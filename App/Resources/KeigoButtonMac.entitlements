@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Intentionally no com.apple.security.app-sandbox. §2 explains why: a
+	     sandboxed process cannot read another app's focused AX element, which is
+	     the entire product. Willow made the same call.
+
+	     Accessibility and CGEvent posting are gated by the TCC permission the
+	     user grants at runtime, not by an entitlement, so nothing is needed here.
+	     Keep this file empty rather than deleting it — the hardened runtime build
+	     setting references it. -->
+</dict>
+</plist>

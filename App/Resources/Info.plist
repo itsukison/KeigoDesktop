@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ja</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<!-- The user-visible name. PRODUCT_NAME stays ASCII (see project.yml) because a
+	     non-ASCII executable name breaks codesigning; these two are what Finder, the
+	     menu bar, and the Accessibility permission dialog actually display. -->
+	<key>CFBundleName</key>
+	<string>敬語ボタン</string>
+	<key>CFBundleDisplayName</key>
+	<string>敬語ボタン</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+
+	<!-- §9: no Dock icon. The settings window is reached from the menu-bar item. -->
+	<key>LSUIElement</key>
+	<true/>
+
+	<!-- §5: this string is what the user actually reads in the permission dialog.
+	     Say what is read and what is written, in plain Japanese. -->
+	<key>NSAccessibilityUsageDescription</key>
+	<string>編集中の文章を読み取って書き換えた文章を戻すために、アクセシビリティの許可が必要です。画面の内容を記録したり、他の目的で使用することはありません。</string>
+
+	<!-- §6: sign-in returns through this scheme. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.core7.keigobutton.mac</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>keigobutton</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

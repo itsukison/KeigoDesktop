@@ -1,0 +1,9 @@
+# Desktop-only function config. The shared project's authoritative config lives in
+# ../Japanese/supabase/config.toml; this file exists so `supabase functions deploy`
+# from this repo carries the right gateway setting.
+#
+# `verify_jwt = true` is load-bearing: index.ts trusts the `sub` claim without
+# re-verifying the signature, so the gateway check is the only thing standing
+# between the public internet and "act as any user". Do not set this to false.
+[functions.desktop-rewrite]
+verify_jwt = true

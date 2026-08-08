@@ -1,0 +1,46 @@
+name: KeigoButtonMac
+options:
+  bundleIdPrefix: com.core7.keigobutton
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: "4KS6YS23KT"
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # §2: the sandbox makes AXUIElementCreateSystemWide useless against other
+    # processes, so this app can never ship on the Mac App Store.
+    ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_APP_SANDBOX: NO
+    CODE_SIGN_ENTITLEMENTS: App/Resources/KeigoButtonMac.entitlements
+    SWIFT_STRICT_CONCURRENCY: complete
+
+packages:
+  KeigoButtonMacCore:
+    path: .
+
+targets:
+  KeigoButtonMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+    dependencies:
+      - package: KeigoButtonMacCore
+        product: DesktopRewriteKit
+      - package: KeigoButtonMacCore
+        product: TextIO
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.core7.keigobutton.mac
+        # MUST stay ASCII. A non-ASCII PRODUCT_NAME makes the executable
+        # `Contents/MacOS/敬語ボタン`, and Xcode's debug-dylib signing flow then skips
+        # it — the bundle signing fails with "code object is not signed at all".
+        # The user-visible name is CFBundleDisplayName in Info.plist.
+        PRODUCT_NAME: KeigoButtonMac
+        INFOPLIST_FILE: App/Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES
