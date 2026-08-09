@@ -49,14 +49,18 @@ Verified (2026-08-07):
   `Developer ID Application` identity for team `4KS6YS23KT`; the App Store Connect Team
   API key authenticated with `notarytool`; the permanent Sparkle Ed25519 key lives in
   Keychain; and the two GitHub environments, Pages, Actions permissions, six production
-  secrets and public-key variable are configured. **`v0.1.0` was released successfully
-  on 2026-08-09:** workflow run `31295352067` exported a universal app, verified its
+  secrets and public-key variable are configured. **`v0.1.0` was replaced successfully
+  on 2026-08-09 before public announcement:** workflow run `31297160268` exported the
+  universal `KeigoButton.app`, verified its
   Developer ID signature and hardened/no-sandbox entitlements, notarized and stapled
-  the app and DMG, signed the Sparkle archive/appcast, published both release assets and
-  deployed Pages. The public DMG was downloaded again, matched GitHub's SHA-256 digest,
-  passed `stapler validate`, and Gatekeeper reported `Notarized Developer ID`.
-  **Not verified: installing the public DMG and the old-build → new-build Sparkle update
-  chain.** See `docs/releasing.md`.
+  the app and Willow-styled `KeigoButton.dmg`, signed the Sparkle archive/appcast,
+  published both release assets and deployed Pages. The stable
+  `/releases/latest/download/KeigoButton.dmg` URL resolves; the downloaded public DMG
+  matched GitHub's SHA-256 digest, passed `stapler validate`, and Gatekeeper reported
+  `Notarized Developer ID`. Its mounted contents carry the saved Finder layout,
+  `KeigoButton.app`, and the Applications link. **Not verified: dragging this replacement
+  public DMG into Applications and the old-build → new-build Sparkle update chain.** See
+  `docs/releasing.md`.
 - **2026-08-08 — adaptive rewrite practice and a real reply practice.** Onboarding is
   now eight steps: アカウント → 用途 → ボタン → アクセス → the real pill → 書き換え
   → 返信 → 完了. The first practice's live Mail draft is selected from the reviewed

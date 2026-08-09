@@ -14,12 +14,14 @@ Current release status (2026-08-09):
 - GitHub environments `production` and `github-pages` are restricted to `main`; Pages
   uses GitHub Actions, workflow permissions are write-enabled, and all required
   production secrets plus `SPARKLE_PUBLIC_ED_KEY` are configured.
-- Workflow run `31295352067` published `v0.1.0` successfully. The app and DMG were
-  notarized and stapled, the public DMG passed Gatekeeper as `Notarized Developer ID`,
-  its downloaded SHA-256 matched GitHub's asset digest, and the live Pages appcast is
-  valid and carries the signed `0.1.0` enclosure.
-- The remaining proof is installing that public DMG and completing the two-version
-  Sparkle test below.
+- Replacement workflow run `31297160268` published `v0.1.0` successfully before public
+  announcement. `KeigoButton.app` and the Willow-styled `KeigoButton.dmg` were notarized
+  and stapled; the public DMG passed Gatekeeper as `Notarized Developer ID`, its
+  downloaded SHA-256 matched GitHub's asset digest, and its mounted contents include the
+  saved Finder layout plus the Applications link. The live Pages appcast is valid and
+  carries the signed `KeigoButton-0.1.0.zip` enclosure.
+- The remaining proof is drag-installing that replacement public DMG and completing the
+  two-version Sparkle test below.
 
 ## One-time setup
 
