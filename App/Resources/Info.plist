@@ -27,6 +27,10 @@
 	<string>14.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
+	<key>POSTHOG_PROJECT_TOKEN</key>
+	<string>$(POSTHOG_PROJECT_TOKEN)</string>
+	<key>POSTHOG_HOST</key>
+	<string>$(POSTHOG_HOST)</string>
 
 	<!-- §9: no Dock icon. The settings window is reached from the menu-bar item. -->
 	<key>LSUIElement</key>

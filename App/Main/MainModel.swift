@@ -1,6 +1,7 @@
 import AppKit
 import AuthenticationServices
 import DesktopRewriteKit
+import PostHog
 import ServiceManagement
 import SwiftUI
 import TextIO
@@ -130,6 +131,9 @@ final class MainModel: NSObject, ObservableObject {
     /// disagrees with the list the user is looking at.
     private let onPromptsChanged: () async -> Void
     private var webAuthSession: ASWebAuthenticationSession?
+    /// Avoids redundant identify calls during activation-driven refreshes. A fresh app
+    /// launch has no value here, so a restored session is identified once per launch.
+    private var identifiedUserId: String?
 
     init(
         auth: AuthService,
@@ -160,7 +164,9 @@ final class MainModel: NSObject, ObservableObject {
         isTrusted = AXPermission.isTrusted
         launchAtLogin = SMAppService.mainApp.status == .enabled
         Task {
+            let session = await auth.currentSession
             signedInEmail = await auth.currentEmail
+            await identifyIfNeeded(session)
             await reloadHistory()
             guard signedInEmail != nil else {
                 entitlement = nil
@@ -202,6 +208,9 @@ final class MainModel: NSObject, ObservableObject {
     }
 
     func beginCheckout(_ price: BillingRemoteStore.PriceKey) {
+        PostHogSDK.shared.capture("desktop_checkout_started", properties: [
+            "billing_interval": price == .yearly ? "yearly" : "monthly",
+        ])
         openBilling { try await self.billingStore.checkoutURL(for: price) }
     }
 
@@ -283,6 +292,20 @@ final class MainModel: NSObject, ObservableObject {
         stats = await history_.stats()
     }
 
+    /// Establishes the authenticated Supabase user as the SDK identity exactly once.
+    /// The UUID is stable; the email remains a person property rather than event data.
+    private func identifyIfNeeded(_ session: AuthSession?) async {
+        guard let session, !session.userId.isEmpty, session.userId != identifiedUserId else {
+            return
+        }
+
+        let email = await auth.currentEmail
+        var userProperties: [String: Any] = [:]
+        if let email { userProperties["email"] = email }
+        PostHogSDK.shared.identify(session.userId, userProperties: userProperties)
+        identifiedUserId = session.userId
+    }
+
     // MARK: - Account
 
     func signIn() {
@@ -347,8 +370,9 @@ final class MainModel: NSObject, ObservableObject {
     /// Also reached from `AppDelegate` when the redirect arrives as a plain URL open.
     func completeOAuth(url: URL) async {
         do {
-            _ = try await auth.completeOAuthCallback(url: url)
+            let session = try await auth.completeOAuthCallback(url: url)
             signedInEmail = await auth.currentEmail
+            await identifyIfNeeded(session)
             await loadProfile()
             await reloadPrompts()
             await onPromptsChanged()
@@ -370,7 +394,9 @@ final class MainModel: NSObject, ObservableObject {
                 password = ""
                 passwordConfirm = ""
                 authNotice = notice
+                let session = await auth.currentSession
                 signedInEmail = await auth.currentEmail
+                await identifyIfNeeded(session)
                 guard signedInEmail != nil else { return }
                 await loadProfile()
                 await reloadPrompts()
@@ -398,6 +424,11 @@ final class MainModel: NSObject, ObservableObject {
     func signOut() {
         Task {
             await auth.signOut()
+            PostHogSDK.shared.reset()
+            // `reset` clears super properties along with the identity, so the surface
+            // has to go back on or every post-sign-out event loses it.
+            PostHogConfiguration.registerSurface()
+            identifiedUserId = nil
             signedInEmail = nil
             email = ""
             password = ""
@@ -443,6 +474,9 @@ final class MainModel: NSObject, ObservableObject {
                 slot: slot,
                 sortOrder: (self.prompts.map(\.sortOrder).max() ?? 0) + 1
             )
+            PostHogSDK.shared.capture("desktop_prompt_created", properties: [
+                "slot": slot.rawValue,
+            ])
             self.editingPromptId = created.id
         }
     }
@@ -451,7 +485,14 @@ final class MainModel: NSObject, ObservableObject {
         // Applied locally first: the list is the thing the user is looking at, and a
         // round trip's worth of stale text in the row reads as a dropped edit.
         applyLocally(prompt)
-        mutate { try await self.promptStore.update(prompt) }
+        mutate {
+            try await self.promptStore.update(prompt)
+            PostHogSDK.shared.capture("desktop_prompt_updated", properties: [
+                "slot": prompt.slot.rawValue,
+                "is_enabled": prompt.isEnabled,
+                "origin": prompt.origin.rawValue,
+            ])
+        }
     }
 
     func setEnabled(_ prompt: UserPrompt, _ isEnabled: Bool) {
@@ -468,6 +509,10 @@ final class MainModel: NSObject, ObservableObject {
         mutate {
             try await self.promptStore.delete(id: prompt.id)
             try await self.persistPromptOrder(remaining)
+            PostHogSDK.shared.capture("desktop_prompt_deleted", properties: [
+                "slot": prompt.slot.rawValue,
+                "origin": prompt.origin.rawValue,
+            ])
         }
     }
 

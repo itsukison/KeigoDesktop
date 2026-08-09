@@ -25,7 +25,9 @@ struct OnboardingFlowView: View {
                     case .access: AccessStep(coordinator: coordinator)
                     case .bar: BarStep(coordinator: coordinator)
                     case .practice: PracticeStep(coordinator: coordinator)
+                    case .customPractice: CustomPracticeStep(coordinator: coordinator)
                     case .replyPractice: ReplyPracticeStep(coordinator: coordinator)
+                    case .source: SourceStep(coordinator: coordinator)
                     case .complete: CompleteStep(coordinator: coordinator)
                     }
                 }
@@ -108,11 +110,19 @@ private struct OnboardingNavigationBar: View {
 
                 case .practice:
                     LinkButton(title: "あとで始める") { coordinator.skipEducation() }
-                    primaryButton("返信も練習", enabled: coordinator.rewritePracticeCompleted)
+                    primaryButton("カスタムも練習", enabled: coordinator.rewritePracticeCompleted)
+
+                case .customPractice:
+                    LinkButton(title: "あとで始める") { coordinator.skipEducation() }
+                    primaryButton("返信も練習", enabled: coordinator.customPracticeCompleted)
 
                 case .replyPractice:
                     LinkButton(title: "あとで始める") { coordinator.skipEducation() }
                     primaryButton("次へ", enabled: coordinator.replyPracticeCompleted)
+
+                case .source:
+                    LinkButton(title: "答えない") { coordinator.skipSource() }
+                    primaryButton("次へ", enabled: coordinator.selectedSource != nil)
 
                 case .complete:
                     primaryButton("敬語ボタンを使う")
@@ -146,7 +156,9 @@ private struct ProgressRail: View {
         .review: "ボタン",
         .access: "アクセス",
         .practice: "書き換え",
+        .customPractice: "カスタム",
         .replyPractice: "返信",
+        .source: "きっかけ",
         .complete: "完了",
     ]
 
@@ -227,7 +239,11 @@ private struct WelcomeStep: View {
             OnboardingVisualStage {
                 OnboardingMascotHero()
                     .frame(width: 344, height: 344)
-                    .blendMode(.multiply)
+                    .mask {
+                        RoundedRectangle(cornerRadius: 44, style: .continuous)
+                            .padding(10)
+                            .blur(radius: 16)
+                    }
                     .padding(28)
             }
             .padding(.vertical, OnboardingMetrics.visualVerticalInset)
@@ -503,55 +519,89 @@ private struct PurposeOptionCard: View {
     }
 }
 
+/// The one page whose left column is a working list rather than a paragraph, and the
+/// three rules that keep it from behaving like one.
+///
+/// 1. **The block is vertically centred**, like every other split page. That is only
+///    possible if the column has a natural height, and a `ScrollView` never does — it
+///    takes everything it is offered. So the list is capped at the height its rows
+///    occupy *collapsed* (`listViewportHeight`) and stays flexible below that, which
+///    makes it exactly as tall as its content when the set is short and lets the parent
+///    compress it when the set is long.
+/// 2. **Opening a row cannot resize anything outside the list.** The cap is computed
+///    from the row count, not measured from the content, so an expanded editor grows
+///    *inside* a viewport that does not move: the heading, the 追加 action and the whole
+///    right column stay exactly where they were. The expanded row is scrolled to the top
+///    of that viewport in the same animation, which is where the editor is legible.
+/// 3. **The preview column is a layout invariant** (§15). It spans the full height on
+///    its own terms and reads nothing about the left column. It used to flip its
+///    alignment from centre to top whenever a row opened, so pressing ✎ moved the one
+///    thing on screen the user had not touched.
 private struct ButtonReviewStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @State private var editingID: UUID?
 
+    /// Enforced on the collapsed row rather than assumed of it — `ButtonDraftRow` sets
+    /// this as an explicit height, so the arithmetic below cannot drift from what is
+    /// drawn. 74 is what the two 26 pt reorder buttons plus the row's padding measured.
+    private static let rowHeight: CGFloat = 74
+    private static let rowSpacing: CGFloat = 10
+
+    /// The list's height with every row closed. `+ 2` is the 1 pt inset the rows are
+    /// padded by so their focus rings and borders are not clipped by the scroll view.
+    private var listViewportHeight: CGFloat {
+        let count = CGFloat(coordinator.buttonDrafts.count)
+        return count * Self.rowHeight + max(0, count - 1) * Self.rowSpacing + 2
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 24) {
-            VStack(alignment: .leading, spacing: 18) {
-                StepHeading(
-                    eyebrow: "ボタンを確認",
-                    title: "使うボタンを確認",
-                    subtitle: "先頭がメインボタンです。名前、指示、順番はここで変更できます。"
-                )
+            ScrollViewReader { scroll in
+                VStack(alignment: .leading, spacing: 18) {
+                    StepHeading(
+                        eyebrow: "ボタンを確認",
+                        title: "使うボタンを確認",
+                        subtitle: "先頭がメインボタンです。名前、指示、順番はここで変更できます。"
+                    )
 
-                ScrollView {
-                    VStack(spacing: 10) {
-                        ForEach(Array(coordinator.buttonDrafts.enumerated()), id: \.element.id) { index, draft in
-                            ButtonDraftRow(
-                                draft: draft,
-                                index: index,
-                                count: coordinator.buttonDrafts.count,
-                                isEditing: editingID == draft.id,
-                                onToggleEdit: {
-                                    withAnimation(.easeOut(duration: 0.16)) {
-                                        editingID = editingID == draft.id ? nil : draft.id
+                    ScrollView {
+                        VStack(spacing: Self.rowSpacing) {
+                            ForEach(Array(coordinator.buttonDrafts.enumerated()), id: \.element.id) { index, draft in
+                                ButtonDraftRow(
+                                    draft: draft,
+                                    index: index,
+                                    count: coordinator.buttonDrafts.count,
+                                    height: Self.rowHeight,
+                                    isEditing: editingID == draft.id,
+                                    onToggleEdit: { toggleEdit(of: draft.id, scroll: scroll) },
+                                    onChange: coordinator.updateDraft,
+                                    onMove: { coordinator.moveDraft(id: draft.id, by: $0) },
+                                    onDelete: {
+                                        if editingID == draft.id { editingID = nil }
+                                        coordinator.deleteDraft(id: draft.id)
                                     }
-                                },
-                                onChange: coordinator.updateDraft,
-                                onMove: { coordinator.moveDraft(id: draft.id, by: $0) },
-                                onDelete: {
-                                    if editingID == draft.id { editingID = nil }
-                                    coordinator.deleteDraft(id: draft.id)
-                                }
-                            )
+                                )
+                                .id(draft.id)
+                            }
+                        }
+                        .padding(1)
+                    }
+                    .scrollIndicators(.hidden)
+                    .frame(maxHeight: listViewportHeight)
+
+                    if coordinator.buttonDrafts.count < 7 {
+                        ActionButton("ボタンを追加", icon: .add, style: .secondary) {
+                            coordinator.addDraft()
                         }
                     }
-                    .padding(1)
                 }
-                .scrollIndicators(.hidden)
-
-                if coordinator.buttonDrafts.count < 7 {
-                    ActionButton("ボタンを追加", icon: .add, style: .secondary) {
-                        coordinator.addDraft()
-                    }
-                }
+                .frame(width: 540, alignment: .leading)
+                .frame(maxHeight: .infinity, alignment: .leading)
             }
-            .frame(width: 540, alignment: .leading)
 
             VStack(alignment: .leading, spacing: 16) {
                 PillCaption(suffix: "のプレビュー")
+
                 OnboardingBarPreview(titles: coordinator.buttonDrafts.map(\.title))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -566,7 +616,6 @@ private struct ButtonReviewStep: View {
                         .foregroundStyle(Tokens.Window.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
@@ -575,12 +624,26 @@ private struct ButtonReviewStep: View {
         .padding(.top, OnboardingMetrics.contentTopPadding)
         .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
+
+    /// One gesture, one motion: the row grows and the list scrolls it to the top under
+    /// the same curve. The editor itself only fades — sliding it in from the top edge as
+    /// well described the same event twice, against a row that was already growing.
+    private func toggleEdit(of id: UUID, scroll: ScrollViewProxy) {
+        let opening = editingID != id
+        withAnimation(.easeOut(duration: 0.18)) {
+            editingID = opening ? id : nil
+            if opening { scroll.scrollTo(id, anchor: .top) }
+        }
+    }
 }
 
 private struct ButtonDraftRow: View {
     let draft: OnboardingButtonDraft
     let index: Int
     let count: Int
+    /// The closed row's height, fixed so `ButtonReviewStep` can size the list's viewport
+    /// from the row count alone and keep it stable while a row is open.
+    let height: CGFloat
     let isEditing: Bool
     let onToggleEdit: () -> Void
     let onChange: (OnboardingButtonDraft) -> Void
@@ -615,7 +678,7 @@ private struct ButtonDraftRow: View {
                 IconButton(icon: .trash, help: "削除", enabled: count > 1) { onDelete() }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .frame(height: height)
 
             if isEditing {
                 Hairline()
@@ -650,7 +713,7 @@ private struct ButtonDraftRow: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Tokens.Window.group))
                 }
                 .padding(14)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(.opacity)
             }
         }
         .background(RoundedRectangle(cornerRadius: 12).fill(Tokens.Window.canvas))
@@ -760,7 +823,7 @@ private struct BarStep: View {
 private struct PracticeStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @State private var sample: String
-    @FocusState private var focused: Bool
+    @State private var focused = true
 
     init(coordinator: OnboardingCoordinator) {
         self.coordinator = coordinator
@@ -777,49 +840,23 @@ private struct PracticeStep: View {
 
                 Spacer(minLength: 0)
 
-                if !coordinator.rewritePracticeCompleted {
-                    HStack(spacing: 7) {
-                        Icon(.info, size: 13)
-                            .opticalCentre()
-                        Text("結果が出たら Insert")
-                            .font(Tokens.Font.body(11, weight: .medium))
-                    }
-                    .foregroundStyle(Tokens.Window.accentText)
-                    .padding(.horizontal, 11)
-                    .frame(height: 30)
-                    .background(Capsule().fill(Tokens.Window.accentTint))
-                }
+                PracticeStatusBadge(
+                    completed: coordinator.rewritePracticeCompleted,
+                    pendingText: "結果が出たら書き換える",
+                    completedText: "書き戻し完了"
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             OnboardingVisualStage {
                 OnboardingMailScene(labels: [], showsBar: false) {
-                    ZStack(alignment: .topTrailing) {
-                        TextEditor(text: $sample)
-                            .font(Tokens.Font.body(15))
-                            .foregroundStyle(Tokens.Window.textPrimary)
-                            .scrollContentBackground(.hidden)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 16)
-                            .focused($focused)
-                            .background(.white)
-                            .accessibilityLabel("練習用メッセージ")
-
-                        if coordinator.rewritePracticeCompleted {
-                            HStack(spacing: 5) {
-                                Icon(.check, size: 12)
-                                    .opticalCentre()
-                                Text("書き戻し完了")
-                                    .font(Tokens.Font.body(11, weight: .medium))
-                            }
-                            .foregroundStyle(Tokens.Window.success)
-                            .padding(.horizontal, 9)
-                            .frame(height: 27)
-                            .background(Capsule().fill(.white.opacity(0.94)))
-                            .padding(12)
-                            .allowsHitTesting(false)
-                        }
-                    }
+                    OnboardingPracticeEditor(
+                        text: $sample,
+                        isFocused: $focused,
+                        fontSize: 15,
+                        accessibilityLabel: "練習用メッセージ"
+                    )
+                    .background(.white)
                 }
             }
             .padding(.bottom, OnboardingMetrics.visualVerticalInset)
@@ -829,7 +866,66 @@ private struct PracticeStep: View {
         .padding(.horizontal, OnboardingMetrics.pagePadding)
         .padding(.top, OnboardingMetrics.contentTopPadding)
         .padding(.bottom, OnboardingMetrics.bottomPadding)
-        .onAppear { focused = true }
+    }
+}
+
+private struct CustomPracticeStep: View {
+    private static let sourceDraft = "明日の15時の打ち合わせですが、資料の準備が間に合わないので、来週火曜日の同じ時間に変更したいです。"
+    private static let suggestedGuidance = "取引先向けに、簡潔なメールにしてください。"
+
+    @ObservedObject var coordinator: OnboardingCoordinator
+    @State private var draft = Self.sourceDraft
+    @State private var focused = true
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack(alignment: .bottom, spacing: 28) {
+                CustomPracticeHeading(completed: coordinator.customPracticeCompleted)
+                    .frame(maxWidth: 590, alignment: .leading)
+
+                Spacer(minLength: 0)
+
+                if coordinator.customPracticeCompleted {
+                    PracticeStatusBadge(
+                        completed: true,
+                        pendingText: "",
+                        completedText: "カスタム指示で書き戻しました"
+                    )
+                } else {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("入力例")
+                            .font(Tokens.Font.body(10, weight: .medium))
+                            .foregroundStyle(Tokens.Window.textTertiary)
+                        Text(Self.suggestedGuidance)
+                            .font(Tokens.Font.body(11, weight: .medium))
+                            .foregroundStyle(Tokens.Window.accentText)
+                            .lineLimit(2)
+                    }
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Tokens.Window.accentTint))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            OnboardingVisualStage {
+                OnboardingMailScene(labels: [], showsBar: false) {
+                    OnboardingPracticeEditor(
+                        text: $draft,
+                        isFocused: $focused,
+                        fontSize: 15,
+                        accessibilityLabel: "カスタム練習用メッセージ"
+                    )
+                    .background(.white)
+                }
+            }
+            .padding(.bottom, OnboardingMetrics.visualVerticalInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
+        .padding(.horizontal, OnboardingMetrics.pagePadding)
+        .padding(.top, OnboardingMetrics.contentTopPadding)
+        .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
 }
 
@@ -839,7 +935,7 @@ private struct ReplyPracticeStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @State private var reply = ""
     @State private var copied = false
-    @FocusState private var focused: Bool
+    @State private var focused = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -849,18 +945,11 @@ private struct ReplyPracticeStep: View {
 
                 Spacer(minLength: 0)
 
-                if !coordinator.replyPracticeCompleted {
-                    HStack(spacing: 7) {
-                        Icon(.info, size: 13)
-                            .opticalCentre()
-                        Text("例：参加できると丁寧に")
-                            .font(Tokens.Font.body(11, weight: .medium))
-                    }
-                    .foregroundStyle(Tokens.Window.accentText)
-                    .padding(.horizontal, 11)
-                    .frame(height: 30)
-                    .background(Capsule().fill(Tokens.Window.accentTint))
-                }
+                PracticeStatusBadge(
+                    completed: coordinator.replyPracticeCompleted,
+                    pendingText: "例：参加できると丁寧に",
+                    completedText: "返信を書き戻しました"
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -870,41 +959,14 @@ private struct ReplyPracticeStep: View {
                     copied: copied,
                     onCopy: copyMessage
                 ) {
-                    ZStack(alignment: .topLeading) {
-                        if reply.isEmpty {
-                            Text("# product への返信")
-                                .font(Tokens.Font.body(13))
-                                .foregroundStyle(Tokens.Window.textTertiary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 13)
-                                .allowsHitTesting(false)
-                        }
-
-                        TextEditor(text: $reply)
-                            .font(Tokens.Font.body(13))
-                            .foregroundStyle(Tokens.Window.textPrimary)
-                            .scrollContentBackground(.hidden)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .focused($focused)
-                            .accessibilityLabel("返信練習用メッセージ")
-
-                        if coordinator.replyPracticeCompleted {
-                            HStack(spacing: 5) {
-                                Icon(.check, size: 12)
-                                    .opticalCentre()
-                                Text("返信を書き戻しました")
-                                    .font(Tokens.Font.body(11, weight: .medium))
-                            }
-                            .foregroundStyle(Tokens.Window.success)
-                            .padding(.horizontal, 9)
-                            .frame(height: 27)
-                            .background(Capsule().fill(.white.opacity(0.96)))
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .allowsHitTesting(false)
-                        }
-                    }
+                    OnboardingPracticeEditor(
+                        text: $reply,
+                        isFocused: $focused,
+                        fontSize: 13,
+                        contentInset: NSSize(width: 14, height: 12),
+                        placeholder: "# product への返信",
+                        accessibilityLabel: "返信練習用メッセージ"
+                    )
                     .background(.white)
                 }
             }
@@ -924,6 +986,269 @@ private struct ReplyPracticeStep: View {
     }
 }
 
+private struct PracticeStatusBadge: View {
+    let completed: Bool
+    let pendingText: String
+    let completedText: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Icon(completed ? .check : .info, size: 13)
+                .opticalCentre()
+            Text(completed ? completedText : pendingText)
+                .font(Tokens.Font.body(11, weight: .medium))
+        }
+        .foregroundStyle(completed ? Tokens.Window.success : Tokens.Window.accentText)
+        .padding(.horizontal, 11)
+        .frame(height: 30)
+        .background(Capsule().fill(completed ? Tokens.Window.surface : Tokens.Window.accentTint))
+    }
+}
+
+private struct OnboardingPracticeEditor: NSViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    var fontSize: CGFloat
+    var contentInset = NSSize(width: 14, height: 16)
+    var placeholder: String?
+    let accessibilityLabel: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+
+        let textView = PracticeNSTextView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.drawsBackground = false
+        textView.minSize = .zero
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: 0,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainerInset = contentInset
+        textView.font = editorFont
+        textView.textColor = NSColor(red: 0x4e / 255, green: 0x4d / 255, blue: 0x51 / 255, alpha: 1)
+        textView.insertionPointColor = NSColor(red: 0x5a / 255, green: 0x57 / 255, blue: 0xba / 255, alpha: 1)
+        textView.string = text
+        textView.placeholder = placeholder
+        textView.delegate = context.coordinator
+        textView.setAccessibilityLabel(accessibilityLabel)
+
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
+        focusIfNeeded(textView)
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? PracticeNSTextView else { return }
+        context.coordinator.parent = self
+        textView.font = editorFont
+        textView.textContainerInset = contentInset
+        textView.placeholder = placeholder
+        textView.setAccessibilityLabel(accessibilityLabel)
+        if textView.string != text { textView.string = text }
+        focusIfNeeded(textView)
+        textView.needsDisplay = true
+    }
+
+    private var editorFont: NSFont {
+        NSFont(name: "Inter", size: fontSize) ?? .systemFont(ofSize: fontSize)
+    }
+
+    private func focusIfNeeded(_ textView: NSTextView) {
+        guard isFocused else { return }
+        DispatchQueue.main.async { [weak textView] in
+            guard let textView, textView.window?.firstResponder !== textView else { return }
+            textView.window?.makeFirstResponder(textView)
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: OnboardingPracticeEditor
+        weak var textView: NSTextView?
+
+        init(_ parent: OnboardingPracticeEditor) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView else { return }
+            parent.text = textView.string
+        }
+    }
+
+    final class PracticeNSTextView: NSTextView {
+        var placeholder: String?
+
+        override func draw(_ dirtyRect: NSRect) {
+            if string.isEmpty, let placeholder, !placeholder.isEmpty {
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: font ?? NSFont.systemFont(ofSize: 13),
+                    .foregroundColor: NSColor(red: 0xb3 / 255, green: 0xb3 / 255, blue: 0xb8 / 255, alpha: 1),
+                ]
+                placeholder.draw(at: textContainerOrigin, withAttributes: attributes)
+            }
+            super.draw(dirtyRect)
+        }
+    }
+}
+
+/// 「どこで知りましたか？」 — the one page of first run that asks for something rather
+/// than teaching something, so it deliberately reuses 用途's exact composition: the same
+/// question-left / choice-grid-right split, the same card metrics, the same selection
+/// dot. It is a question, not a gate — 「答えない」 sits beside the forward action.
+private struct SourceStep: View {
+    @ObservedObject var coordinator: OnboardingCoordinator
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12),
+    ]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 28) {
+            VStack(alignment: .leading, spacing: 22) {
+                StepHeading(
+                    eyebrow: "最後にひとつ",
+                    title: "敬語ボタンをどこで知りましたか？",
+                    subtitle: "どこで見つけてもらえたのかを知るためだけの質問です。近いものを1つ選んでください。"
+                )
+
+                HStack(alignment: .top, spacing: 10) {
+                    Icon(.info, size: 14)
+                        .foregroundStyle(Tokens.Window.accentText)
+                        .opticalCentre()
+                    Text("送るのは選んだ項目だけです。答えずに進んでも、機能は何も変わりません。")
+                        .font(Tokens.Font.body(12))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: 250, alignment: .leading)
+            .frame(maxHeight: .infinity, alignment: .leading)
+
+            OnboardingVisualStage {
+                GeometryReader { proxy in
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(OnboardingSource.allCases, id: \.self) { source in
+                                SourceOptionCard(
+                                    source: source,
+                                    selected: coordinator.selectedSource == source
+                                ) {
+                                    coordinator.select(source: source)
+                                }
+                            }
+                        }
+                        .padding(18)
+                        .frame(minHeight: proxy.size.height, alignment: .center)
+                    }
+                    .scrollIndicators(.hidden)
+                }
+            }
+            .padding(.vertical, OnboardingMetrics.visualVerticalInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
+        .padding(.horizontal, OnboardingMetrics.pagePadding)
+        .padding(.top, OnboardingMetrics.contentTopPadding)
+        .padding(.bottom, OnboardingMetrics.bottomPadding)
+    }
+}
+
+private struct SourceOptionCard: View {
+    let source: OnboardingSource
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 11) {
+                SourceMark(source: source)
+                Text(source.label)
+                    .font(Tokens.Font.body(13, weight: .medium))
+                    .foregroundStyle(Tokens.Window.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                ZStack {
+                    Circle()
+                        .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1.5)
+                        .frame(width: 18, height: 18)
+                    if selected {
+                        Circle().fill(Tokens.Window.accent).frame(width: 10, height: 10)
+                    }
+                }
+            }
+            .padding(.horizontal, 13)
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(hovering && !selected ? Tokens.Window.surface : Tokens.Window.canvas)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.hairline, lineWidth: selected ? 1.5 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .cursor(.pointingHand)
+    }
+}
+
+/// The four app sources carry their real App Store artwork; the rest are Reicon on a
+/// plate, the same pairing the sign-in page already makes when it puts the official
+/// Google G beside the app's own glyphs (§15).
+private struct SourceMark: View {
+    let source: OnboardingSource
+
+    private let size: CGFloat = 28
+    /// Apple's icon superellipse. The artwork is delivered square, so the mask belongs
+    /// here rather than baked into an asset that would then be wrong at another size.
+    private var radius: CGFloat { size * 0.2237 }
+
+    var body: some View {
+        switch source {
+        case .x: brand("SourceX")
+        case .youtube: brand("SourceYouTube")
+        case .instagram: brand("SourceInstagram")
+        case .tiktok: brand("SourceTikTok")
+        case .webSearch: IconPlate(icon: .search, diameter: size, tinted: false)
+        case .friend: IconPlate(icon: .user, diameter: size, tinted: false)
+        case .article: IconPlate(icon: .window, diameter: size, tinted: false)
+        case .other: IconPlate(icon: .info, diameter: size, tinted: false)
+        }
+    }
+
+    private func brand(_ name: String) -> some View {
+        Image(name)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.08))
+            )
+    }
+}
+
 private struct CompleteStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
 
@@ -936,6 +1261,7 @@ private struct CompleteStep: View {
                     CompletionRow(text: "アカウントとボタンを同期")
                     CompletionRow(text: "アクセシビリティを許可")
                     CompletionRow(text: "書き換えの操作を確認")
+                    CompletionRow(text: "一度だけのカスタム指示を確認")
                     CompletionRow(text: "コピーから返信する操作を確認")
                 }
             }
@@ -1078,6 +1404,40 @@ private struct ReplyPracticeHeading: View {
                 }
                 .font(Tokens.Font.body(14))
                 .foregroundStyle(Tokens.Window.textSecondary)
+            }
+        }
+    }
+}
+
+private struct CustomPracticeHeading: View {
+    let completed: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("カスタム指示を試す")
+                .font(Tokens.Font.body(12, weight: .medium))
+                .foregroundStyle(Tokens.Window.accentText)
+            Text(completed ? "一度だけの指示で書き戻せました" : "このメールだけの仕上げ方を伝えましょう")
+                .font(Tokens.Font.display(20))
+                .tracking(Tokens.Font.displayTracking(20))
+                .foregroundStyle(Tokens.Window.textPrimary)
+            if completed {
+                Text("保存済みのボタンを変えずに、その場だけの指示を使えます。")
+                    .font(Tokens.Font.body(14))
+                    .foregroundStyle(Tokens.Window.textSecondary)
+            } else {
+                HStack(spacing: 6) {
+                    Text("本文にフォーカスを残し、")
+                    PillPreview(scale: 0.58)
+                    Text("を開いて右端の ✎ を押します。")
+                }
+                .font(Tokens.Font.body(14))
+                .foregroundStyle(Tokens.Window.textSecondary)
+                Text("✎ は、その書き換えに一度だけ使う指示を入力するボタンです。入力後に生成し、結果を入れ替えてください。")
+                    .font(Tokens.Font.body(13))
+                    .foregroundStyle(Tokens.Window.textSecondary)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -15,6 +15,9 @@ final class OverlayController: ObservableObject {
     @Published private(set) var tutorialPrompts: [UserPrompt] = []
     /// Set only when the fetch failed **and** left nothing to show — see `refreshPrompts`.
     @Published private(set) var promptsFailed = false
+    /// Set when there is no usable session at all. The hover row answers this with a
+    /// sign-in button rather than an apology — see `refreshPrompts`.
+    @Published private(set) var signedOut = false
 
     private let panel: PillPanel
     private var generatingPanel: GeneratingPanel?
@@ -78,7 +81,7 @@ final class OverlayController: ObservableObject {
     /// gets inserted is the last one produced.
     private var lastHistoryEntryId: UUID?
     private var tutorialInserted: (() -> Void)?
-    private var replyTutorialActive = false
+    private var tutorialMode: OnboardingTutorialMode?
 
     /// Opens the paywall when a **free** user hits the monthly cap (§9 row 41).
     ///
@@ -211,12 +214,25 @@ final class OverlayController: ObservableObject {
     }
 
     /// The status-bar menu's "今すぐ再表示する" — the only way back once the pill itself
-    /// is gone and there is nothing left to right-click.
+    /// is gone and there is nothing left to right-click. The deadline is cleared by
+    /// `setVisible(true)`, which every other route back goes through as well.
     func cancelHideNow() {
         guard hiddenBySnooze else { return }
-        hiddenBySnooze = false
-        Self.hiddenUntil = nil
         setVisible(true)
+    }
+
+    /// Whether the copy-triggered reply arm (§16) is inside a timed disable, and how
+    /// long is left on it. Both menus that offer the toggle are built fresh on every
+    /// open, so this is asked at that moment rather than published.
+    var isCopyTriggerDisabled: Bool {
+        OverlaySnooze.isActive(until: ClipboardWatcher.copyDisabledUntil)
+    }
+
+    var copyDisabledRemainingMinutes: Int? {
+        guard let until = ClipboardWatcher.copyDisabledUntil, OverlaySnooze.isActive(until: until) else {
+            return nil
+        }
+        return OverlaySnooze.remainingMinutes(until: until)
     }
 
     /// The right-click menu's "コピー機能を無効にする" rows. This does not touch the bar at
@@ -226,12 +242,15 @@ final class OverlayController: ObservableObject {
         ClipboardWatcher.copyDisabledUntil = OverlaySnooze.until(duration)
     }
 
+    /// Its counterpart, "コピー機能を有効にする", in both menus.
+    func enableCopyTriggerNow() {
+        ClipboardWatcher.copyDisabledUntil = nil
+    }
+
     /// Checked from the position-tracking timer below, which is already polling at the
     /// interval this needs and would otherwise be the only other timer in the app.
     private func checkHiddenExpiry() {
         guard hiddenBySnooze, !OverlaySnooze.isActive(until: Self.hiddenUntil) else { return }
-        hiddenBySnooze = false
-        Self.hiddenUntil = nil
         setVisible(true)
     }
 
@@ -254,20 +273,17 @@ final class OverlayController: ObservableObject {
         collapseTask?.cancel()
         collapseTask = nil
 
-        let copyDisabledUntil = ClipboardWatcher.copyDisabledUntil
-        let isCopyDisabled = OverlaySnooze.isActive(until: copyDisabledUntil)
-
         let menu = SnoozeMenuPanel(
             anchor: panel.frame,
-            isCopyDisabled: isCopyDisabled,
-            copyDisabledRemainingMinutes: copyDisabledUntil.map { OverlaySnooze.remainingMinutes(until: $0) },
+            isCopyDisabled: isCopyTriggerDisabled,
+            copyDisabledRemainingMinutes: copyDisabledRemainingMinutes,
             onHide: { [weak self] duration in self?.hideOverlay(for: duration) },
             onDisableCopy: { [weak self] duration in
                 self?.disableCopyTrigger(for: duration)
                 self?.dismissSnoozeMenu()
             },
             onCancelCopyDisable: { [weak self] in
-                ClipboardWatcher.copyDisabledUntil = nil
+                self?.enableCopyTriggerNow()
                 self?.dismissSnoozeMenu()
             },
             onDismiss: { [weak self] in self?.dismissSnoozeMenu() }
@@ -310,6 +326,12 @@ final class OverlayController: ObservableObject {
 
     func setVisible(_ visible: Bool) {
         if visible {
+            // Any deliberate show outranks a timed hide, and onboarding is the caller
+            // that makes this load-bearing: it puts the real bar on screen for its own
+            // lesson, and a deadline left in force behind that would leave the status
+            // menu offering 再表示 for a bar the user is already looking at.
+            hiddenBySnooze = false
+            Self.hiddenUntil = nil
             panel.orderFrontRegardless()
             startClipboardWatching()
         } else {
@@ -341,32 +363,49 @@ final class OverlayController: ObservableObject {
         do {
             prompts = try await promptStore.fetch().enabledForHoverRow
             promptsFailed = false
+            signedOut = false
+        } catch RewriteError.notSignedIn {
+            // **Not the stale-data case below.** These buttons belong to an account
+            // that is no longer attached, so keeping them would leave a row of pills
+            // whose only possible outcome is a failed rewrite. The row shows the way
+            // back in instead, which is the one thing the user can act on.
+            prompts = []
+            signedOut = true
+            promptsFailed = false
         } catch {
             // A stale button list is better than an empty row, so whatever we had
             // stays. But an empty row after a *failure* is not the same as an empty
             // row because the user has no buttons — telling someone to go and make
             // buttons they already have is worse than saying nothing, so the row
             // needs to be able to tell the two apart.
+            signedOut = false
             promptsFailed = prompts.isEmpty
         }
     }
 
     func beginTutorial(prompts: [UserPrompt], onInserted: @escaping () -> Void) {
-        replyTutorialActive = false
+        tutorialMode = .savedButtons(Set(prompts.map(\.id)))
         tutorialPrompts = prompts
+        tutorialInserted = onInserted
+        transition(to: .pill)
+    }
+
+    func beginCustomTutorial(onInserted: @escaping () -> Void) {
+        tutorialMode = .custom
+        tutorialPrompts = []
         tutorialInserted = onInserted
         transition(to: .pill)
     }
 
     func beginReplyTutorial(onInserted: @escaping () -> Void) {
         tutorialPrompts = []
-        replyTutorialActive = true
+        tutorialMode = .reply
         tutorialInserted = onInserted
         transition(to: .pill)
     }
 
     func copyReplyTutorialSource(_ text: String) {
-        guard replyTutorialActive, let source = ReplySource(copied: text) else { return }
+        guard tutorialMode?.marksReply == true, let source = ReplySource(copied: text) else { return }
         ClipboardWatcher.writingOurselves {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
@@ -377,7 +416,7 @@ final class OverlayController: ObservableObject {
     func endTutorial() {
         tutorialPrompts = []
         tutorialInserted = nil
-        replyTutorialActive = false
+        tutorialMode = nil
         if case .pill = state { return }
         transition(to: .pill)
     }
@@ -513,8 +552,11 @@ final class OverlayController: ObservableObject {
         }
         guard case .pill = state else { return }
         // The only retry there is. `refreshPrompts` otherwise runs once at launch, so
-        // being offline at that moment left the row permanently empty.
-        if promptsFailed { Task { await refreshPrompts() } }
+        // being offline at that moment left the row permanently empty. `signedOut` is
+        // retried for the same reason: signing in elsewhere pushes a refresh through
+        // `MainModel.onPromptsChanged`, but a session restored any other way would
+        // otherwise leave the sign-in button up for the rest of the session.
+        if promptsFailed || signedOut { Task { await refreshPrompts() } }
         transition(to: .hoverRow)
     }
 
@@ -569,7 +611,7 @@ final class OverlayController: ObservableObject {
                     buttonTitle: prompt.title,
                     commandKey: prompt.builtinKey,
                     promptOrigin: prompt.origin.rawValue,
-                    isTutorial: self.tutorialPrompts.contains { $0.id == prompt.id }
+                    isTutorial: self.tutorialMode?.marksSavedButton(id: prompt.id) == true
                 )
             } catch {
                 ClipboardWatcher.resume()
@@ -599,6 +641,18 @@ final class OverlayController: ObservableObject {
                 self.present(error)
             }
         }
+    }
+
+    /// The signed-out hover row's only action — the bar's way into the window.
+    ///
+    /// No capture and no AX call: there is nothing to rewrite until there is an
+    /// account. The row collapses first so the bar is not left expanded behind the
+    /// window that is about to take focus, and `onSignInRequired` is the same callback
+    /// a rewrite raises when it discovers a missing session, so both routes land on
+    /// アカウント in sign-in mode.
+    func pressSignIn() {
+        transition(to: .pill)
+        onSignInRequired?()
     }
 
     /// Backing out of the input bar without sending anything.
@@ -644,7 +698,7 @@ final class OverlayController: ObservableObject {
                 buttonTitle: nil,
                 commandKey: nil,
                 promptOrigin: nil,
-                isTutorial: false
+                isTutorial: tutorialMode?.marksCustomGuidance(trimmed) == true
             )
 
         case .replyInput(let source, let captured):
@@ -660,7 +714,7 @@ final class OverlayController: ObservableObject {
                 buttonTitle: "返信",
                 commandKey: nil,
                 promptOrigin: nil,
-                isTutorial: replyTutorialActive
+                isTutorial: tutorialMode?.marksReply == true
             )
 
         case .pill, .hoverRow, .generating, .result, .replyArmed:
@@ -827,8 +881,9 @@ final class OverlayController: ObservableObject {
                 }
                 let tutorialCompletion = context.pending.isTutorial ? self.tutorialInserted : nil
                 if context.pending.isTutorial {
+                    self.tutorialPrompts = []
                     self.tutorialInserted = nil
-                    if context.pending.replyTo != nil { self.replyTutorialActive = false }
+                    self.tutorialMode = nil
                 }
                 // The reply has been sent where it was going, so the copy behind it is
                 // spent. Cancelling the clock as well keeps a late expiry from firing

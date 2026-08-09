@@ -149,24 +149,37 @@ struct HoverRow: View {
             BrandMark(animation: .engaged)
             divider
 
-            if controller.displayedPrompts.isEmpty {
-                // Two different empty states. Telling someone to go and make buttons
-                // they already have, because the fetch failed, is worse than silence.
-                Text(
-                    controller.promptsFailed
-                        ? "ボタンを読み込めませんでした"
-                        : "スマホでボタンを作成してください"
-                )
-                .font(Tokens.Font.body(Tokens.Overlay.labelMedium))
-                .foregroundStyle(Tokens.Overlay.textTertiary)
+            if controller.signedOut {
+                // **The one empty row that is not an apology.** Signed out, every
+                // control on this bar is inert — the buttons live on the account and
+                // ✎ can only end in a failed rewrite — so the row is replaced by the
+                // single action that changes that, rather than reporting that the
+                // buttons could not be loaded and leaving the user to guess why.
+                Text("サインインするとボタンが使えます")
+                    .font(Tokens.Font.body(Tokens.Overlay.labelMedium))
+                    .foregroundStyle(Tokens.Overlay.textSecondary)
+                RowPill(title: "サインイン", emphasised: true) { controller.pressSignIn() }
             } else {
-                ForEach(controller.displayedPrompts) { prompt in
-                    RowPill(title: prompt.title) { controller.press(prompt) }
+                if controller.displayedPrompts.isEmpty {
+                    // Two different empty states. Telling someone to go and make
+                    // buttons they already have, because the fetch failed, is worse
+                    // than silence.
+                    Text(
+                        controller.promptsFailed
+                            ? "ボタンを読み込めませんでした"
+                            : "スマホでボタンを作成してください"
+                    )
+                    .font(Tokens.Font.body(Tokens.Overlay.labelMedium))
+                    .foregroundStyle(Tokens.Overlay.textTertiary)
+                } else {
+                    ForEach(controller.displayedPrompts) { prompt in
+                        RowPill(title: prompt.title) { controller.press(prompt) }
+                    }
                 }
-            }
 
-            divider
-            RowPill(systemImage: "pencil") { controller.pressCustomInput() }
+                divider
+                RowPill(systemImage: "pencil") { controller.pressCustomInput() }
+            }
         }
         .padding(.horizontal, 12)
     }
@@ -180,16 +193,23 @@ struct HoverRow: View {
 
 /// Transparent until hover, then the hairline value — `surface` sits too close to
 /// `canvas` for a hover state to read.
+///
+/// `emphasised` inverts it to a filled pill for the one row that holds a single
+/// action and nothing else (signed out). It fills with `textPrimary` rather than
+/// introducing a colour: §8 keeps the generating capsule as the overlay's only
+/// colour, and the dark ramp's own white is the loudest thing available here.
 struct RowPill: View {
     var title: String?
     var systemImage: String?
+    var emphasised = false
     let action: () -> Void
 
     @State private var isHovering = false
 
-    init(title: String, action: @escaping () -> Void) {
+    init(title: String, emphasised: Bool = false, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = nil
+        self.emphasised = emphasised
         self.action = action
     }
 
@@ -210,17 +230,24 @@ struct RowPill: View {
                         .font(.system(size: 11, weight: .medium))
                 }
             }
-            .foregroundStyle(Tokens.Overlay.textPrimary)
+            .foregroundStyle(foreground)
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .background(
-                Capsule().fill(isHovering ? Tokens.Overlay.controlHover : .clear)
-            )
+            .background(Capsule().fill(fill))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
         .cursor(.pointingHand)
+    }
+
+    private var foreground: Color {
+        emphasised ? Tokens.Overlay.canvas : Tokens.Overlay.textPrimary
+    }
+
+    private var fill: Color {
+        guard emphasised else { return isHovering ? Tokens.Overlay.controlHover : .clear }
+        return Tokens.Overlay.textPrimary.opacity(isHovering ? 0.88 : 1)
     }
 }
 

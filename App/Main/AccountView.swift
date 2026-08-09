@@ -149,6 +149,8 @@ struct AccountView: View {
 
     /// Cards run the full width; the editable value does not. A text field as wide as
     /// the pane is harder to read and makes the Save action look detached from it.
+    /// One width for every field on this page — the signed-out form used to carry a
+    /// second (240) because it lived in a 460 pt column of its own.
     private static let fieldWidth: CGFloat = 280
 
     private static let joinedFormatter: DateFormatter = {
@@ -160,54 +162,31 @@ struct AccountView: View {
 
     // MARK: - Signed out
 
-    /// A real desktop composition: context and trust on the left, the compact account
-    /// form on the right. `ViewThatFits` stacks the same two pieces at the minimum
-    /// window width rather than squeezing fields or clipping them.
+    /// The same page, signed out: captioned row groups down one column, exactly like
+    /// the signed-in half above it.
+    ///
+    /// It was a two-column split — a marketing panel on the left, the form on the right
+    /// — and the two columns never lined up: the left one had no controls in it, the
+    /// right one was pinned to a 460 pt frame inside a pane twice that wide, and the
+    /// page changed shape completely at the moment of signing in. One column of the
+    /// window's own settings idiom is what the rest of this app already is.
     private var authForm: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 24) {
-                authIntroduction
-                    .frame(width: 220, alignment: .leading)
-                authControls
-                    .frame(width: Self.authGroupWidth, alignment: .leading)
-            }
-            VStack(alignment: .leading, spacing: 24) {
-                authIntroduction
-                authControls
-                    .frame(maxWidth: Self.authGroupWidth, alignment: .leading)
-            }
+        VStack(alignment: .leading, spacing: 24) {
+            authControls
+            authBenefits
         }
     }
 
-    private var authIntroduction: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Badge("共有アカウント")
-            VStack(alignment: .leading, spacing: 6) {
-                Text("スマホと Mac を、ひとつにつなぐ")
-                    .font(Tokens.Font.body(17, weight: .semibold))
-                    .foregroundStyle(Tokens.Window.textPrimary)
-                Text("同じアカウントでサインインすると、いつものボタンをこの Mac でもすぐに使えます。")
-                    .font(Tokens.Font.body(13))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                AuthBenefit(icon: .buttons, text: "ボタンを自動で同期")
-                AuthBenefit(icon: .profile, text: "表示名と契約を共有")
-                AuthBenefit(icon: .history, text: "履歴はこの Mac に保存")
-            }
-        }
-    }
-
+    /// The tabs caption the group. A `SectionCaption` reading 「サインイン」 directly
+    /// under a tab already reading 「サインイン」 would be the label twice.
     private var authControls: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             ModeTabs(mode: $model.authMode)
 
             RowGroup {
                 SettingsRow(title: "メールアドレス") {
                     SettingsField(placeholder: "you@example.com", text: $model.email) { submit() }
-                        .frame(width: Self.authFieldWidth)
+                        .frame(width: Self.fieldWidth)
                 }
                 Hairline()
                 SettingsRow(
@@ -215,7 +194,7 @@ struct AccountView: View {
                     subtitle: model.authMode == .signUp ? "6文字以上" : nil
                 ) {
                     SettingsField(placeholder: "", text: $model.password, secure: true) { submit() }
-                        .frame(width: Self.authFieldWidth)
+                        .frame(width: Self.fieldWidth)
                 }
                 if model.authMode == .signUp {
                     Hairline()
@@ -226,7 +205,7 @@ struct AccountView: View {
                             secure: true,
                             onSubmit: { submit() }
                         )
-                        .frame(width: Self.authFieldWidth)
+                        .frame(width: Self.fieldWidth)
                     }
                 }
             }
@@ -259,9 +238,36 @@ struct AccountView: View {
         }
     }
 
-    /// Wide enough for an address, narrow enough that the row still reads as a row.
-    private static let authFieldWidth: CGFloat = 240
-    private static let authGroupWidth: CGFloat = 460
+    /// What signing in actually does, in the same rows-and-badges shape `syncSection`
+    /// uses once signed in — so the page answers the same question before and after,
+    /// rather than making the claim in a marketing column that then disappears.
+    private var authBenefits: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionCaption(text: "サインインすると")
+            RowGroup {
+                SettingsRow(
+                    title: "ボタンが自動で同期されます",
+                    subtitle: "スマホで作ったボタンが、この Mac のバーにそのまま並びます"
+                ) {
+                    Badge("同期")
+                }
+                Hairline()
+                SettingsRow(
+                    title: "表示名と契約を共有します",
+                    subtitle: "アカウントはスマホとこの Mac で共通です"
+                ) {
+                    Badge("同期")
+                }
+                Hairline()
+                SettingsRow(
+                    title: "履歴と統計はこの Mac に残ります",
+                    subtitle: "文章の記録はこの端末から出ません"
+                ) {
+                    Badge("この Mac")
+                }
+            }
+        }
+    }
 
     private func submit() {
         guard canSubmit else { return }
@@ -271,20 +277,6 @@ struct AccountView: View {
     private var canSubmit: Bool {
         guard !model.isAuthenticating else { return false }
         return model.email.contains("@") && model.password.count >= 6
-    }
-}
-
-private struct AuthBenefit: View {
-    let icon: Icon.Name
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 9) {
-            IconPlate(icon: icon, diameter: 28, tinted: false)
-            Text(text)
-                .font(Tokens.Font.body(13, weight: .medium))
-                .foregroundStyle(Tokens.Window.textPrimary)
-        }
     }
 }
 

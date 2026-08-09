@@ -38,7 +38,17 @@ public struct UserPromptRemoteStore: Sendable {
         try await authorize(&request)
 
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let http = response as? HTTPURLResponse else {
+            throw RewriteError.backend("Failed to load buttons.")
+        }
+        // 401/403 is the *other* way to be signed out, and it has to be told apart
+        // from a network failure: `ensureFreshAccessToken` deliberately falls back to
+        // the stored token when a refresh fails rather than signing the user out, so a
+        // session that has genuinely expired reaches PostgREST and comes back rejected.
+        // The hover row shows a sign-in button for one of these and a retry for the
+        // other, so collapsing both into `backend` loses the only signal it has.
+        guard !Self.isUnauthorized(http.statusCode) else { throw RewriteError.notSignedIn }
+        guard (200..<300).contains(http.statusCode) else {
             throw RewriteError.backend("Failed to load buttons.")
         }
         return try PostgRESTCoding.decoder.decode([UserPrompt].self, from: data)
@@ -198,17 +208,29 @@ public struct UserPromptRemoteStore: Sendable {
 
     private func send(_ request: URLRequest, action: String) async throws -> Data {
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw RewriteError.backend(action)
-        }
+        guard let http = response as? HTTPURLResponse else { throw RewriteError.backend(action) }
+        guard !Self.isUnauthorized(http.statusCode) else { throw RewriteError.notSignedIn }
+        guard (200..<300).contains(http.statusCode) else { throw RewriteError.backend(action) }
         return data
     }
 
+    /// Mirrors `DesktopRewriteService.post`: a missing session is `notSignedIn`, not a
+    /// transport error. Every caller here goes through this, so no request is ever sent
+    /// with no token at all.
     private func authorize(_ request: inout URLRequest) async throws {
-        let accessToken = try await auth.ensureFreshAccessToken()
+        let accessToken: String
+        do {
+            accessToken = try await auth.ensureFreshAccessToken()
+        } catch {
+            throw RewriteError.notSignedIn
+        }
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(config.publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    }
+
+    private static func isUnauthorized(_ statusCode: Int) -> Bool {
+        statusCode == 401 || statusCode == 403
     }
 
 }

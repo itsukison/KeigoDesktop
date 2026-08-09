@@ -1,12 +1,15 @@
 import AppKit
 import DesktopRewriteKit
+import PostHog
 import SwiftUI
 
 @MainActor
 final class OnboardingCoordinator: ObservableObject {
     @Published private(set) var step: DesktopOnboardingStep = .welcome
     @Published private(set) var rewritePracticeCompleted = false
+    @Published private(set) var customPracticeCompleted = false
     @Published private(set) var replyPracticeCompleted = false
+    @Published private(set) var selectedSource: OnboardingSource?
     @Published private(set) var selectedPack: OnboardingPresetPack?
     @Published var buttonDrafts: [OnboardingButtonDraft] = [] {
         didSet { saveDrafts() }
@@ -39,21 +42,25 @@ final class OnboardingCoordinator: ObservableObject {
     func start(replay: Bool) {
         replaying = replay
         rewritePracticeCompleted = false
+        customPracticeCompleted = false
         replyPracticeCompleted = false
+        selectedSource = nil
         selectedPack = progress.savedPack
         buttonDrafts = progress.savedDrafts
         move(to: replay ? .welcome : progress.savedStep)
     }
 
     func move(to next: DesktopOnboardingStep) {
-        if [.practice, .replyPractice].contains(step), next != step { overlay.endTutorial() }
+        if [.practice, .customPractice, .replyPractice].contains(step), next != step {
+            overlay.endTutorial()
+        }
         step = next
         if !replaying { progress.save(step: next) }
 
         switch next {
         case .welcome, .purpose, .review, .access:
             overlay.setVisible(false)
-        case .bar, .complete:
+        case .bar, .source, .complete:
             overlay.endTutorial()
             overlay.setVisible(true)
         case .practice:
@@ -61,6 +68,13 @@ final class OnboardingCoordinator: ObservableObject {
             overlay.beginTutorial(prompts: tutorialPrompts) { [weak self] in
                 guard let self else { return }
                 self.rewritePracticeCompleted = true
+                self.restoreWindowAfterTutorialInsert?()
+            }
+        case .customPractice:
+            overlay.setVisible(true)
+            overlay.beginCustomTutorial { [weak self] in
+                guard let self else { return }
+                self.customPracticeCompleted = true
                 self.restoreWindowAfterTutorialInsert?()
             }
         case .replyPractice:
@@ -80,11 +94,36 @@ final class OnboardingCoordinator: ObservableObject {
         case .review: confirmButtons()
         case .access where mainModel.isTrusted: move(to: .bar)
         case .bar: move(to: .practice)
-        case .practice where rewritePracticeCompleted: move(to: .replyPractice)
-        case .replyPractice where replyPracticeCompleted: move(to: .complete)
+        case .practice where rewritePracticeCompleted: move(to: .customPractice)
+        case .customPractice where customPracticeCompleted: move(to: .replyPractice)
+        case .replyPractice where replyPracticeCompleted: move(to: .source)
+        case .source where selectedSource != nil: submitSource()
         case .complete: finish()
         default: break
         }
+    }
+
+    func select(source: OnboardingSource) {
+        selectedSource = source
+    }
+
+    /// The question is optional by construction: 「答えない」 moves on and sends nothing,
+    /// so a skipped run is absent from the series rather than a guess inside it.
+    func skipSource() {
+        move(to: .complete)
+    }
+
+    private func submitSource() {
+        if let selectedSource, !replaying {
+            // First touch wins — `userPropertiesSetOnce`. A replaying user answered this
+            // on their real first run, and their answer is the one worth keeping.
+            PostHogSDK.shared.capture(
+                "desktop_source_selected",
+                properties: ["source": selectedSource.rawValue],
+                userPropertiesSetOnce: ["attribution_source": selectedSource.rawValue]
+            )
+        }
+        move(to: .complete)
     }
 
     var usesCurrentButtons: Bool { selectedPack == nil && !buttonDrafts.isEmpty }
@@ -167,7 +206,10 @@ final class OnboardingCoordinator: ObservableObject {
     private func finish() {
         overlay.endTutorial()
         overlay.setVisible(true)
-        if !replaying { progress.complete() }
+        if !replaying {
+            progress.complete()
+            PostHogSDK.shared.capture("desktop_onboarding_completed")
+        }
         onFinish()
     }
 

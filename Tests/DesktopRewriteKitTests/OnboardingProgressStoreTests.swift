@@ -28,6 +28,9 @@ final class OnboardingProgressStoreTests: XCTestCase {
     func testUnfinishedStepSurvivesAStoreReload() {
         OnboardingProgressStore(defaults: defaults).save(step: .replyPractice)
         XCTAssertEqual(OnboardingProgressStore(defaults: defaults).savedStep, .replyPractice)
+
+        OnboardingProgressStore(defaults: defaults).save(step: .customPractice)
+        XCTAssertEqual(OnboardingProgressStore(defaults: defaults).savedStep, .customPractice)
     }
 
     func testCompletionClearsResumeStepAndCannotBeMovedBack() {
@@ -73,13 +76,60 @@ final class OnboardingProgressStoreTests: XCTestCase {
         )
     }
 
-    func testReplyPracticeWasAppendedWithoutChangingExistingStoredSteps() {
+    func testPracticeStepsWereAppendedWithoutChangingExistingStoredSteps() {
+        XCTAssertEqual(DesktopOnboardingStep.welcome.rawValue, 0)
+        XCTAssertEqual(DesktopOnboardingStep.purpose.rawValue, 1)
+        XCTAssertEqual(DesktopOnboardingStep.review.rawValue, 2)
+        XCTAssertEqual(DesktopOnboardingStep.access.rawValue, 3)
+        XCTAssertEqual(DesktopOnboardingStep.bar.rawValue, 4)
+        XCTAssertEqual(DesktopOnboardingStep.practice.rawValue, 5)
         XCTAssertEqual(DesktopOnboardingStep.complete.rawValue, 6)
         XCTAssertEqual(DesktopOnboardingStep.replyPractice.rawValue, 7)
+        XCTAssertEqual(DesktopOnboardingStep.customPractice.rawValue, 8)
+        XCTAssertEqual(DesktopOnboardingStep.source.rawValue, 9)
         XCTAssertEqual(
             DesktopOnboardingStep.flow,
-            [.welcome, .purpose, .review, .access, .bar, .practice, .replyPractice, .complete]
+            [
+                .welcome, .purpose, .review, .access, .bar, .practice,
+                .customPractice, .replyPractice, .source, .complete,
+            ]
         )
+    }
+
+    func testVisualFlowHasMatchingForwardAndBackNavigation() {
+        let flow = DesktopOnboardingStep.flow
+        XCTAssertEqual(Array(flow.dropFirst()), [
+            .purpose, .review, .access, .bar, .practice, .customPractice,
+            .replyPractice, .source, .complete,
+        ])
+        XCTAssertEqual(Array(flow.dropLast().reversed()), [
+            .source, .replyPractice, .customPractice, .practice, .bar, .access,
+            .review, .purpose, .welcome,
+        ])
+    }
+
+    /// The question is asked before the closing card, not after it — 完了 hands the app
+    /// over, and nothing should be asked once it has.
+    func testTheSourceQuestionIsAskedBeforeCompletion() {
+        XCTAssertEqual(DesktopOnboardingStep.flow.last, .complete)
+        XCTAssertEqual(DesktopOnboardingStep.flow.dropLast().last, .source)
+    }
+
+    /// The raw values reach PostHog as `source`. Renaming one splits an attribution
+    /// series in two with nothing in the data to say it happened.
+    func testSourceKeysAreStable() {
+        XCTAssertEqual(
+            OnboardingSource.allCases.map(\.rawValue),
+            ["x", "youtube", "instagram", "tiktok", "web_search", "friend", "article", "other"]
+        )
+        XCTAssertTrue(OnboardingSource.allCases.allSatisfy { !$0.label.isEmpty })
+    }
+
+    func testCompletedVersionTwoUsersRemainComplete() {
+        let store = OnboardingProgressStore(defaults: defaults)
+        XCTAssertEqual(OnboardingProgressStore.currentVersion, 2)
+        store.complete()
+        XCTAssertTrue(OnboardingProgressStore(defaults: defaults).isComplete)
     }
 
     func testPracticeSamplesFollowTheReviewedMainButton() {

@@ -24,12 +24,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     private var statusItem: NSStatusItem?
     private var onboardingMenuItem: NSMenuItem?
     private var checkForUpdatesMenuItem: NSMenuItem?
-    /// The status menu's only escape hatch once a right-click hide has taken the pill
-    /// off screen (§17) — there is nothing left to right-click at that point. Hidden
-    /// whenever `overlay.isHiddenBySnooze` is false, rather than removed and re-added,
-    /// so `menuNeedsUpdate` only ever toggles one item instead of rebuilding the menu.
-    private var reshowOverlayItem: NSMenuItem?
-    private var reshowOverlaySeparator: NSMenuItem?
+    /// The two time-boxed actions the pill's own right-click menu offers (§17), which
+    /// until now could only be reached by right-clicking the pill — and the hide could
+    /// only be *undone* from here, because a hidden pill has nothing left to right-click.
+    /// One row each, one hour each: the title and the meaning flip with the state, so
+    /// there is never a stale 「無効にする」 sitting under an active window. `menuNeedsUpdate`
+    /// rewrites the titles; the selectors read the state again at click time, so a window
+    /// that expires while the menu is open still does the right thing.
+    private var hideOverlayItem: NSMenuItem?
+    private var copyTriggerItem: NSMenuItem?
     private let onboardingProgress = OnboardingProgressStore()
     private var updaterStarted = false
     private var deferredUpdateCheckTask: Task<Void, Never>?
@@ -55,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         // reached from the menu bar and does not change the activation policy — a
         // policy flip on open would momentarily steal focus, which §4 forbids.
         NSApp.setActivationPolicy(.accessory)
+        PostHogConfiguration.configure()
 
         let rewriteService = DesktopRewriteService(config: config, auth: auth)
         let promptStore = UserPromptRemoteStore(config: config, auth: auth)
@@ -64,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         let overlay = OverlayController(
             rewriteService: rewriteService,
             promptStore: promptStore,
-            analytics: NoopAnalytics(),
+            analytics: PostHogAnalytics(),
             history: history,
             appVersion: appVersion
         )
@@ -223,21 +227,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         let menu = NSMenu()
         menu.delegate = self
 
-        // Starts hidden — `menuNeedsUpdate` is what shows it, and only while
-        // `overlay.isHiddenBySnooze`.
-        let reshowItem = menu.addItem(
-            withTitle: "",
-            action: #selector(reshowOverlay),
-            keyEquivalent: ""
-        )
-        reshowItem.target = self
-        reshowItem.isHidden = true
-        reshowOverlayItem = reshowItem
-        let reshowSeparator = NSMenuItem.separator()
-        reshowSeparator.isHidden = true
-        menu.addItem(reshowSeparator)
-        reshowOverlaySeparator = reshowSeparator
-
         menu.addItem(
             withTitle: "敬語ボタンを開く",
             action: #selector(openMainWindow),
@@ -260,6 +249,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             action: #selector(reloadPrompts),
             keyEquivalent: "r"
         ).target = self
+        menu.addItem(.separator())
+        // Titles are placeholders; `menuNeedsUpdate` writes the real ones.
+        let hideItem = menu.addItem(
+            withTitle: "",
+            action: #selector(toggleOverlayHidden),
+            keyEquivalent: ""
+        )
+        hideItem.target = self
+        hideOverlayItem = hideItem
+        let copyItem = menu.addItem(
+            withTitle: "",
+            action: #selector(toggleCopyTrigger),
+            keyEquivalent: ""
+        )
+        copyItem.target = self
+        copyTriggerItem = copyItem
+        menu.addItem(.separator())
         let updateItem = menu.addItem(
             withTitle: "アップデートを確認…",
             action: #selector(checkForUpdates),
@@ -282,23 +288,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     /// shape `PillRootView`'s right-click menu uses for its own copy-disabled row,
     /// just via AppKit's delegate hook instead of a fresh SwiftUI `ViewBuilder` call.
     func menuNeedsUpdate(_ menu: NSMenu) {
-        guard let overlay, let reshowItem = reshowOverlayItem, let separator = reshowOverlaySeparator else {
-            return
-        }
-        let hidden = overlay.isHiddenBySnooze
-        reshowItem.isHidden = !hidden
-        separator.isHidden = !hidden
-        if hidden {
+        guard let overlay else { return }
+        if overlay.isHiddenBySnooze {
             let minutes = overlay.hiddenRemainingMinutes ?? 0
-            reshowItem.title = "敬語ボタンを今すぐ再表示する（残り\(minutes)分）"
+            hideOverlayItem?.title = "敬語ボタンを今すぐ再表示する（残り\(minutes)分）"
+        } else {
+            hideOverlayItem?.title = "敬語ボタンを\(OverlaySnooze.Duration.oneHour.label)非表示にする"
+        }
+        if overlay.isCopyTriggerDisabled {
+            let minutes = overlay.copyDisabledRemainingMinutes ?? 0
+            copyTriggerItem?.title = "コピー機能を今すぐ有効にする（残り\(minutes)分）"
+        } else {
+            copyTriggerItem?.title = "コピー機能を\(OverlaySnooze.Duration.oneHour.label)無効にする"
         }
         checkForUpdatesMenuItem?.isEnabled = updaterStarted
             && updaterController.updater.canCheckForUpdates
             && overlay.allowsUpdateCheck
     }
 
-    @objc private func reshowOverlay() {
-        overlay?.cancelHideNow()
+    /// The state is read here rather than baked into the item when the menu was built:
+    /// a window can expire while the menu sits open, and the row would then do the
+    /// opposite of what it says.
+    @objc private func toggleOverlayHidden() {
+        guard let overlay else { return }
+        if overlay.isHiddenBySnooze {
+            overlay.cancelHideNow()
+        } else {
+            overlay.hideOverlay(for: .oneHour)
+        }
+    }
+
+    @objc private func toggleCopyTrigger() {
+        guard let overlay else { return }
+        if overlay.isCopyTriggerDisabled {
+            overlay.enableCopyTriggerNow()
+        } else {
+            overlay.disableCopyTrigger(for: .oneHour)
+        }
     }
 
     @objc private func openMainWindow() {

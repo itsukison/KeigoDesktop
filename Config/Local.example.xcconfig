@@ -1,0 +1,17 @@
+// Copy to Config/Local.xcconfig and fill in the values. That copy is gitignored.
+//
+// Without it, POSTHOG_PROJECT_TOKEN is undefined, Info.plist's $(POSTHOG_PROJECT_TOKEN)
+// resolves to nothing, and PostHogConfiguration.configure() trips its DEBUG
+// assertionFailure on launch. The release workflow does not read this file — it passes
+// both values to xcodebuild directly from the `production` environment.
+//
+// The project token is a publishable key and is safe in a client build; it is kept out
+// of git so desktop, iOS and any future staging project cannot be confused for one
+// another. See docs/analytics.md.
+//
+// The // in a URL would be parsed as an xcconfig comment, so break it with $().
+
+// PostHog — "KeigoButton Desktop (macOS)", project 549465. NOT the iOS keyboard's
+// token: mixing the two is the one thing docs/analytics.md exists to prevent.
+POSTHOG_PROJECT_TOKEN =
+POSTHOG_HOST = https:/$()/us.i.posthog.com

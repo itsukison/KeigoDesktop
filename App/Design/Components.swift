@@ -61,6 +61,11 @@ struct CursorArea: NSViewRepresentable {
         @available(*, unavailable)
         required init?(coder: NSCoder) { fatalError() }
 
+        /// This view observes pointer movement; it is never the control being clicked.
+        /// Returning itself here can make the AppKit bridge consume a click before the
+        /// SwiftUI button above it, especially when a dynamic list rebuilds its rows.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
             trackingAreas.forEach(removeTrackingArea)

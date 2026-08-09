@@ -68,3 +68,6 @@ sparkle-private-key
 .cursor/
 *.swp
 *~
+
+# Per-developer build settings (PostHog token). See Config/Local.example.xcconfig.
+Config/Local.xcconfig

@@ -9,9 +9,16 @@ public enum DesktopOnboardingStep: Int, CaseIterable, Sendable {
     case practice = 5
     case complete = 6
     case replyPractice = 7
+    case customPractice = 8
+    case source = 9
 
+    /// Raw values are append-only — a saved step from an unfinished run is read back by
+    /// number — while this array owns the order the user actually sees. `source` is
+    /// second to last: 完了 stays the page the run ends on, and a question asked after
+    /// the closing card would be asked after the app was already handed over.
     public static let flow: [DesktopOnboardingStep] = [
-        .welcome, .purpose, .review, .access, .bar, .practice, .replyPractice, .complete,
+        .welcome, .purpose, .review, .access, .bar, .practice, .customPractice,
+        .replyPractice, .source, .complete,
     ]
 }
 

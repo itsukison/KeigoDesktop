@@ -11,6 +11,129 @@ The first run produced `debug.png` and a round of overlay fixes (§4, §8).
 
 Verified (2026-08-07):
 
+- **2026-08-09 — 「使うボタンを確認」 rebuilt around one cause.** Three complaints —
+  the left column was not centred like every other page, pressing ✎ animated
+  unnaturally, and the preview column moved when the left column did — were one
+  structural fact: a `ScrollView` has no natural height, so the column could never be
+  centred, and every height change inside it propagated outward. The list is now capped
+  at `rowHeight` (74, applied to the closed row rather than assumed of it) × the count
+  plus the gaps, and stays flexible below the cap: the column gets a natural height and
+  is centred with `.frame(maxHeight: .infinity)` like the others, while a long set is
+  still compressed and still scrolls. Because the cap comes from the count and not from
+  the content, an opened row grows *inside* a viewport that does not move — the heading,
+  the 追加 action and the preview all stay put — and the row is scrolled to the top of it
+  under the same curve. The editor's `.move(edge: .top)` is gone (it described the same
+  event the row's growth already did) and the preview column's
+  `alignment: isEditing ? .topLeading : .leading` is gone with it; the stage now spans
+  the full height, which is §15's invariant everywhere else. `xcodebuild` succeeds with
+  no new warnings and 105 tests pass. **Not verified: any of it on screen.** The
+  geometry was worked out on paper — 542 pt of usable height, a four-row list at 328,
+  a block of 474 leaving 34 pt above and below, and an expanded row of 275 inside the
+  328 pt viewport — and paper is exactly what got the overlay's panels wrong twice
+  (§16). Open the page with four buttons, press ✎ on the last row, and watch whether
+  anything outside the list moves.
+- **2026-08-09 — first run now asks where the user came from.** A tenth step,
+  きっかけ, sits between 返信 and 完了 — the last thing asked, but deliberately *before*
+  the page that hands the app over. Eight options; X, YouTube, Instagram and TikTok carry
+  their real App Store artwork, pulled through the ASO MCP's `get_app_details` for the
+  **jp** storefront (`333903271`, `544007664`, `389801252`, `1235601864`) and bundled at
+  1×/2× as `Assets.xcassets/Source*`, while the four non-app answers are Reicon on a
+  plate. The page is 用途's composition reused rather than a new layout, and the artwork
+  is bundled rather than fetched at runtime because a survey is not a reason to make a
+  network call. Answering is optional: 「答えない」 goes straight to 完了 and sends nothing,
+  so the series counts answers, not people. `desktop_source_selected` carries
+  `source` = `OnboardingSource.rawValue` plus a `$set_once` `attribution_source` person
+  property, and a 使い方を見る replay sends nothing at all. `source` is appended at raw
+  value 9 so unfinished saved steps still resolve, `currentVersion` stays 2 so users who
+  finished before the page existed are not asked, and two new tests pin both the wire
+  keys and the question's position before 完了. `xcodebuild` succeeds with no new
+  warnings and all 105 tests pass. **Not verified: the page on screen, and not one real
+  event.** The grid was sized on paper (297 pt cards in the 642 pt stage, four rows
+  inside the available height) rather than looked at, and 549465 has still never received
+  an event of any kind — `docs/analytics.md` §5 remains the check to run on the first
+  build carrying the token.
+- **2026-08-09 — onboarding detail pass: mascot tone, review tracking and practice
+  editor geometry.** The welcome mascot was dark because the whole white-field video
+  used `.multiply`: it removed the field by also multiplying the keycap's off-white
+  body and shadows into lavender. The video now keeps its source colour and feathers
+  only its outer edge into the stage. On ボタン, the preview group has a stable 280 pt
+  scene and is vertically centred until an editor opens, then top-aligns so the edited
+  row and preview are easy to track together. The intermittent edit/delete miss was in
+  the shared cursor bridge rather than either callback: its AppKit tracking view still
+  participated in hit testing beneath SwiftUI buttons; `CursorRectView.hitTest` is now
+  pass-through while its tracking areas remain active. The three practice scenes share
+  an explicit `NSTextView` font/inset layout, so the caret and text use the same native
+  geometry, and their success badges moved into the heading row instead of covering the
+  editable message. `xcodebuild` succeeds with no new warnings and all 103 tests pass.
+  **Not verified: the running onboarding window.** The local Computer Use runtime was
+  unavailable, so repeated edit/delete clicks, the animated mascot blend and the live
+  caret/success transition still need the owner check.
+- **2026-08-09 — the two timed switches are reachable from the menu bar, not only
+  from the pill.** Hiding the bar and disabling the copy trigger (§16) were
+  right-click-only, which left them undiscoverable and left the hide asymmetric: the
+  status menu could already *undo* it, because a hidden pill has nothing to right-click.
+  The menu now carries one row each — 「敬語ボタンを1時間非表示にする」 and
+  「コピー機能を1時間無効にする」 — and each row flips to
+  「…を今すぐ再表示する／有効にする（残りN分）」 while its window is in force, so there is
+  never a stale 「無効にする」 sitting under an active one. **One hour only from here**; the
+  pill's own menu keeps both 10分 and 1時間. `menuNeedsUpdate` writes the titles at open
+  time and the selectors re-read the state at *click* time, so a window expiring while
+  the menu sits open still does what the row says. `setVisible(true)` now clears the hide
+  deadline itself, which is what makes onboarding safe: it puts the real bar on screen for
+  its own lesson, and a deadline surviving that would leave the menu offering 再表示 for a
+  bar already on screen. `cancelHideNow` and `checkHiddenExpiry` lost their duplicate
+  clearing, and `OverlayController` gained `isCopyTriggerDisabled` /
+  `copyDisabledRemainingMinutes` / `enableCopyTriggerNow` so both menus ask the same
+  object instead of reading `ClipboardWatcher` twice. `xcodebuild` succeeds with no new
+  warnings and all 103 tests pass. **Not verified: the menu on screen.** No pure logic was
+  added — the durations and the countdown are `OverlaySnooze`, already tested — so what is
+  unproven is entirely the AppKit surface: the two rows' titles flipping, and a hide
+  started from the menu bar coming back an hour later.
+- **2026-08-09 — onboarding now teaches ✎, and reply guidance is intent rather than
+  sendable prose.** The visual flow is nine steps: アカウント → 用途 → ボタン →
+  アクセス → the real pill → 書き換え → カスタム → 返信 → 完了. The new full-width
+  Mail practice keeps a live focused editor, opens the production custom-input path,
+  rejects empty guidance, stays out of history/statistics, and completes only after a
+  successful Insert; saved buttons cannot complete it. All previous raw step values
+  remain fixed (`complete = 6`, `replyPractice = 7`) and `customPractice = 8`, so an
+  unfinished reply lesson resumes there and completed v2 users are not replayed.
+  `desktop-rewrite` now separates `<received_message>`, `<existing_draft>` and
+  `<reply_guidance>`; copied content is escaped and explicitly untrusted, while guidance
+  may carry facts, stance, fragments or style. Replies must be complete and sendable,
+  preserve supplied facts, never invent decisions or commitments, default to
+  context-aware professional language, and let explicit style requests win. The normal
+  rewrite prompt is unchanged. `swift test` passes all 103 tests, `xcodebuild` succeeds
+  with no new warnings, and six Deno prompt tests plus `deno check` / `deno lint` pass.
+  **`desktop-rewrite` v9 is ACTIVE with `verify_jwt = true`;** a request without a JWT
+  401s as `unauthorized`, and its downloaded deployed `index.ts`, `prompt.ts` and
+  `redact.ts` match the local SHA-256 hashes. Six authenticated
+  production reply cases passed: an availability fragment became a complete acceptance,
+  a decline kept its supplied reason, empty guidance acknowledged without choosing
+  availability, an existing draft was integrated once, Slack stayed concise, and copied
+  prompt injection was ignored. Two throwaway Auth accounts were deleted through the
+  production deletion function; password login then returned `invalid_credentials`.
+  **Not verified: the running nine-step window or either real custom/reply Insert path.**
+  The required local UI-control runtime was unavailable in this session, so those remain
+  an owner check rather than a claimed visual result.
+- **2026-08-09 — the signed-out bar said the wrong thing, and the signed-out account
+  page was two pages.** Hovering the pill with no session showed
+  「ボタンを読み込めませんでした」 — a network apology for a problem no retry can fix,
+  and it was reached because `UserPromptRemoteStore` collapsed *every* failure into
+  `RewriteError.backend`, so the row had no way to tell a dropped connection from a
+  missing account. `authorize` now wraps a missing session as `notSignedIn` the way
+  `DesktopRewriteService.post` already did, and 401/403 maps to it too (a refresh
+  failure deliberately falls back to the stored token, so an expired session is
+  rejected by PostgREST rather than locally). `OverlayController.signedOut` is that
+  state: the stale buttons are dropped, ✎ goes with them, and the row becomes
+  「サインインするとボタンが使えます」 plus a filled サインイン pill that collapses the
+  row and calls the existing `onSignInRequired` → アカウント in sign-in mode (§4
+  Errors). The account page's signed-out half lost its two-column split — a marketing
+  panel next to a form pinned at 460 pt inside a pane twice that wide — and is now one
+  column of the same row groups the signed-in half uses, with the sync claims as
+  captioned rows that survive signing in (§14). `xcodebuild` succeeds with no new
+  warnings and all 98 tests pass. **Not verified: either surface on screen.** The row
+  needs a real pointer on the bar (§14 item 1) and the page needs the window open with
+  no session; both are compiled and reasoned, neither has been looked at.
 - **2026-08-09 — 「使うボタンを確認」 always failed on the first attempt, and it was a
   second unique key nobody had read.** `user_prompts` carries
   `user_prompts_user_builtin_unique (user_id, builtin_key) WHERE builtin_key IS NOT NULL`,
@@ -296,8 +419,20 @@ panel, not an insertion — as are the clipboard fallback and the
 
 Known gaps, all deliberate:
 
-- Analytics is `NoopAnalytics`. §7's new PostHog project does not exist yet, so
-  there is no token to point at; the event shape is fixed in `App/Analytics.swift`.
+- **Analytics is wired end to end and has never carried a single event.** Project
+  `KeigoButton Desktop (macOS)` is **549465** in org `Keigo`, its token and host
+  are set on the repo's `production` environment (so `release-macos.yml`'s
+  `test -n` preflight passes — it did not before), and the 15-tile
+  `Desktop (macOS) Overview` dashboard is built and pinned. `docs/analytics.md`
+  is the authority. **Not verified: one real event.** `ingested_event` was false
+  at creation; the first build carrying the token is what proves the pipe, and
+  `docs/analytics.md` §5 is the three-step check to run then — the surface stamp
+  arriving, surviving a sign-out, and 465060 receiving nothing new.
+- Three analytics gaps, each small and each bounding a dashboard tile: no
+  `desktop_checkout_completed` (the revenue funnel ends at intent), no desktop
+  sign-in/sign-up events (a new desktop user is indistinguishable from an iOS
+  user installing the Mac app — `desktop.activations` is the server-side answer),
+  and `io_path` exists only on the two rewrite events. `docs/analytics.md` §3.
 - Sparkle and the distribution credentials are wired, and the `v0.1.0` GitHub release
   workflow passed end to end. What remains unproven is the user-side install and an
   installed old-build → new-build Sparkle update. The local Developer ID identity,
@@ -671,11 +806,30 @@ The structure below keeps that image's *geometry* and replaces its contents.
   never what anyone was reading against. `transition` now clears the toast only on the
   way into `.generating` or `.result`; the duration is 8 s, the toast is 360 pt wide at
   13 pt, and it says it closes on click.
-- **Two empty rows, two messages.** A failed `refreshPrompts` that leaves nothing
-  to show sets `promptsFailed`, and the row says so instead of telling someone to
-  go and make buttons they already have. Hovering retries — `refreshPrompts`
-  otherwise runs once at launch, so being offline at that moment left the row
-  empty for the session.
+- **Three empty rows, and only two of them are messages.** A failed `refreshPrompts`
+  that leaves nothing to show sets `promptsFailed`, and the row says so instead of
+  telling someone to go and make buttons they already have. Hovering retries —
+  `refreshPrompts` otherwise runs once at launch, so being offline at that moment left
+  the row empty for the session.
+
+  **Signed out is the third, and it is a button.** `refreshPrompts` catches
+  `RewriteError.notSignedIn` separately, drops the stale buttons (they belong to an
+  account that is no longer attached, so pressing one could only fail) and sets
+  `signedOut`. That row is 「サインインするとボタンが使えます」 plus a filled サインイン
+  pill, and it drops ✎ as well — every other control on the bar is inert until there is
+  an account, so the row holds the one action that changes that. Pressing it collapses
+  the row and calls `onSignInRequired`, the same callback a rewrite raises when it
+  discovers a missing session, so both routes land on アカウント in sign-in mode. It
+  used to report 「ボタンを読み込めませんでした」, which is a network apology for a
+  problem no retry can fix.
+
+  **Which needs `notSignedIn` to survive the store.** `UserPromptRemoteStore` used to
+  turn every failure into `RewriteError.backend`, so the row could not tell the two
+  apart. `authorize` now wraps a missing session the way `DesktopRewriteService.post`
+  already did, and 401/403 is mapped as well — `ensureFreshAccessToken` deliberately
+  falls back to the stored token when a refresh fails rather than signing the user out,
+  so a genuinely expired session reaches PostgREST and comes back rejected rather than
+  failing locally.
 
 ### Capture ordering — the rule that makes this work
 
@@ -921,15 +1075,42 @@ deferred.
 
 ## 7. Analytics
 
+`docs/analytics.md` is the authority — the dashboard's 14 tiles, the three
+isolation layers and the manual project-creation step live there. This is the
+short version.
+
 - **New PostHog project** in org `Keigo`. Do not report into `Default project`
   (465060) — MAU, retention and funnels are computed per project, and person
   merging across surfaces would silently deflate both platforms' counts.
-- PostHog Swift SDK, `distinct_id` = Supabase user id.
-- Every rewrite event carries: `surface: macos`, `host_app_bundle_id`,
-  `capture_mode`, `io_path` (`ax` | `clipboard`), `prompt_origin`,
-  `latency_ms`, `candidate_count`, `accepted` / `selected_index`.
+  **Read back on 2026-08-09: org `Keigo` contains exactly one project, 465060,
+  and it is the iOS keyboard's *and* the landing page's.** `../Japanese/Config/
+  Local.xcconfig` points at its token; 465060 already ingests `keyboard_enabled`,
+  `$screen` and `app_store_click`. The desktop project does not exist yet, so no
+  token is set anywhere and nothing has ever been sent.
+- PostHog Swift SDK, `distinct_id` = Supabase user id. **That is the same id iOS
+  identifies with**, which is why a shared project could not be salvaged by
+  filtering: the merge would be to the person store, not the event stream.
+- **Every event carries `surface: macos` as a super property**, registered in
+  `PostHogConfiguration.registerSurface()` — so the autocaptured `$exception` and
+  `$identify` carry it too, not just the ones we call `capture` for. It is
+  re-registered in `MainModel.signOut()`, because `PostHogSDK.shared.reset()`
+  clears super properties along with the identity and every event after a
+  sign-out would otherwise lose its surface until the next launch.
+- **Desktop event names are `desktop_`-prefixed, all of them.** Four of them were
+  not until 2026-08-09 — `prompt_created`, `prompt_updated`, `prompt_deleted` and
+  `onboarding_completed` are byte-identical to events the iOS container has been
+  sending into 465060 since 2026-06-11, so a mistyped token would have merged two
+  platforms' series unsplittably. Renaming was free because desktop has no event
+  history; it stops being free the moment the token goes live.
+- Every rewrite event carries: `host_app_bundle_id`, `capture_mode`,
+  `io_path` (`ax` | `clipboard`), `prompt_origin`, `latency_ms`,
+  `candidate_count`, `accepted` / `selected_index`.
 - `io_path` is the one to watch. A rising clipboard-fallback rate in a specific
-  bundle id is the earliest signal that an app's AX tree changed.
+  bundle id is the earliest signal that an app's AX tree changed — which is why
+  the dashboard breaks it down by `host_app_bundle_id` and not only over time.
+- `desktop_rewrite_failed` now carries `message`, the app's own Japanese toast.
+  It used to take the string and drop it, so the failure tile could only ever
+  have been a count.
 
 ---
 
@@ -1458,8 +1639,9 @@ No server write happens until an arrow has selected the next complete order.
 
 Page content runs the **full width** of the pane; individual inputs are capped
 (`AccountView.fieldWidth`). Clamping a whole page instead left it as a narrow
-column hugging the left edge of a 940 pt window. The signed-out form is the one
-deliberate exception — see "The account page is as big as `profiles` allows".
+column hugging the left edge of a 940 pt window. The signed-out form used to be a
+deliberate exception, pinned to a 460 pt column beside a marketing panel; it is not
+one any more — see "The signed-out form is the same page, not a different one".
 
 **Badges are one object.** `Badge` is `design.md`'s 9999 pt `#e4e5f0` plate with
 `#5856b5` 12/500 text and 8/4 `opticalPadding`. The メイン slot marker and the history
@@ -1584,36 +1766,45 @@ silently does nothing.
 keys plus the variable-fractional-second timestamp fallback that plain `.iso8601`
 rejects. Two copies of that would have been two places to get it wrong.
 
-### The signed-out form is a responsive split, not a hero card
+### The signed-out form is the same page, not a different one
 
-What was there was the shape a sign-in page takes when nobody opens `design.md`: a
-tinted icon plate and a bold heading **inside** a card, placeholder-only inputs, a small
-button, and a 「または」 rule separating it from a Google button that was sitting right
-underneath anyway — all wrapped in a full-width card clamped to a 380 pt column, so half
-of the card was empty. `design.md` names four of those in its Don'ts: don't title a card
-from inside it when a caption above it will do, don't leave a card's width unused, carry
-hierarchy with weight rather than ornament, and don't put a rule where nothing needs
-separating.
+Two shapes have now been rejected here, and they failed for opposite reasons.
 
-It now uses the desktop width rather than merely capping a phone-shaped form: a compact
-left column explains exactly what syncs and what stays local, while the right column is
-the familiar segmented control, `RowGroup` of label-plus-field rows, and two actions.
-`ViewThatFits` stacks those same pieces at the minimum window width instead of squeezing
-the fields. The tabs are the group's caption — a `SectionCaption` under them would say
-「サインイン」 directly below a tab already reading 「サインイン」.
+The **first** was the shape a sign-in page takes when nobody opens `design.md`: a tinted
+icon plate and a bold heading **inside** a card, placeholder-only inputs, a small button,
+and a 「または」 rule separating it from a Google button that was sitting right underneath
+anyway — all wrapped in a full-width card clamped to a 380 pt column, so half of the card
+was empty. `design.md` names four of those in its Don'ts: don't title a card from inside
+it when a caption above it will do, don't leave a card's width unused, carry hierarchy
+with weight rather than ornament, and don't put a rule where nothing needs separating.
 
-The form column is fixed at `authGroupWidth` (460) and each field at 240. A settings row
-throws its control to the far edge, which is right for a switch and wrong for an
-uncapped field: at the pane's full width the label and input would end up hundreds of
-points apart.
+The **second** overcorrected into a two-column split: a marketing panel on the left
+(badge, 17 pt heading, three icon-plate benefits) and the form on the right in a fixed
+460 pt frame, with `ViewThatFits` stacking them at the minimum width. It read as an
+advertisement bolted to a form. The two columns had no shared alignment, only one of them
+held a control, the form sat pinned to 460 inside a pane more than twice that wide, and
+the page changed shape completely at the instant of signing in — the pane the user was
+looking at is the same アカウント page either side of that moment.
+
+It is now **one column of the window's own settings idiom**, structurally identical to
+the signed-in half above it: `ModeTabs`, a `RowGroup` of label-plus-field rows at the
+page's full width with each field capped at `fieldWidth` (280, the same number 表示名
+uses), the two actions, then a 「サインインすると」 group carrying the sync claims as
+captioned rows with 同期 / この Mac badges — the same rows `syncSection` shows once
+signed in. Nothing on the page is wider or narrower than the rest of the app, and the
+claims survive the transition instead of vanishing with the left column.
+
+The tabs are still the group's caption: a `SectionCaption` under them would say
+「サインイン」 directly below a tab already reading 「サインイン」. The 240 pt field
+width went with the 460 pt column that justified it.
 
 ---
 
 ## 15. First-run onboarding
 
 `App/Onboarding/` is a dedicated, non-resizable **1080×700** window with no settings
-sidebar. Its eight steps are アカウント → 用途 → ボタン → アクセス → the pill →
-書き換え → 返信 → 完了. The frame does not follow the intrinsic size of whichever step happens to be
+sidebar. Its ten steps are アカウント → 用途 → ボタン → アクセス → the pill →
+書き換え → カスタム → 返信 → きっかけ → 完了. The frame does not follow the intrinsic size of whichever step happens to be
 visible: `.resizable` is absent from the style mask, the `NSHostingView` has
 `sizingOptions = []`, and both `contentMinSize` and `contentMaxSize` are applied at
 1080×700 after the host is installed. The order matters: the hosting view's default
@@ -1634,18 +1825,22 @@ the product mark, traffic-light circles and the official full-colour Google G.
 The visual stage contains code-native, shared desktop primitives rather than screenshots:
 a Mail composer with window chrome, toolbar, addressing rows and an editable body; the
 production-shaped dark overlay bar; and a System Settings accessibility scene with its
-sidebar, permission row and current state. Mock controls do not accept input. The reply
-practice's copy control and composer are the deliberate live exceptions. Real permission,
-navigation and save actions stay in the shared bottom shelf, so a switch or toolbar button
-that looks plausible never becomes a dead competing action.
+sidebar, permission row and current state. Mock controls do not accept input. The custom
+and reply practices' live editors, plus the reply practice's copy control, are the
+deliberate live exceptions. Real permission, navigation and save actions stay in the
+shared bottom shelf, so a switch or toolbar button that looks plausible never becomes a
+dead competing action.
 
 Its vertical extent is a layout invariant, not content measurement. On every split page
 the stage consumes the full height offered between the progress rail and navigation
 shelf, inset 10 pt at the top and bottom. Its width may change for a button editor or
 choice grid, but its top and bottom edges do not jump with the mock inside it.
 Explanatory columns are vertically centred against that stable stage so the two sides
-carry comparable visual weight. Task-heavy columns such as the button editor stay
-top-aligned because their content itself fills the region.
+carry comparable visual weight. **Every left column is centred, including the working
+ones** — ボタン used to be the exception on the grounds that a list fills the region
+anyway, which was only true at the largest set it allows. A column can only be centred
+if it has a natural height, so the one construct that never has one, a `ScrollView`, is
+capped rather than left to take everything it is offered (§15's ボタン paragraph).
 
 After authentication, navigation is one shared 58 pt shelf pinned to the bottom of that
 grid. Back stays at the left edge, skip actions are text links beside the forward action,
@@ -1682,13 +1877,29 @@ deleting obsolete owner rows, then fetches the server result and refreshes the o
 a failed second request may leave an extra row but cannot empty the account. Drafts and
 the selected pack survive an unfinished close in `OnboardingProgressStore`.
 
+Its layout is three rules, and the first one is what the other two are for. **The list is
+capped at the height its rows occupy closed** — `rowHeight` (74, applied to the row rather
+than assumed of it) × the count, plus the gaps — and stays flexible below that cap. That
+is the only way the column has a natural height, and a natural height is the only way it
+can be vertically centred like every other left column; below the cap the parent still
+compresses it, so a seven-button set scrolls exactly as before. Because the cap is
+computed from the *count* and not measured from the content, **opening a row cannot
+resize anything outside the list**: the editor grows inside a viewport whose height did
+not change, and the heading, the 追加 action and the preview column stay where they are.
+The row is scrolled to the top of that viewport in the same animation, which is what
+makes an expanded editor legible in a viewport it can nearly fill. The editor only fades
+in; sliding it down from the row's top edge as well described one event twice while the
+row was already growing. And the preview column reads nothing about the left one — it
+used to flip from centred to top-aligned whenever a row opened, which moved the one thing
+on screen the user had not touched.
+
 Sign-in and Accessibility are hard gates. バー and 練習 can be skipped once both
 exist. `OnboardingProgressStore.currentVersion` is persisted in `UserDefaults`;
 an unfinished close saves the current step, while the menu-bar item changes from
 「セットアップを続ける」 to 「使い方を見る」 after completion. A later sign-out or
 revoked permission does not reset onboarding; Home's compact recovery card handles it.
 
-The practice is real, not a simulation. It is the one page that drops the split layout:
+The first practice is real, not a simulation. It is the first page that drops the split layout:
 the heading runs above a large, full-width Mail composer, matching the interaction
 reference and making the target look like a place somebody would actually write. Its
 body is still the live `TextEditor`, not text painted into the mock. The real bar remains
@@ -1710,15 +1921,49 @@ window is made key again. Its editor is also the only production AX target owned
 process: a same-process selected-range setter enters AppKit directly and must run on
 `MainActor`, while every ordinary cross-process AX write stays on `AXTextIO`'s actor.
 
-返信 is a second real practice page, not a tour card. Its Slack-style scene has a live
+カスタム is a second full-width Mail practice with the focused live editor and the real
+screen-edge overlay. Its draft asks to move a 15:00 client meeting because the materials
+will not be ready, and the suggested one-off guidance asks for a concise client email
+that opens with an apology. The instructions identify the rightmost ✎ as the place for
+one-off directions. `beginCustomTutorial` marks only ✎ submissions as tutorial work:
+saved buttons may still run but cannot complete the page, blank guidance cannot submit,
+generation never reaches local history/statistics, and only a successful Insert clears
+the tutorial and restores the onboarding window.
+
+返信 is a third real practice page, not a tour card. Its Slack-style scene has a live
 copy action and a live empty composer. The copy is placed on the pasteboard and explicitly
 armed through the production reply state so the lesson still works when a replaying user
 has disabled clipboard watching; from `.replyArmed` onward it is the same hover, capture,
 free-text instruction, generation, result and Insert path as §16. The reply rewrite is
 marked as a tutorial, so it neither enters history nor increments local statistics, and
-the page completes only after the same-process AX write succeeds. `replyPractice` was
-appended at raw value 7 while `complete` stays 6; `DesktopOnboardingStep.flow` owns the
-visual order and Back navigation without invalidating unfinished saved steps.
+the page completes only after the same-process AX write succeeds. `replyPractice` remains
+raw value 7, `complete` remains 6, and `customPractice` is appended at 8;
+`DesktopOnboardingStep.flow` owns their visual order and Back navigation without
+invalidating unfinished saved steps. `currentVersion` remains 2, so completed users reach
+the expanded lesson through 「使い方を見る」 rather than being forced through first run.
+
+きっかけ is the only page that asks for something instead of teaching something, and it
+sits **second to last**: 完了 hands the app over, and nothing should be asked after that.
+It reuses 用途's composition exactly — question left, choice grid on the lavender stage,
+the same card metrics and selection dot — because a survey that invents its own layout
+reads as a different product's page. Eight options: X, YouTube, Instagram and TikTok
+carry their real App Store artwork, and Web検索 / 知人にすすめられて / 記事・ブログ /
+その他 are Reicon on a plate, the same full-colour-beside-Reicon pairing the sign-in
+page already makes with the official Google G. The artwork is bundled
+(`Assets.xcassets/Source*`), not fetched: this page must draw offline, and a survey is
+not a reason to make a network call. It is delivered square, so the superellipse mask is
+applied in `SourceMark` rather than baked into an asset that would then be wrong at
+another size. **These are third-party trademarks, shown to identify the channel and for
+nothing else.**
+
+It is a question, not a gate: 「答えない」 sits beside 「次へ」, moves straight to 完了 and
+sends nothing, so a skipped run is absent from the series rather than a guess inside it.
+`OnboardingSource.rawValue` is the wire key and is pinned by a test — a rename splits an
+attribution series with nothing in the data to show it happened — while `label` is free
+to be reworded. `desktop_source_selected` carries `source` plus a `$set_once`
+`attribution_source` person property (`docs/analytics.md` §3), and a replay sends nothing
+at all. `source` is appended at raw value 9, so an unfinished saved step still resolves,
+and `currentVersion` stays 2: users who finished before this page existed are not asked.
 
 ---
 
@@ -1729,21 +1974,28 @@ for *how* you want to reply, and the rewrite comes back as the reply. Two new
 `OverlayState` cases, one clipboard poll, and one flag on the AX capture. Everything
 from the generating capsule onward is §4 unchanged.
 
-**The backend was already finished.** `desktop-rewrite` has had the reply branch since
-it was written — `systemInstructions` switches on `isReply` and `userPrompt` wraps the
-message in `<reply_to>`. `RewriteRequest.replyTo` was in the copied model, and
-`parseRequest` already accepted it. Nothing in `supabase/` was touched for this feature,
-and the three fields mean this:
+`desktop-rewrite` selects the reply branch from `replyTo`, as it always has, but reply
+prompt construction now lives in the pure, tested `prompt.ts`. The three fields mean:
 
 | Field | Reply mode | Everywhere else |
 |---|---|---|
 | `replyTo` | the copied message. **The only thing that selects the reply branch** | nil |
-| `text` | the user's own draft in the field they are about to write into — usually `""`, which the backend handles explicitly | the text being rewritten |
-| `prompt` | the instruction they typed in the input box | the button's prompt |
+| `text` | the user's optional existing draft in `<existing_draft>` — usually `""` | the text being rewritten |
+| `prompt` | guidance in `<reply_guidance>`: facts, stance, answers, keywords or style, not necessarily prose to repeat | the button's prompt |
 
 `text` being empty is not a degenerate case, it is the normal one, and it is why
 `ContractTests` pins both `replyTo` going over the wire and its default staying nil:
 losing the key does not fail loudly, it silently rewrites an empty string.
+
+The copied text is escaped inside `<received_message>` and is untrusted context, never a
+source of instructions. A reply must acknowledge and answer it where the user's facts
+permit, integrate fragments into coherent prose, and return a complete sendable body.
+The host app and sender tone are hints: professional and context-aware is the default,
+while an explicit style request wins. Every user-supplied fact, reason, answer, decision
+and commitment is preserved; availability, dates, reasons, names, decisions and promises
+must never be invented. When both the existing draft and guidance provide no stance, the
+fallback acknowledges the message without accepting, declining, promising action or
+choosing availability for the user. Normal rewrite prompt construction is unchanged.
 
 ### ⌘C is the trigger, and selection is not
 
@@ -1954,7 +2206,10 @@ consulted on every poll, so `MainModel` needs no wiring to the overlay it does n
 
 ### Not verified
 
-`swift build`, `xcodebuild` and 64 tests pass, and there are no new warnings.
+`swift test` passes 103 tests, `xcodebuild` succeeds, and six Deno prompt tests plus
+`deno check` / `deno lint` pass, with no new warnings. `desktop-rewrite` v9 is ACTIVE
+with `verify_jwt = true`; the downloaded deployed source matches local hashes, and the
+six authenticated quality cases described at the top of this file passed.
 
 **Every correction in this section came from the owner running it, none from reading
 code — that is the pattern to expect here, and it is worth taking literally.** The
@@ -1964,9 +2219,10 @@ creation path, which looked correct and was. The measured height was the problem
 call sites downstream. When something in the overlay is mispositioned, read what the
 other panels had to fix before theorising about this one.
 
-Still unwatched by anyone: the one-line pill as it now stands, the gap holding as the
-input bar wraps to a second line, an empty-field capture in a real Mail or Slack compose
-box, and the write of a composed reply. `scripts/axdiag.swift` is the tool for the last.
+Still unwatched by anyone: the ten-step onboarding window, both real custom/reply Insert
+paths, the one-line reply pill, the gap holding as the input bar wraps to a second line,
+an empty-field capture in a real Mail or Slack compose box, and the write of a composed
+reply. `scripts/axdiag.swift` is the tool for the last.
 
 ### Open — the primary flow pays for this
 
