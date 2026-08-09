@@ -71,9 +71,7 @@ struct GeneratingCapsule: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "wand.and.sparkles")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Tokens.Overlay.textPrimary)
+            MascotSprite(animation: .thinking)
 
             Text(label)
                 .font(Tokens.Font.body(Tokens.Overlay.labelMedium))

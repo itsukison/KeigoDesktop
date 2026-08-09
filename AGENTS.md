@@ -11,6 +11,155 @@ The first run produced `debug.png` and a round of overlay fixes (§4, §8).
 
 Verified (2026-08-07):
 
+- **2026-08-09 — 「使うボタンを確認」 always failed on the first attempt, and it was a
+  second unique key nobody had read.** `user_prompts` carries
+  `user_prompts_user_builtin_unique (user_id, builtin_key) WHERE builtin_key IS NOT NULL`,
+  so a `builtin_key` is an *identity*, not a label — an account owns at most one `polite`
+  row. `replaceAll` upserts `on_conflict=id` and a preset pack mints fresh ids, so the id
+  conflict never fired, the partial index did, and PostgREST answered **409**. This was read
+  off the live project rather than theorised: two `POST /rest/v1/user_prompts?on_conflict=id`
+  409s in the API log, and `duplicate key value violates unique constraint
+  "user_prompts_user_builtin_unique"` in the Postgres log at the same two timestamps.
+  It is not intermittent and it is not the network the toast blames: `handle_new_user()`
+  seeds **every** account with all four keys at signup, so `starter` (4 keys), `japanese`
+  (`polite`) and `international` (`translateToEnglish`) collide 100 % of the time, while
+  `work` and `social` carry no keys and always went through — which is exactly why switching
+  packs "fixed" it. 「現在のボタンを使う」 was never affected; it sends the owned ids.
+  `UserPromptIdentity.reconciled` (pure, 6 tests) now re-points an incoming button at the row
+  the account already owns for its key, keeping that row's `created_at`, and `replaceAll`
+  reads the current rows first to do it. Reordering the write to delete-then-insert was
+  rejected: it fixes the symptom by making a half-failed write able to leave an account with
+  no buttons at all. Reproduced and fixed **against the live table** on a throwaway
+  `auth.users` id — the pre-fix shape raised the same 23505, the reconciled shape updated all
+  four rows in place with no new rows, and the user was deleted afterwards (0 rows left in
+  `auth.users`, `user_prompts`, `profiles`). `xcodebuild` succeeds and 98 tests pass.
+  **Not verified: the running review page.** The failing and passing shapes are proven at
+  the SQL layer and in the client's reconciliation, not by watching the step advance.
+- **2026-08-08 — Sparkle updater and GitHub release pipeline are wired.** Sparkle
+  2.9.5 is pinned in `project.yml`; the app starts its updater only after onboarding,
+  exposes `アップデートを確認…` from the status menu, and defers update presentation
+  while the overlay is doing capture, generation, input or result work. Production
+  builds take the EdDSA public key from `SPARKLE_PUBLIC_ED_KEY`; a missing key leaves
+  local builds usable but deliberately does not start the updater. The manual
+  `release-macos.yml` workflow builds a universal Developer ID archive, rejects sandbox
+  or debug entitlements, notarizes and staples both the app and DMG, generates a signed
+  appcast, publishes a GitHub release, then deploys the appcast to GitHub Pages. A clean
+  Debug build, an unsigned universal Release build and all 98 tests pass. **Release
+  credentials were completed on 2026-08-09:** Keychain reports the required
+  `Developer ID Application` identity for team `4KS6YS23KT`; the App Store Connect Team
+  API key authenticated with `notarytool`; the permanent Sparkle Ed25519 key lives in
+  Keychain; and the two GitHub environments, Pages, Actions permissions, six production
+  secrets and public-key variable are configured. **No GitHub release workflow or
+  Sparkle update chain has run yet.** See `docs/releasing.md`.
+- **2026-08-08 — adaptive rewrite practice and a real reply practice.** Onboarding is
+  now eight steps: アカウント → 用途 → ボタン → アクセス → the real pill → 書き換え
+  → 返信 → 完了. The first practice's live Mail draft is selected from the reviewed
+  main button's builtin key, title and instruction rather than always being a casual
+  sentence for 敬語; the real pill exposes every reviewed button, and Insert from any
+  one completes the lesson. The new full-width Slack scene
+  has one live copy action and one live `TextEditor`: copying arms the production reply
+  state, focusing the composer preserves the same-process AX target, and Insert must
+  write the generated reply back before the step completes. Both tutorial paths stay
+  out of history and statistics. Onboarding prose and progress use the same reusable
+  production-shaped `PillPreview` as Home instead of writing 「バー」 as an abstract
+  label. Existing raw step values remain unchanged and `replyPractice` is appended at
+  7, so an unfinished v2 setup still resumes correctly; `currentVersion` remains 2 so
+  this content change does not force completed users through first-run again. `swift
+  test` passes all 89 tests and `xcodebuild` succeeds. **The running copy → hover →
+  reply → Insert path and the eight-step layout still need an owner check.**
+- **2026-08-08 — onboarding visual system rebuilt around realistic desktop scenes.**
+  The seven-step state machine, fixed 1080×700 window, shared navigation shelf and real
+  tutorial overlay are unchanged. Explanatory steps now use a consistent question-left /
+  visual-right composition, with a lavender stage copied from the landing page's own
+  desktop scene (`#efecfa → #ddd8f2 → #c8c1e8`, with white and lavender radial light).
+  The access illustration is now a detailed System Settings window rather than one
+  symbolic row; button review, bar education and completion use the same realistic Mail
+  composer and production-shaped overlay preview. Practice is the deliberate full-width
+  exception, matching the reference's large app scene while retaining the original live,
+  focused `TextEditor` as the same-process AX target. The mock controls are illustrative
+  only; permission and navigation actions remain in the bottom shelf. `xcodebuild`
+  succeeds and all 87 tests pass. **The owner is doing the running visual check.**
+- **2026-08-08 — subscriptions, from the schema up to the cap-hit surface.**
+  `docs/billing.md` is the authority and its §11 is the checklist; this is what changed
+  here. The billing schema turned out to be **already applied** (`desktop_billing`,
+  `desktop_billing_cron`) — the document said otherwise and was wrong. What it did not
+  have was an entry point for `desktop.checkout_intents` or `desktop.stripe_events`:
+  `desktop` is not an exposed schema (§6), so those two tables were unreachable and the
+  Edge Functions were unbuildable. `20260808140000_desktop_billing_entry_points.sql`
+  adds the wrappers plus `desktop_process_stripe_event`, which preserves §5's "mark the
+  event processed in the same transaction as the write" over a transport that cannot
+  hold a lock across an HTTP call. Three new functions — `desktop-checkout` (§3.3's four
+  race defences; the price is resolved from a lookup key **server-side**),
+  `desktop-portal` (one call, no retention interstitial — §10), and
+  `desktop-stripe-webhook` (raw-body HMAC, `v1` scheme only, payload read for the
+  customer id and nothing else). `desktop-rewrite`'s bump-then-check guard is replaced
+  by reserve/commit/release: a rejected request no longer consumes quota, a failed
+  provider call is released, and `requestId` on the wire makes a retry idempotent.
+  Client: `PlanView` in the ⚙︎ modal, a quota row on ホーム carrying the **computed**
+  reset date (§4.5), and three distinct cap-hit surfaces — free-at-50 opens the paywall,
+  Pro-at-1,000 does not, a brake is neither (§9 rows 41–43). `xcodebuild` succeeds with
+  no new warnings, 87 tests pass, `deno check` + `deno lint` clean on all four functions.
+  `20260808140000` **is applied** — 11 entry points, and §3.3a's "two callers leave with
+  one session and one idempotency key" smoke-tested against a throwaway id with the rows
+  cleaned up afterwards. The Dashboard was read back rather than assumed: the webhook
+  endpoint is live on **`2026-07-29.dahlia`** with all 13 events, and the portal carries
+  `shortening_interval` **only**, with no retention offer. All four functions are
+  **deployed** — `verify_jwt` true/true/**false**/true, the webhook 400s on a missing or
+  forged signature and 405s on GET, both authed functions 401 without a JWT, and
+  `desktop-rewrite` v6's source was read back off the platform rather than assumed.
+  §6's lifecycle and §4.2's month-end arithmetic were then exercised **against the live
+  project on throwaway ids** (rows deleted afterwards): a retry does not double-reserve,
+  release returns quota but leaves the day brake ticked, and an anchor on 31 January
+  gives Feb 28 → **Mar 31** → Apr 30 with no drift. **Still not proven: a real payment.**
+  Tax is deliberately off end to end — **Core7 is a 免税事業者 with no T-number**, so
+  there is no Stripe Tax registration and no `jp_trn` by decision rather than by
+  omission; `desktop-checkout` sends `automatic_tax[enabled]=false` explicitly rather
+  than relying on Stripe's default, because it is a legal position and a default is the
+  wrong place to keep one. The plan card no longer says 「税込」 for the same reason.
+- **2026-08-08 — onboarding actions anchored and practice insertion crash fixed.** Every
+  post-authentication step now uses one shared 58 pt navigation shelf at the bottom of
+  the 920 pt grid: Back stays at the left, optional skip actions stay secondary, and the
+  single indigo forward action ends at the same lower-right coordinate on every page.
+  The practice page no longer tries to visually reach the screen edge; a compact note
+  points to the real bar outside the window, and its copy names the actual first
+  reviewed button rather than hard-coding 敬語. After a successful tutorial Insert, the
+  overlay now finishes dismissing its result panel before firing completion, then the
+  onboarding window is restored as key. The reported `EXC_BREAKPOINT` was a real crash,
+  not that focus handoff: practice is the one rewrite target owned by this process, and
+  its AX setter entered AppKit's `NSTextView` implementation from the `AXTextIO` actor.
+  AppKit asserted the main queue in `accessibilitySetSelectedRange` and trapped in
+  `_dispatch_assert_queue_fail`. Same-process AX writes now hop to `MainActor`; normal
+  cross-process AX writes remain off the main thread. **The running practice insert
+  still needs an owner check.**
+- **2026-08-08 — practice can no longer resize the onboarding window.** Setting
+  `contentMinSize` and `contentMaxSize` was not a fixed-frame guarantee: the
+  `NSHostingView` installed afterwards kept its default `.standardBounds`, which
+  reflects SwiftUI's min, ideal and max measurements back into its `NSWindow` and
+  overwrote those values. Focusing practice's `TextEditor` invalidated the measurement
+  and made the window grow toward the screen-edge pill. Onboarding now sets the host's
+  `sizingOptions` to `[]`, then applies 1080×700 after installing it. The real pill
+  remains a separate screen-edge panel outside the unchanged onboarding frame.
+- **2026-08-08 — onboarding rebuilt around use cases and the Willow window system.**
+  The window is now fixed at 1080×700 for the full run, and every step sits on the same
+  920 pt content grid inside a white 12 pt panel / 4 pt grey shell. The seven-step flow
+  is アカウント → 用途 → ボタン → アクセス → バー → 練習 → 完了: Google is the
+  primary sign-in, five practical four-button packs replace generic output gimmicks,
+  and a mandatory review page supports editing, adding, deleting and reordering before
+  anything is written to `user_prompts`. The welcome art is a silent Higgsfield
+  Seedance 2.0 mascot loop with no generated text or UI; its white field blends into the
+  panel, so the animation has no card, backdrop or decorative pills. `xcodebuild`
+  succeeds and all 82 tests pass. **The owner is doing the running visual check.**
+- **2026-08-08 — button ordering rewritten after two failed drag interactions.** The
+  manual `DragGesture` shook because it moved the row while reordering its list; native
+  `.draggable` then produced a detached, opaque preview narrower than the real row and
+  made the destination unclear. `ButtonsView` now has a compact vertical pair of up/down
+  controls on the left: one click, one adjacent move, no preview and no drop target. The first row is
+  always `main`, so moving another button above it replaces it; all rows, including
+  builtins, expose delete. `UserPromptRemoteStore.update` persists `slot`, and deleting
+  the main normalizes and promotes the next row. Four pure ordering tests cover the
+  arrow semantics. `xcodebuild` succeeds and all 79 tests pass. Existing iOS builds may
+  re-seed a deleted builtin; permanent cross-client deletion needs the iOS tombstone
+  noted in §14.
 - `swift build` + `xcodebuild` succeed; 64 unit tests pass, no new warnings.
 - **2026-08-08 — one candidate instead of three (§6, §8).** The desktop was sending
   the shared model's default `candidateCount: 3` and showing only the first, so two
@@ -96,6 +245,21 @@ Verified (2026-08-07):
   pointer motion reaches `NSTrackingArea` at all (§14 item 1 has the three methods that
   were tried and the zero callbacks each produced). Hover the bar and check before
   believing it.
+- **2026-08-08 — animated mascot.** Higgsfield's catalog exposed AutoSprite but
+  its submission endpoint rejected the job type, so the approved fallback used
+  Seedance 2.0 with `public/bgremoved.png` as both first and last frame. The shipped
+  generations are idle `610859ac-f8be-493c-8a6a-8bdf63ee042a`, engaged
+  `ae88e59b-34fd-4e06-9bf2-ebe671286088`, and thinking
+  `a30adc86-8f26-4aad-b67a-b3be79f9bee7`. Each became a transparent 4×4 atlas: 16
+  frames, 4 fps, 128 px per frame. `BrandGlyph` runs idle at rest, engaged in hover /
+  reply / input states, and `GeneratingCapsule` runs thinking. The first engaged take
+  `d1c4b64a-e104-49ca-8898-7bc7086a4d6a` invented a cast shadow and was rejected.
+  The first running check exposed that `NSImageView` advertised each 128 px crop as a
+  128 pt intrinsic view, so SwiftUI clipped it into the 16 pt slot instead of scaling
+  it. The renderer is now a non-intrinsic `NSView` that draws into its actual bounds,
+  not a video decoder. Both atlases were inspected at 16 pt on `#141312`; `assetutil`
+  sees both names, `xcodebuild` succeeds and 79 tests pass. **The bounds-drawing fix has
+  not yet been rechecked in the running overlay.**
 - `deno check` + `deno lint` clean on `desktop-rewrite`.
 - Migration applied to `eercsucvxnszqletxued`: 3 `desktop` tables, RLS on, zero
   policies; 5 `public.desktop_*` entry points, all confirmed **not** callable by
@@ -124,8 +288,11 @@ Known gaps, all deliberate:
 
 - Analytics is `NoopAnalytics`. §7's new PostHog project does not exist yet, so
   there is no token to point at; the event shape is fixed in `App/Analytics.swift`.
-- No `Developer ID Application` certificate exists yet (§9), and Sparkle is not
-  wired. Dev builds only.
+- Sparkle and the distribution credentials are wired, but the GitHub release workflow
+  and an installed old-build → new-build Sparkle update have not run. The local
+  Developer ID identity, Apple notarization API authentication, permanent Sparkle key,
+  GitHub environments, encrypted secrets, Actions permissions and Pages source were all
+  verified on 2026-08-09. See §9 and `docs/releasing.md`.
 - Inter and Geist Mono are referenced by `DesignTokens` but not yet bundled, so
   type currently falls back to the system font.
 - `desktop_delete_old_usage_buckets` is not scheduled. Add it to the pg_cron
@@ -636,7 +803,7 @@ billing. **Separate function, separate schema, separate analytics.**
 |---|---|
 | `auth.users` | one identity across phone and laptop |
 | `profiles` | display name, subscription state |
-| `user_prompts` | the buttons — read and write (columns: `id, user_id, slot, builtin_key, origin, title, prompt, is_enabled, sort_order, created_at, updated_at`) |
+| `user_prompts` | the buttons — read and write (columns: `id, user_id, slot, builtin_key, origin, title, prompt, is_enabled, sort_order, created_at, updated_at`). **`id` is not its only unique key**: `user_prompts_user_builtin_unique (user_id, builtin_key) WHERE builtin_key IS NOT NULL` makes a builtin key an identity, and `handle_new_user()` seeds all four (`polite`, `natural`, `email`, `translateToEnglish`) at signup. Any write that mints a fresh id for an already-owned key is a 409 — see `UserPromptIdentity` |
 | `user_ai_consent` | AI-improvement consent, honored by both surfaces |
 
 ### Desktop-only `desktop` schema — tables there, entry points in `public`
@@ -893,18 +1060,30 @@ means adding an imageset *and* a case — deliberately, because the alternative 
 `AppIconView` is the one exception to the single-set rule: real application icons come
 from `NSWorkspace` in full colour, because they are the user's apps and not our chrome.
 
-**The product mark is not Reicon, and it ships in two cuts.** The artwork in `public/`
+**The product mark is not Reicon.** The artwork in `public/`
 (a keycap, off-white with a black keyline and two black eyes) replaced
 `wand.and.sparkles` everywhere on 2026-08-07. Three raster assets were cut from it —
 `icon-mark` (line art, template), `icon-mark-filled` (the full colour art, the one
-non-template image in the app) and `AppIcon`. The catalog's README carries the
-derivation; the reason there are **two** cuts is the only part worth repeating here:
+non-template static image) and `AppIcon`. Three Higgsfield-derived animation atlases now
+carry the overlay states. The catalog's README carries the derivation:
 
 | Surface | Cut | Why |
 |---|---|---|
 | sidebar, onboarding (`AppMark`) | line art, tinted `#5a57ba` | the full-colour art's black keyline reads as a photograph on a `#f5f6f7` sidebar; §14's rule is that the accent is on the chrome |
 | menu-bar status item | line art, `isTemplate = true` | the menu bar inverts its contents for dark mode and for selection, which only works on alpha |
-| overlay bar (`BrandGlyph` → `BrandMark`) | full colour | on `#141312` the line art's double keyline closes into a smudge at 16 pt; the filled art is a white shape with two dark counters. Still achromatic, so §8's "the generating capsule is the overlay's only colour" survives |
+| overlay bar (`BrandGlyph` → `BrandMark`) | idle atlas | 16 transparent frames at 4 fps: a restrained bob and blink, legible at 16 pt |
+| expanded/reply/input bar | engaged atlas | a pronounced pop, lean and blink that survives at 16 pt |
+| generating capsule | thinking atlas | a pronounced side-to-side rock and directional eye movement; still achromatic, so the capsule ring remains the overlay's only colour |
+
+`MascotIdleSprite`, `MascotEngagedSprite` and `MascotThinkingSprite` are 512×512 PNG atlases in
+`Assets.xcassets`, four columns by four rows with 128 px frames. `MascotSprite` slices
+them once into `NSImage`s and advances at 250 ms. Its AppKit view deliberately has no
+intrinsic size and paints each frame into its SwiftUI-proposed bounds; an `NSImageView`
+made the 128 px source behave like a 128 pt view and clip inside the 16 pt pill slot.
+This is deliberate instead of shipping the 960 px H.264 sources: the overlay needs
+alpha, deterministic loops and no always-on video decoder. Both clips use the original
+mark as first **and** last frame, and both were normalized through the same stable crop
+so changing state does not change scale.
 
 `AppIcon` did not exist before this — `project.yml` had pointed
 `ASSETCATALOG_COMPILER_APPICON_NAME` at an `AppIcon` that was never in the catalog, so
@@ -1005,10 +1184,12 @@ taller than the area it sits in.
   write it plainly, it is the string that appears in the permission dialog.
 - Developer ID signing + notarization + hardened runtime. **No App Sandbox**
   (§2). Sparkle for updates.
-- **There is no Developer ID Application certificate on the dev machine yet** —
-  only `Apple Development`. Dev builds work and are correctly signed
-  (`TeamIdentifier=4KS6YS23KT`, `flags=0x10000(runtime)`, no `app-sandbox`);
-  nothing can be *distributed* until the cert is requested. Not a blocker.
+- **The Developer ID Application identity is installed and verified.** On 2026-08-09,
+  `security find-identity` reported `Developer ID Application: Yihuan Sun
+  (4KS6YS23KT)` with its private key available. The password-protected source `.p12`
+  stays outside the repository and its encrypted archive/password are separate GitHub
+  production secrets. Distribution still needs one successful workflow artifact and
+  the two-version Sparkle test in `docs/releasing.md`.
 - **`PRODUCT_NAME` must stay ASCII.** Setting it to `敬語ボタン` makes the
   executable `Contents/MacOS/敬語ボタン`, and Xcode's debug-dylib signing flow then
   signs `*.debug.dylib` and `__preview.dylib` but silently skips the main
@@ -1035,10 +1216,14 @@ Tracked so they don't creep in:
 - Multi-candidate UI (pager works, only one candidate shown).
 - Streaming (`stream: true` exists in the contract; v1 waits for the full
   response).
-- **Server-backed usage stats.** §14's numbers come from a local file. Reading
-  `desktop.usage_buckets` back would mean granting `authenticated` execute on a
-  new `SECURITY DEFINER` function — a change to a shared project's API surface
-  for a stat card. Deferred, not refused; see §12.
+- **Server-backed usage stats.** §14's four stat numbers still come from a local
+  file, and the reasoning below stands for them. **The quota readout is now the
+  exception**: `public.desktop_get_entitlement()` is granted to `authenticated` —
+  the first and only `desktop_*` entry point that is — because a cap the user
+  cannot see is a cap that ambushes them, and it takes no arguments precisely so
+  it cannot become the IDOR that a `p_user_id` parameter would be. Reading
+  `desktop.usage_buckets` back for the *stat card* would still mean another grant
+  on a shared project's API surface. Deferred, not refused; see §12.
 - Team / collaboration surfaces. The reference has them; we have no team object.
 
 ---
@@ -1058,9 +1243,13 @@ convention — `bundleIdPrefix: com.core7.keigobutton`, `DEVELOPMENT_TEAM: 4KS6Y
 
 ## 12. Open questions
 
-- **Subscription enforcement.** Shared billing was decided, but not what a
-  free-tier desktop user sees when they hit the cap, or whether desktop and
-  keyboard draw from one quota or two.
+- ~~**Subscription enforcement.**~~ **Answered by `docs/billing.md`.** Two separate
+  quotas: the desktop's counters live in `desktop.usage_windows` and the keyboard's in
+  `ai_rewrite_usage_buckets`, which follows §2's rule about never writing to the iOS
+  app's tables. A free desktop user who hits 50 gets the ⚙︎ プラン paywall with the
+  computed reset date; a Pro user who hits 1,000 gets a message and no paywall, because
+  there is no tier above (§9 rows 41–42). 「iPhone版はこれからも無料」 is on the plan
+  card, so the two quotas are stated rather than merely true.
 - **Brand relationship.** The iOS container uses the Bikey design system (purple
   + Liquid Glass); this app uses `design.md`, whose accent is now Willow's indigo
   `#5a57ba` **verbatim** — taken by decision on 2026-08-07 over the alternative of
@@ -1143,54 +1332,40 @@ sidebar selection and body text stay achromatic. `BrandVisuals.swift` still exis
 is no longer load-bearing — it is just the shapes that are not text or a control, and
 its gradients are gone.
 
-### Reordering is a real drag
+The Home stat row uses `StatsBackdrop`, a generated 5:1 raster derived from the window's
+own white / fog / indigo-tint ramp. It has no motif and is composited at 55% over white;
+dark text, hairline border and column rules remain the card's structure. It replaces the
+saturated indigo→violet code gradient that made the card look like promotional AI art.
 
-The grip is a hand-drawn 2×3 dot handle — SF Symbols has no 2×3 grip, and it is
-the shape people already read as "grab me". `List` + `.onMove` was rejected: it
-needs a fixed height to lay out inside the page's own `ScrollView`, and styling
-its rows back to a `Card` fights the list's own insets and separators.
+### Reordering is explicit
 
-Rows are therefore a fixed `ButtonsView.rowHeight`, which is what lets the drag
-convert travel into an index by division. The gesture swaps as soon as it has
-travelled one row and subtracts that height from its own offset, so the dragged
-row stays under the pointer. `MainModel` splits the work to match: `moveLocally`
-runs many times per gesture and touches only the array, `commitOrder` runs once
-on release and is the only thing that PATCHes. A write per frame would be slow
-*and* a way to leave the table half-reordered if the drag is interrupted.
+The button list does not drag. It was tried both ways: the hand-rolled `DragGesture`
+moved a row while changing the `ForEach` beneath it and shook; SwiftUI's native
+`.draggable` lifted an opaque 340 pt preview out of a much wider row, so the thing being
+moved looked unrelated to its destination. For a live list of four to seven items,
+up/down arrows are faster to understand and remove every ambiguous intermediate state.
+
+Each row has Reicon AngleUp / AngleDown controls in a 26 pt-wide vertical pair on the
+left. One click swaps with one adjacent row, the arrow at either list boundary is
+visibly disabled, and the list eases to its new order over 0.16 s. There is no drag
+preview, hidden drop target or pointer-following offset.
+
+There is one visible list. Its first row is the `main` slot and every later row is
+`sub`; moving another button to the top replaces the phone's main button. The pure
+`UserPromptOrder` normalizer owns this invariant and is unit-tested. Writes are serial:
+rapid arrow clicks coalesce to the newest pending snapshot instead of racing older
+responses against newer ones. Each snapshot PATCHes secondary rows first and the new
+main last, so a partial write cannot create two main rows.
 
 Deleting is an `IconButton` on the row behind a confirmation alert — not buried
 in the editor, which is where it was and where nobody found it.
 
-**The drag needs two numbers, not one.** `DragGesture.translation` is measured
-from where the drag began, so the first version — which kept a single offset and
-subtracted a row's height from it after each swap — had that subtraction
-overwritten by the very next event. The row snapped back to the pointer's raw
-travel, immediately re-crossed the threshold, and the list flipped back and
-forth. `ButtonsView` keeps `dragTranslation` (raw) and `consumedTravel` (spent on
-completed swaps); the visible offset is the difference, and only `consumedTravel`
-is ever adjusted. Both are computed in locals and written back once per event —
-the loop condition must not read state it is in the middle of mutating.
-
-**The dragged row takes no animation, and that is not a polish decision.** A swap
-moves it ±`rowHeight` in layout and changes its offset by ∓`rowHeight` to
-compensate. Under the container's `.animation(_:value:)` both ease over 0.16 s
-and cancel — for about four milliseconds, until the next `onChanged` writes the
-offset in an *un*-animated transaction. The offset then snaps to its final value
-while the layout half is still 160 ms from arriving, so the row swings a full row
-height and eases back, on every swap. That was the shaking. The row under the
-pointer is opted out with `.transaction { $0.animation = nil }` so both halves
-land in the same frame; its siblings keep the slide.
-
-Two smaller sources of the same complaint: iterating `Array(prompts.enumerated())`
-rebuilt every row closure — including its gesture — whenever the order changed,
-and a reorder slides rows under a stationary pointer, so `onHover` fired twice per
-row and flashed the grips down the whole list. Hence `ForEach(model.prompts)` and
-`PromptRow.isReordering`.
+No server write happens until an arrow has selected the next complete order.
 
 ### Five things that are easy to leave out and obvious when missing
 
-1. **Cursors.** Everything clickable takes `.pointingHand`, the grip takes
-   `.openHand`, and disabled controls stay `.arrow`. `View.cursor(_:)` wraps an
+1. **Cursors.** Everything clickable takes `.pointingHand`, the movable overlay bar
+   takes `.openHand`, and disabled controls stay `.arrow`. `View.cursor(_:)` wraps an
    `NSView` — **not** `NSCursor.push()` / `pop()` in `.onHover`, which is the usual
    SwiftUI trick and leaks: a hover that ends because the view was *removed* never
    pops, and reordering a list removes hovered views constantly.
@@ -1201,8 +1376,13 @@ row and flashed the grips down the whole list. Hence `ForEach(model.prompts)` an
    what it declared, while the identical code worked in the main window, which *is*
    key. That is documented behaviour and it matches the symptom exactly.
 
-   **Which replacement works is not established, and `CursorArea` therefore installs
-   three.** `NSTrackingArea` turned out to be unreachable by any synthetic pointer:
+   **The replacement is an active tracking area, and its window must opt into mouse-
+   moved delivery.** `CursorArea` uses `.mouseEnteredAndExited` to set the cursor and
+   `.mouseMoved` to reassert it after AppKit resets it. `NSWindow` defaults
+   `acceptsMouseMovedEvents` to false; leaving that default on `PillPanel` made the
+   reassertion dead code and was why the tracking-area replacement still showed an
+   arrow. `PillPanel` now sets it to true. `NSTrackingArea` turned out to be unreachable
+   by any synthetic pointer:
    moving the window under a stationary pointer, `CGWarpMouseCursorPosition`, and posted
    `.mouseMoved` events at the HID tap each produced **zero** enter/exit callbacks, even
    for a plain `NSView` with no SwiftUI in the way — AppKit only recomputes tracking on
@@ -1287,8 +1467,9 @@ sizes, two paddings, one role, and neither of them the 12–13 px the system spe
   ours, with the icons of the apps this Mac has actually rewritten in beside it. Then
   the four-column stat card, a compact recovery card only when sign-in or Accessibility
   is missing, then history grouped by day under a search pill. Rows expand in place.
-- **ボタン** — the hover row, editable. Enable/disable, drag to reorder, retitle,
-  reword, add, delete.
+- **ボタン** — one ordered list for the hover row. The first row is the main button;
+  every row can be enabled/disabled, moved with its compact left-side arrows, retitled,
+  reworded, added and deleted.
 - **アカウント** — display name (editable), address, join date, sign in, **sign
   up**, Google, sign out. Groups are captioned from above, never titled from inside.
 - **⚙︎ modal** — 780×540, two panes (一般 / 履歴 / このアプリ), captioned row groups on
@@ -1323,16 +1504,16 @@ rather than assumed:
    translateToEnglish`. Desktop-authored rows leave it null and set
    `origin = user_authored`, matching what the phone writes for a hand-made
    button.
-3. **Builtins can be disabled and reworded but not deleted.** The phone re-seeds
-   them from `builtin_key`, so a delete would come back on the next sync and read
-   as the button ignoring you. `MainModel.canDelete` is that rule.
+3. **Every row is deletable, including a builtin.** The desktop sends a real DELETE;
+   deleting the current main immediately promotes and persists the next row. Existing
+   phone builds may re-seed a missing `builtin_key`, so permanent cross-client builtin
+   deletion still needs an iOS-side tombstone contract rather than another desktop UI
+   condition.
 
-Reordering renumbers a whole `slot` rather than swapping two values: rows written
-before `sort_order` mattered share a `0`, and swapping two zeroes is a no-op the
-list would happily animate. Moves do not cross the `main`/`sub` boundary —
-`main` is the phone's single primary toolbar button, and the hover row renders
-`main` first regardless (`enabledForHoverRow`), so a cross-slot move would either
-mint a second `main` or reorder nothing.
+Reordering normalizes the whole list: index zero becomes `main` at order zero, and the
+remaining `sub` rows are numbered from zero. `UserPromptRemoteStore.update` sends the
+slot as well as `sort_order`; without that field a main replacement would look right
+locally and revert on the next reload.
 
 Every mutation ends by reloading from the server and re-pushing the hover row, so
 a rejected write cannot survive in the list.
@@ -1391,7 +1572,7 @@ silently does nothing.
 keys plus the variable-fractional-second timestamp fallback that plain `.iso8601`
 rejects. Two copies of that would have been two places to get it wrong.
 
-### The signed-out form is a row group, not a hero card
+### The signed-out form is a responsive split, not a hero card
 
 What was there was the shape a sign-in page takes when nobody opens `design.md`: a
 tinted icon plate and a bold heading **inside** a card, placeholder-only inputs, a small
@@ -1402,24 +1583,92 @@ from inside it when a caption above it will do, don't leave a card's width unuse
 hierarchy with weight rather than ornament, and don't put a rule where nothing needs
 separating.
 
-It is now the same pattern as the ⚙︎ modal and every other group in the window: the
-segmented control, then a `RowGroup` of label-plus-field rows, then the two actions in
-one row beneath it. The tabs are the group's caption — a `SectionCaption` under them
-said 「サインイン」 directly below a tab reading 「サインイン」.
+It now uses the desktop width rather than merely capping a phone-shaped form: a compact
+left column explains exactly what syncs and what stays local, while the right column is
+the familiar segmented control, `RowGroup` of label-plus-field rows, and two actions.
+`ViewThatFits` stacks those same pieces at the minimum window width instead of squeezing
+the fields. The tabs are the group's caption — a `SectionCaption` under them would say
+「サインイン」 directly below a tab already reading 「サインイン」.
 
-The group is capped at `authGroupWidth` (540), and it is the **one** place on this page
-that is not full width. A settings row throws its control to the far edge, which is right
-for a switch and wrong for a field you are about to type an address into: at the pane's
-full width the label and its input end up 200 pt apart.
+The form column is fixed at `authGroupWidth` (460) and each field at 240. A settings row
+throws its control to the far edge, which is right for a switch and wrong for an
+uncapped field: at the pane's full width the label and input would end up hundreds of
+points apart.
 
 ---
 
 ## 15. First-run onboarding
 
-`App/Onboarding/` is a dedicated 1080×700 window with no settings sidebar. Its
-five steps are ようこそ → アクセス → バー → 練習 → 完了. This takes VoiceOS's useful
-sequence — prerequisites, explanation, real practice, earned finish — without
-copying its dictation-specific screens or cloud artwork.
+`App/Onboarding/` is a dedicated, non-resizable **1080×700** window with no settings
+sidebar. Its eight steps are アカウント → 用途 → ボタン → アクセス → the pill →
+書き換え → 返信 → 完了. The frame does not follow the intrinsic size of whichever step happens to be
+visible: `.resizable` is absent from the style mask, the `NSHostingView` has
+`sizingOptions = []`, and both `contentMinSize` and `contentMaxSize` are applied at
+1080×700 after the host is installed. The order matters: the hosting view's default
+`.standardBounds` reflects SwiftUI's changing measurements into the window and can
+overwrite min/max values that were assigned before `contentView`.
+
+The whole flow uses `design.md`'s dashboard system rather than a separate onboarding
+theme: a `#f2f2f4` shell, one white panel inset 4 pt, a shared 920 pt content grid with
+48 pt outer gutters, white cards separated by hairlines, fog-filled inputs, and indigo
+only for progress, selected state and the primary action. Routine page titles stay at
+20 pt. Explanatory pages use one consistent question-left / visual-right composition.
+The right visual is a reusable lavender stage taken from the landing page's desktop
+scene: `#efecfa → #ddd8f2 → #c8c1e8` with white light at the upper-left and `#a99ed4`
+at the lower-right. It is an illustration surface, not a new window palette: controls,
+cards and the surrounding panel still use `Tokens.Window`. Every glyph is Reicon except
+the product mark, traffic-light circles and the official full-colour Google G.
+
+The visual stage contains code-native, shared desktop primitives rather than screenshots:
+a Mail composer with window chrome, toolbar, addressing rows and an editable body; the
+production-shaped dark overlay bar; and a System Settings accessibility scene with its
+sidebar, permission row and current state. Mock controls do not accept input. The reply
+practice's copy control and composer are the deliberate live exceptions. Real permission,
+navigation and save actions stay in the shared bottom shelf, so a switch or toolbar button
+that looks plausible never becomes a dead competing action.
+
+Its vertical extent is a layout invariant, not content measurement. On every split page
+the stage consumes the full height offered between the progress rail and navigation
+shelf, inset 10 pt at the top and bottom. Its width may change for a button editor or
+choice grid, but its top and bottom edges do not jump with the mock inside it.
+Explanatory columns are vertically centred against that stable stage so the two sides
+carry comparable visual weight. Task-heavy columns such as the button editor stay
+top-aligned because their content itself fills the region.
+
+After authentication, navigation is one shared 58 pt shelf pinned to the bottom of that
+grid. Back stays at the left edge, skip actions are text links beside the forward action,
+and exactly one filled indigo action ends at the lower-right edge. Individual steps do
+not place their own Next button inside their content, so changing from a short page to a
+tall one never moves the primary action or changes which control owns the hierarchy.
+The signed-out account form is the deliberate exception: Google is the action that
+authenticates, so it remains attached to the form rather than masquerading as page
+navigation.
+
+アカウント makes Google the primary action and progressively reveals the existing
+email/password form. Its right stage keeps `OnboardingMascotLoop.mp4` as the only
+generated content; the video is multiply-composited so its white field disappears into
+the shared lavender scene instead of becoming a card behind the mark. There are no
+generated labels, particles or button chips. The source is Higgsfield
+Seedance 2.0 job `101892b2-3fdc-4a81-b054-24a8b5708091`, made from
+`public/bgremoved.png` as the matching first and last frame. The prompt deliberately
+asks only for a blink, glance and restrained keypress-like bounce because video models
+are not trusted with readable text or exact interface geometry.
+
+用途 offers five practical, four-button configurations: the general starter set, work,
+international communication, Japanese polishing, and social/chat. The starter remains
+敬語 / メール / 英訳 / 自然に and retains the four shared `builtin_key` values. The
+other packs use standing context that can genuinely live on a reusable button (for
+example 上司向け, 取引先, 仕事英語, 校正, LINE), not one-off message content or
+gimmicks such as emoji and hashtag insertion. Existing synced buttons are a sixth choice
+when present. The grid is vertically centred when all choices fit and becomes scrollable
+without changing that alignment contract when they do not.
+
+ボタン is a required confirmation page. It shows the actual bottom-bar preview and lets
+the user rename, rewrite the instruction, reorder, add or delete before proceeding. The
+first row is the shared `main` slot. Confirmation upserts the reviewed rows before
+deleting obsolete owner rows, then fetches the server result and refreshes the overlay;
+a failed second request may leave an extra row but cannot empty the account. Drafts and
+the selected pack survive an unfinished close in `OnboardingProgressStore`.
 
 Sign-in and Accessibility are hard gates. バー and 練習 can be skipped once both
 exist. `OnboardingProgressStore.currentVersion` is persisted in `UserDefaults`;
@@ -1427,16 +1676,37 @@ an unfinished close saves the current step, while the menu-bar item changes from
 「セットアップを続ける」 to 「使い方を見る」 after completion. A later sign-out or
 revoked permission does not reset onboarding; Home's compact recovery card handles it.
 
-The practice is real, not a simulation. `OverlayController.beginTutorial` replaces
-the visible prompt row with one transient `onboarding_preset` prompt, captures the
-focused training editor, calls `desktop-rewrite`, presents the production result card,
-and completes only after Insert writes successfully. The transient prompt never reaches
-`user_prompts`, and the sample rewrite never enters local history or statistics.
+The practice is real, not a simulation. It is the one page that drops the split layout:
+the heading runs above a large, full-width Mail composer, matching the interaction
+reference and making the target look like a place somebody would actually write. Its
+body is still the live `TextEditor`, not text painted into the mock. The real bar remains
+outside the onboarding window at the screen edge; no simulated bar competes with it.
+The editor carries no artificial focus ring; its content has explicit vertical inset so
+the first line clears the Mail body's top edge rather than clipping against it.
+`OverlayController.beginTutorial` exposes every reviewed button (with the old 敬語
+tutorial prompt only as a defensive fallback when there are none), while
+`OnboardingPracticeSample` selects a draft from the main button's builtin key, title and
+instruction so 英訳, 校正, 社内チャット and other reviewed main buttons receive a
+matching input rather than the old 敬語-only sentence. It then
+captures the focused training editor, calls `desktop-rewrite`, presents the production
+result card, and completes only after Insert writes successfully. The sample rewrite
+never enters local history or statistics. The window does not resize or extend toward
+the overlay for this step: a compact instruction points below the window to the real
+screen-edge bar and names the actual tutorial button. On a successful Insert, the
+result panel is dismissed before the completion callback runs, then the onboarding
+window is made key again. Its editor is also the only production AX target owned by this
+process: a same-process selected-range setter enters AppKit directly and must run on
+`MainActor`, while every ordinary cross-process AX write stays on `AXTextIO`'s actor.
 
-`OnboardingHero` is the one raster visual. It is original ImageGen artwork stored in
-`App/Resources/Assets.xcassets`; the app window and bottom pill drawn over it are native
-SwiftUI so text and controls stay exact and accessible. The onboarding uses the same
-Willow tokens, Reicon glyphs and light-only appearance as the main window.
+返信 is a second real practice page, not a tour card. Its Slack-style scene has a live
+copy action and a live empty composer. The copy is placed on the pasteboard and explicitly
+armed through the production reply state so the lesson still works when a replaying user
+has disabled clipboard watching; from `.replyArmed` onward it is the same hover, capture,
+free-text instruction, generation, result and Insert path as §16. The reply rewrite is
+marked as a tutorial, so it neither enters history nor increments local statistics, and
+the page completes only after the same-process AX write succeeds. `replyPractice` was
+appended at raw value 7 while `complete` stays 6; `DesktopOnboardingStep.flow` owns the
+visual order and Back navigation without invalidating unfinished saved steps.
 
 ---
 

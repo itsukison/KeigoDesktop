@@ -1,5 +1,6 @@
 import AppKit
 import DesktopRewriteKit
+import Sparkle
 import SwiftUI
 import TextIO
 
@@ -14,7 +15,7 @@ struct KeigoButtonMacApp {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpdaterDelegate {
 
     private var overlay: OverlayController?
     private var mainWindow: MainWindowController?
@@ -22,7 +23,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainModel: MainModel?
     private var statusItem: NSStatusItem?
     private var onboardingMenuItem: NSMenuItem?
+    private var checkForUpdatesMenuItem: NSMenuItem?
+    /// The status menu's only escape hatch once a right-click hide has taken the pill
+    /// off screen (§17) — there is nothing left to right-click at that point. Hidden
+    /// whenever `overlay.isHiddenBySnooze` is false, rather than removed and re-added,
+    /// so `menuNeedsUpdate` only ever toggles one item instead of rebuilding the menu.
+    private var reshowOverlayItem: NSMenuItem?
+    private var reshowOverlaySeparator: NSMenuItem?
     private let onboardingProgress = OnboardingProgressStore()
+    private var updaterStarted = false
+    private var deferredUpdateCheckTask: Task<Void, Never>?
+
+    private lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: false,
+        updaterDelegate: self,
+        userDriverDelegate: nil
+    )
 
     private lazy var appVersion: String = {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
@@ -43,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let rewriteService = DesktopRewriteService(config: config, auth: auth)
         let promptStore = UserPromptRemoteStore(config: config, auth: auth)
         let profileStore = ProfileRemoteStore(config: config, auth: auth)
+        let billingStore = BillingRemoteStore(config: config, auth: auth)
 
         let overlay = OverlayController(
             rewriteService: rewriteService,
@@ -57,10 +74,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             auth: auth,
             promptStore: promptStore,
             profileStore: profileStore,
+            billingStore: billingStore,
             history: history,
             appVersion: appVersion,
             onPromptsChanged: { [weak overlay] in await overlay?.refreshPrompts() }
         )
+
+        // §9 row 41. A free user who hits the monthly cap pressed a button and got
+        // nothing back, so the plan pane is the answer to what just happened — not a
+        // second thing to go and find.
+        overlay.onQuotaPaywall = { [weak self] in self?.openPlan() }
+        overlay.onSignInRequired = { [weak self] in self?.openSignIn() }
 
         installMainMenu()
         installStatusItem()
@@ -75,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openOnboarding()
             return
         }
+        startUpdaterIfConfigured()
         Task { [auth] in
             let signedIn = await auth.isSignedIn
             if !AXPermission.isTrusted || !signedIn { openMainWindow() }
@@ -94,13 +119,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - URL scheme
 
-    /// The `keigobutton://auth-callback` leg of an OAuth sign-in (§6).
+    /// Two legs arrive here, and they are told apart by host.
     ///
-    /// `ASWebAuthenticationSession` normally intercepts this itself; this path is what
-    /// catches the redirect when the sheet has already been dismissed.
+    /// - `keigobutton://auth-callback` — the OAuth return (§6).
+    ///   `ASWebAuthenticationSession` normally intercepts this itself; this path is
+    ///   what catches the redirect when the sheet has already been dismissed.
+    /// - `keigobutton://billing` — the 「アプリに戻る」 button on the Checkout return
+    ///   pages. Checkout hands off to the DEFAULT BROWSER (Apple Pay needs Safari's
+    ///   payment sheet), so the user finishes the purchase outside the app and has no
+    ///   route back except the Dock. This is that route.
+    ///
+    /// The billing leg re-reads entitlement rather than trusting the redirect. A
+    /// `success_url` fires the moment Stripe redirects, which can beat the webhook —
+    /// treating it as proof of payment is how an unpaid session gets granted Pro
+    /// (§3.3). The webhook remains the only writer; this just asks again.
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.scheme == "keigobutton" {
-            Task { [mainModel] in await mainModel?.completeOAuth(url: url) }
+            if url.host == "billing" {
+                NSApp.activate(ignoringOtherApps: true)
+                openPlan()
+                Task { [mainModel] in await mainModel?.reloadEntitlement() }
+            } else {
+                Task { [mainModel] in await mainModel?.completeOAuth(url: url) }
+            }
         }
     }
 
@@ -180,6 +221,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.image = markImage
 
         let menu = NSMenu()
+        menu.delegate = self
+
+        // Starts hidden — `menuNeedsUpdate` is what shows it, and only while
+        // `overlay.isHiddenBySnooze`.
+        let reshowItem = menu.addItem(
+            withTitle: "",
+            action: #selector(reshowOverlay),
+            keyEquivalent: ""
+        )
+        reshowItem.target = self
+        reshowItem.isHidden = true
+        reshowOverlayItem = reshowItem
+        let reshowSeparator = NSMenuItem.separator()
+        reshowSeparator.isHidden = true
+        menu.addItem(reshowSeparator)
+        reshowOverlaySeparator = reshowSeparator
+
         menu.addItem(
             withTitle: "敬語ボタンを開く",
             action: #selector(openMainWindow),
@@ -202,6 +260,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(reloadPrompts),
             keyEquivalent: "r"
         ).target = self
+        let updateItem = menu.addItem(
+            withTitle: "アップデートを確認…",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        updateItem.target = self
+        checkForUpdatesMenuItem = updateItem
         menu.addItem(.separator())
         menu.addItem(
             withTitle: "終了",
@@ -211,6 +276,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         item.menu = menu
         statusItem = item
+    }
+
+    /// Runs right before the status menu opens — the same "ask again at click time"
+    /// shape `PillRootView`'s right-click menu uses for its own copy-disabled row,
+    /// just via AppKit's delegate hook instead of a fresh SwiftUI `ViewBuilder` call.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard let overlay, let reshowItem = reshowOverlayItem, let separator = reshowOverlaySeparator else {
+            return
+        }
+        let hidden = overlay.isHiddenBySnooze
+        reshowItem.isHidden = !hidden
+        separator.isHidden = !hidden
+        if hidden {
+            let minutes = overlay.hiddenRemainingMinutes ?? 0
+            reshowItem.title = "敬語ボタンを今すぐ再表示する（残り\(minutes)分）"
+        }
+        checkForUpdatesMenuItem?.isEnabled = updaterStarted
+            && updaterController.updater.canCheckForUpdates
+            && overlay.allowsUpdateCheck
+    }
+
+    @objc private func reshowOverlay() {
+        overlay?.cancelHideNow()
     }
 
     @objc private func openMainWindow() {
@@ -235,6 +323,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openMainWindow()
     }
 
+    /// The ⚙︎ modal opened straight onto プラン. Onboarding is not a gate here the way
+    /// it is for the two above: hitting the cap means the app has already been used,
+    /// so the flow is finished by construction.
+    private func openPlan() {
+        mainModel?.preferencesSection = .plan
+        mainModel?.showsPreferences = true
+        openMainWindow()
+    }
+
+    /// A missing session found from the overlay is a returning-user recovery path,
+    /// not a reason to replay onboarding. Close any stale settings modal and put the
+    /// existing account form directly into sign-in mode.
+    private func openSignIn() {
+        mainModel?.page = .account
+        mainModel?.authMode = .signIn
+        mainModel?.showsPreferences = false
+        openMainWindow()
+    }
+
     @objc private func openOnboarding() {
         guard let mainModel, let overlay else { return }
         if onboardingWindow == nil {
@@ -246,6 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.onboardingWindow?.close()
                 self.onboardingMenuItem?.title = "使い方を見る"
+                self.startUpdaterIfConfigured()
                 self.openMainWindow()
             }
             onboardingWindow = OnboardingWindowController(coordinator: coordinator)
@@ -255,5 +363,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func reloadPrompts() {
         Task { await overlay?.refreshPrompts() }
+    }
+
+    @objc private func checkForUpdates(_ sender: Any?) {
+        guard updaterStarted, overlay?.allowsUpdateCheck == true else { return }
+        updaterController.checkForUpdates(sender)
+    }
+
+    private func startUpdaterIfConfigured() {
+        guard !updaterStarted, onboardingProgress.isComplete else { return }
+        let publicKey = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String
+        guard let publicKey, !publicKey.isEmpty, !publicKey.contains("$(") else { return }
+        updaterController.startUpdater()
+        updaterStarted = true
+    }
+
+    func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+        guard onboardingProgress.isComplete, overlay?.allowsUpdateCheck == true else {
+            if updateCheck == .updatesInBackground {
+                scheduleDeferredUpdateCheck()
+            }
+            throw NSError(
+                domain: "com.core7.keigobutton.mac.updates",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "現在の操作が終わってからアップデートを確認します。"
+                ]
+            )
+        }
+    }
+
+    /// Sparkle's delegate can decline a scheduled check, but declining alone postpones
+    /// it until the next daily interval. Retry as soon as the overlay becomes passive so
+    /// an update discovered during a long result/input session is not delayed by a day.
+    private func scheduleDeferredUpdateCheck() {
+        guard deferredUpdateCheckTask == nil else { return }
+        deferredUpdateCheckTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self else { return }
+                guard self.updaterStarted else { continue }
+                if self.overlay?.allowsUpdateCheck == true {
+                    self.deferredUpdateCheckTask = nil
+                    self.updaterController.updater.checkForUpdatesInBackground()
+                    return
+                }
+            }
+        }
     }
 }

@@ -10,13 +10,13 @@ import SwiftUI
 /// in the main window, which *is* key. That much is documented behaviour and matches the
 /// symptom exactly.
 ///
-/// **Which replacement works could not be verified from a sandbox, so this installs all
-/// three.** `NSTrackingArea` turns out to be unreachable by any synthetic pointer:
+/// The non-key-window path is `.mouseEnteredAndExited` plus `.mouseMoved`; its window
+/// must set `acceptsMouseMovedEvents = true` or the reassertion below is dead code.
+/// `NSTrackingArea` turns out to be unreachable by any synthetic pointer:
 /// moving the window under a stationary pointer, `CGWarpMouseCursorPosition`, and posted
 /// `.mouseMoved` events at the HID tap all produced *zero* enter/exit callbacks, even for
 /// a plain `NSView` with no SwiftUI in the way — AppKit only recomputes tracking on real
-/// HID motion. Rather than guess, each mechanism below covers a different documented
-/// failure and none of them costs anything:
+/// HID motion. Each mechanism below covers a different cursor lifecycle:
 ///
 /// - `addCursorRect` — the only one AppKit re-asserts on every mouse-moved, which is
 ///   what keeps the cursor from flickering back to an arrow. Key windows only.

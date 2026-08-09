@@ -25,6 +25,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 
 	<!-- §9: no Dock icon. The settings window is reached from the menu-bar item. -->
 	<key>LSUIElement</key>
@@ -34,6 +36,19 @@
 	     Say what is read and what is written, in plain Japanese. -->
 	<key>NSAccessibilityUsageDescription</key>
 	<string>編集中の文章を読み取って書き換えた文章を戻すために、アクセシビリティの許可が必要です。画面の内容を記録したり、他の目的で使用することはありません。</string>
+
+	<!-- §9: Sparkle checks a static HTTPS appcast. The public EdDSA key is injected
+	     as a build setting; release builds fail in CI if it has not been configured. -->
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUFeedURL</key>
+	<string>https://itsukison.github.io/KeigoDesktop/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 
 	<!-- §6: sign-in returns through this scheme. -->
 	<key>CFBundleURLTypes</key>

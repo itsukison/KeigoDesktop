@@ -232,6 +232,130 @@ final class ContractTests: XCTestCase {
         XCTAssertNil(AuthService.userId(fromJWT: ""))
     }
 
+    // MARK: - Billing (§6)
+
+    /// `requestId` is the idempotency key for the server's reserve → commit → release
+    /// lifecycle. Losing it off the wire does not fail: `parseRequest` generates one,
+    /// so every retry becomes a *second* reservation and a double-press consumes two
+    /// of the user's 1,000 (§9 row 29). Same failure shape as `candidateCount` — a
+    /// usage bill rather than a bug report.
+    func testSendsRequestId() throws {
+        let request = RewriteRequest(
+            prompt: "p",
+            text: "t",
+            appVersion: "0.1.0",
+            captureMode: .wholeInput,
+            ioPath: "ax"
+        )
+        let json = try JSONSerialization.jsonObject(
+            with: try JSONEncoder().encode(request)
+        ) as? [String: Any]
+
+        let id = try XCTUnwrap(json?["requestId"] as? String)
+        XCTAssertNotNil(UUID(uuidString: id))
+    }
+
+    /// A retry is the same intent, so it must carry the same id — that is the whole of
+    /// "a client retry cannot consume twice". Two *different* rewrites must not.
+    func testRequestIdIsPerIntentNotPerProcess() {
+        let first = RewriteRequest(prompt: "p", text: "t", appVersion: "0", captureMode: .wholeInput)
+        let second = RewriteRequest(prompt: "p", text: "t", appVersion: "0", captureMode: .wholeInput)
+        XCTAssertNotEqual(first.requestId, second.requestId)
+
+        let retry = RewriteRequest(
+            prompt: "p", text: "t", appVersion: "0", captureMode: .wholeInput,
+            requestId: first.requestId
+        )
+        XCTAssertEqual(retry.requestId, first.requestId)
+    }
+
+    /// §9 rows 41 vs 42. The two cap-hit surfaces are different products — one has an
+    /// upgrade to offer and one does not — and getting this backwards means either
+    /// selling Pro to a Pro user or silently swallowing the free user's only route
+    /// out. The brakes are neither: upgrading does not lift them.
+    func testOnlyAFreeMonthlyCapOffersAnUpgrade() {
+        func denial(_ reason: QuotaDenial.Reason, _ plan: Entitlement.Plan) -> QuotaDenial {
+            QuotaDenial(
+                reason: reason, plan: plan, used: 50, monthLimit: 50,
+                resetsAt: Date(timeIntervalSince1970: 0), message: "…"
+            )
+        }
+
+        XCTAssertTrue(denial(.month, .free).offersUpgrade)
+        XCTAssertFalse(denial(.month, .pro).offersUpgrade)
+        for brake in [QuotaDenial.Reason.day, .hour, .minute] {
+            XCTAssertFalse(denial(brake, .free).offersUpgrade, "\(brake) is not a paywall")
+        }
+    }
+
+    // MARK: - Entitlement
+
+    /// The regression that shipped. On `2026-07-29.dahlia` with flexible billing,
+    /// cancelling through the Billing Portal sets Stripe's `cancel_at` and leaves
+    /// `cancel_at_period_end` FALSE — verified against live subscription
+    /// sub_1U26blCZmA6ItMhqFKag1S0e. Every 解約予定 surface branched on the boolean,
+    /// so a real cancellation displayed nothing at all and the user had no idea how
+    /// long they still had. Nothing may key off the boolean again.
+    func testARealPortalCancellationIsDetectedFromCancelsAtAlone() throws {
+        let json = """
+        [{
+          "plan": "pro",
+          "status": "active",
+          "billing_interval": "month",
+          "used": 3,
+          "month_limit": 1000,
+          "resets_at": "2026-09-08T09:31:58+00:00",
+          "cancel_at_period_end": false,
+          "cancels_at": "2026-09-08T09:31:58+00:00",
+          "current_period_end": "2026-09-08T09:31:58+00:00",
+          "past_due_since": null
+        }]
+        """
+        let rows = try PostgRESTCoding.decoder.decode([EntitlementRow].self, from: Data(json.utf8))
+        let entitlement = try XCTUnwrap(rows.first).entitlement
+
+        XCTAssertFalse(entitlement.cancelAtPeriodEnd, "Stripe's own field must stay mirrored")
+        XCTAssertTrue(entitlement.isCancelScheduled, "the boolean is false — the date is the signal")
+        XCTAssertNotNil(entitlement.cancelsAt, "the notice has no date to render without this")
+        XCTAssertEqual(entitlement.plan, .pro, "scheduled to cancel is still Pro until it ends (§3.1)")
+    }
+
+    /// The legacy shape, for any row written before the field migration.
+    func testTheOlderCancelAtPeriodEndShapeStillReportsScheduled() throws {
+        let json = """
+        [{
+          "plan": "pro", "status": "active", "billing_interval": "year",
+          "used": 0, "month_limit": 1000,
+          "resets_at": "2026-09-08T09:31:58+00:00",
+          "cancel_at_period_end": true,
+          "cancels_at": "2026-09-08T09:31:58+00:00",
+          "current_period_end": "2026-09-08T09:31:58+00:00",
+          "past_due_since": null
+        }]
+        """
+        let rows = try PostgRESTCoding.decoder.decode([EntitlementRow].self, from: Data(json.utf8))
+        XCTAssertTrue(try XCTUnwrap(rows.first).entitlement.isCancelScheduled)
+    }
+
+    /// And an ordinary subscription must not claim to be ending.
+    func testAnActiveSubscriptionIsNotScheduledToCancel() throws {
+        let json = """
+        [{
+          "plan": "pro", "status": "active", "billing_interval": "month",
+          "used": 0, "month_limit": 1000,
+          "resets_at": "2026-09-08T09:31:58+00:00",
+          "cancel_at_period_end": false,
+          "cancels_at": null,
+          "current_period_end": "2026-09-08T09:31:58+00:00",
+          "past_due_since": null
+        }]
+        """
+        let rows = try PostgRESTCoding.decoder.decode([EntitlementRow].self, from: Data(json.utf8))
+        let entitlement = try XCTUnwrap(rows.first).entitlement
+        XCTAssertFalse(entitlement.isCancelScheduled)
+        XCTAssertNil(entitlement.cancelsAt)
+    }
+
     // MARK: - Helpers
 
     private func make(

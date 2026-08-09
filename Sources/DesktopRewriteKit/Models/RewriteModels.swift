@@ -71,6 +71,16 @@ public struct RewriteRequest: Codable, Sendable {
     /// runs the other way (`TextIO` depends on this module), and inverting it to
     /// share one enum would be a cycle.
     public let ioPath: String?
+    /// One id per USER INTENT, carried through the server's reserve → commit →
+    /// release lifecycle (`docs/billing.md` §6). It is the idempotency key, and the
+    /// property that matters is that a **retry of the same rewrite reuses it**: the
+    /// server returns the existing reservation rather than a second one, so a
+    /// double-press or a network retry cannot consume two of the user's 1,000.
+    ///
+    /// Defaulted here rather than required, because every call site that does not
+    /// retry wants a fresh one and forcing them to generate it invites the mistake
+    /// of hoisting one into a stored property and never changing it.
+    public let requestId: String
 
     public init(
         prompt: String,
@@ -91,7 +101,8 @@ public struct RewriteRequest: Codable, Sendable {
         hostAppBundleId: String? = nil,
         captureMode: CaptureMode,
         browserURL: String? = nil,
-        ioPath: String? = nil
+        ioPath: String? = nil,
+        requestId: String = UUID().uuidString
     ) {
         self.prompt = prompt
         self.text = text
@@ -113,6 +124,7 @@ public struct RewriteRequest: Codable, Sendable {
         self.captureMode = captureMode
         self.browserURL = browserURL
         self.ioPath = ioPath
+        self.requestId = requestId
     }
 }
 

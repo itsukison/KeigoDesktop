@@ -21,6 +21,9 @@ settings:
 packages:
   KeigoButtonMacCore:
     path: .
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.9.5
 
 targets:
   KeigoButtonMac:
@@ -33,6 +36,8 @@ targets:
         product: DesktopRewriteKit
       - package: KeigoButtonMacCore
         product: TextIO
+      - package: Sparkle
+        product: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.core7.keigobutton.mac

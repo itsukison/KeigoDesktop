@@ -58,10 +58,14 @@ public struct UserPromptRemoteStore: Sendable {
     //   made on the laptop is `user_authored` — the same value the phone writes for a
     //   hand-made button.
 
-    /// New buttons land in `sub`. `main` is the phone's primary toolbar slot; the
-    /// hover row flattens both anyway (`enabledForHoverRow`), so claiming `main` from
-    /// the desktop would reshuffle the iOS toolbar for no gain here.
-    public func create(title: String, prompt: String, sortOrder: Int) async throws -> UserPrompt {
+    /// New buttons normally land in `sub`; the caller uses `main` only when creating
+    /// the first button after an empty state.
+    public func create(
+        title: String,
+        prompt: String,
+        slot: UserPrompt.Slot = .sub,
+        sortOrder: Int
+    ) async throws -> UserPrompt {
         guard let userId = await auth.currentSession?.userId, !userId.isEmpty else {
             throw RewriteError.notSignedIn
         }
@@ -75,7 +79,7 @@ public struct UserPromptRemoteStore: Sendable {
         try await authorize(&request)
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "user_id": userId,
-            "slot": UserPrompt.Slot.sub.rawValue,
+            "slot": slot.rawValue,
             "title": title,
             "prompt": prompt,
             "is_enabled": true,
@@ -91,8 +95,8 @@ public struct UserPromptRemoteStore: Sendable {
         return created
     }
 
-    /// Sends the whole mutable set rather than a diff — the caller is a form, and the
-    /// four fields together are one edit.
+    /// Sends the whole mutable set rather than a diff. `slot` is included because the
+    /// desktop list's first row owns the iPhone's main-toolbar position.
     ///
     /// `updated_at` defaults only on insert, so a PATCH that left it alone would leave
     /// the row looking older than the phone's copy.
@@ -103,6 +107,7 @@ public struct UserPromptRemoteStore: Sendable {
             "title": prompt.title,
             "prompt": prompt.prompt,
             "is_enabled": prompt.isEnabled,
+            "slot": prompt.slot.rawValue,
             "sort_order": prompt.sortOrder,
             "updated_at": PostgRESTCoding.timestamp(Date()),
         ])
@@ -113,6 +118,69 @@ public struct UserPromptRemoteStore: Sendable {
         var request = try rowRequest(id: id, method: "DELETE")
         try await authorize(&request)
         _ = try await send(request, action: "Failed to delete the button.")
+    }
+
+    /// Replaces the complete owner-scoped button configuration after onboarding
+    /// review. The new rows are upserted before obsolete rows are removed, so a
+    /// failed second request can leave extras but can never leave the account with
+    /// no buttons. A final fetch is the caller's source of truth.
+    ///
+    /// The account's current rows are read first because `id` is not the table's only
+    /// unique key: `user_prompts_user_builtin_unique` makes `builtin_key` an identity too,
+    /// and a preset pack arrives with fresh ids for keys the phone already seeded.
+    /// `UserPromptIdentity.reconciled` is what keeps that upsert an upsert — see the note
+    /// there for the 409 it fixes.
+    public func replaceAll(with prompts: [UserPrompt]) async throws -> [UserPrompt] {
+        guard !prompts.isEmpty else {
+            throw RewriteError.backend("At least one button is required.")
+        }
+        guard let userId = await auth.currentSession?.userId, !userId.isEmpty else {
+            throw RewriteError.notSignedIn
+        }
+
+        let prompts = UserPromptIdentity.reconciled(prompts, existing: try await fetch())
+
+        var components = URLComponents(
+            url: config.restEndpoint.appendingPathComponent("user_prompts"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "on_conflict", value: "id")]
+
+        var upsert = URLRequest(url: components.url!)
+        upsert.httpMethod = "POST"
+        upsert.timeoutInterval = 15
+        upsert.setValue("resolution=merge-duplicates,return=representation", forHTTPHeaderField: "Prefer")
+        try await authorize(&upsert)
+        upsert.httpBody = try JSONSerialization.data(withJSONObject: prompts.map { prompt in
+            [
+                "id": prompt.id.uuidString,
+                "user_id": userId,
+                "slot": prompt.slot.rawValue,
+                "builtin_key": prompt.builtinKey ?? NSNull(),
+                "origin": prompt.origin.rawValue,
+                "title": prompt.title,
+                "prompt": prompt.prompt,
+                "is_enabled": prompt.isEnabled,
+                "sort_order": prompt.sortOrder,
+                "created_at": PostgRESTCoding.timestamp(prompt.createdAt),
+                "updated_at": PostgRESTCoding.timestamp(prompt.updatedAt),
+            ] as [String: Any]
+        })
+        _ = try await send(upsert, action: "Failed to save the onboarding buttons.")
+
+        var deleteComponents = URLComponents(
+            url: config.restEndpoint.appendingPathComponent("user_prompts"),
+            resolvingAgainstBaseURL: false
+        )!
+        let ids = prompts.map { $0.id.uuidString }.joined(separator: ",")
+        deleteComponents.queryItems = [URLQueryItem(name: "id", value: "not.in.(\(ids))")]
+        var delete = URLRequest(url: deleteComponents.url!)
+        delete.httpMethod = "DELETE"
+        delete.timeoutInterval = 15
+        try await authorize(&delete)
+        _ = try await send(delete, action: "Failed to remove the previous buttons.")
+
+        return try await fetch()
     }
 
     private func rowRequest(id: UUID, method: String) throws -> URLRequest {

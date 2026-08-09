@@ -20,9 +20,10 @@ struct AccountView: View {
             )
 
             if model.isSignedIn {
-                identityCard
-                nameSection
+                accountSummary
+                profileSection
                 syncSection
+                sessionSection
             } else {
                 authForm
             }
@@ -35,7 +36,7 @@ struct AccountView: View {
 
     // MARK: - Signed in
 
-    private var identityCard: some View {
+    private var accountSummary: some View {
         Card(padding: 20) {
             HStack(spacing: 14) {
                 Avatar(initial: model.avatarInitial, diameter: 48)
@@ -57,39 +58,56 @@ struct AccountView: View {
                 }
 
                 Spacer()
-                ActionButton("サインアウト", style: .secondary) { model.signOut() }
+                StatusBadge(title: "接続済み", isPositive: true)
             }
         }
     }
 
-    /// The caption sits *outside* the card — `design.md` labels a group by writing
-    /// above it, not by putting a title inside the box.
-    private var nameSection: some View {
+    /// One desktop settings group rather than three unrelated cards. The eye can scan
+    /// labels down the left and values down the right, which is the same layout Willow
+    /// uses for account-like settings in its modal.
+    private var profileSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionCaption(text: "表示名")
-            Card(padding: 20) {
-                HStack(spacing: 10) {
-                    SettingsField(
-                        placeholder: "名前を入力",
-                        text: $model.displayNameDraft,
-                        onSubmit: { model.saveDisplayName() }
-                    )
-                    .frame(maxWidth: Self.fieldWidth)
-                    ActionButton("保存", style: .primary, enabled: model.canSaveDisplayName) {
-                        model.saveDisplayName()
+            SectionCaption(text: "プロフィール")
+            RowGroup {
+                SettingsRow(
+                    title: "表示名",
+                    subtitle: "スマホにも同じ名前が表示されます"
+                ) {
+                    HStack(spacing: 8) {
+                        SettingsField(
+                            placeholder: "名前を入力",
+                            text: $model.displayNameDraft,
+                            onSubmit: { model.saveDisplayName() }
+                        )
+                        .frame(width: Self.fieldWidth)
+                        ActionButton(
+                            "保存",
+                            style: .primary,
+                            enabled: model.canSaveDisplayName
+                        ) {
+                            model.saveDisplayName()
+                        }
                     }
-                    Spacer(minLength: 0)
                 }
-
-                if let error = model.profileError {
-                    Text(error)
+                Hairline()
+                SettingsRow(title: "メールアドレス") {
+                    Text(model.signedInEmail ?? "—")
                         .font(Tokens.Font.body(13))
-                        .foregroundStyle(Tokens.Window.textPrimary)
-                } else {
-                    Text("スマホの敬語ボタンにも同じ名前が表示されます。")
-                        .font(Tokens.Font.body(13))
-                        .foregroundStyle(Tokens.Window.textTertiary)
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .textSelection(.enabled)
                 }
+                Hairline()
+                SettingsRow(title: "利用開始") {
+                    Text(model.joinedAt.map { Self.joinedFormatter.string(from: $0) } ?? "—")
+                        .font(Tokens.Font.body(13))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                }
+            }
+            if let error = model.profileError {
+                Text(error)
+                    .font(Tokens.Font.body(12))
+                    .foregroundStyle(Tokens.Window.textPrimary)
             }
         }
     }
@@ -97,19 +115,41 @@ struct AccountView: View {
     private var syncSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionCaption(text: "同期")
-            Card(padding: 20) {
-                Text("ボタンと表示名はスマホとこの Mac で共有されます。どちらで編集しても、もう一方に反映されます。履歴と統計はこの Mac にだけ保存されます。")
-                    .font(Tokens.Font.body(14))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-                    .lineSpacing(5)
-                    .fixedSize(horizontal: false, vertical: true)
+            RowGroup {
+                SettingsRow(
+                    title: "ボタンと表示名",
+                    subtitle: "スマホとこの Mac の両方に反映されます"
+                ) {
+                    Badge("同期")
+                }
+                Hairline()
+                SettingsRow(
+                    title: "履歴と統計",
+                    subtitle: "文章の記録はこの端末から出ません"
+                ) {
+                    Badge("この Mac")
+                }
             }
         }
     }
 
-    /// Cards run the full width; the inputs inside them do not. A text field as wide
-    /// as the window is harder to read, not more generous.
-    private static let fieldWidth: CGFloat = 380
+    private var sessionSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionCaption(text: "セッション")
+            RowGroup {
+                SettingsRow(
+                    title: "この Mac からサインアウト",
+                    subtitle: "履歴は端末に残り、同期だけが停止します"
+                ) {
+                    ActionButton("サインアウト", style: .secondary) { model.signOut() }
+                }
+            }
+        }
+    }
+
+    /// Cards run the full width; the editable value does not. A text field as wide as
+    /// the pane is harder to read and makes the Save action look detached from it.
+    private static let fieldWidth: CGFloat = 280
 
     private static let joinedFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -120,44 +160,62 @@ struct AccountView: View {
 
     // MARK: - Signed out
 
-    /// **The form is a row group, not a hero card.**
-    ///
-    /// What was here was the shape a sign-in page takes when nobody opens `design.md`:
-    /// a tinted icon plate and a bold heading *inside* a card, placeholder-only inputs,
-    /// a small button, and a 「または」 rule separating it from a Google button that was
-    /// sitting right underneath anyway — all wrapped in a full-width card clamped to a
-    /// 380 pt column, so half the card was empty. Four of those are in the system's own
-    /// Don'ts: don't title a card from inside it when a caption above it will do, don't
-    /// leave a card's width unused, carry hierarchy with weight rather than ornament,
-    /// and don't put a rule where nothing needs separating.
-    ///
-    /// The system's form *is* the settings pattern: label-plus-control rows in a
-    /// hairline group, with the actions under it. That is what the ⚙︎ modal and the
-    /// signed-in half of this page already look like, so signing in now looks like the
-    /// rest of the window instead of a landing page dropped into it.
+    /// A real desktop composition: context and trust on the left, the compact account
+    /// form on the right. `ViewThatFits` stacks the same two pieces at the minimum
+    /// window width rather than squeezing fields or clipping them.
     private var authForm: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 24) {
+                authIntroduction
+                    .frame(width: 220, alignment: .leading)
+                authControls
+                    .frame(width: Self.authGroupWidth, alignment: .leading)
+            }
+            VStack(alignment: .leading, spacing: 24) {
+                authIntroduction
+                authControls
+                    .frame(maxWidth: Self.authGroupWidth, alignment: .leading)
+            }
+        }
+    }
+
+    private var authIntroduction: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Badge("共有アカウント")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("スマホと Mac を、ひとつにつなぐ")
+                    .font(Tokens.Font.body(17, weight: .semibold))
+                    .foregroundStyle(Tokens.Window.textPrimary)
+                Text("同じアカウントでサインインすると、いつものボタンをこの Mac でもすぐに使えます。")
+                    .font(Tokens.Font.body(13))
+                    .foregroundStyle(Tokens.Window.textSecondary)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                AuthBenefit(icon: .buttons, text: "ボタンを自動で同期")
+                AuthBenefit(icon: .profile, text: "表示名と契約を共有")
+                AuthBenefit(icon: .history, text: "履歴はこの Mac に保存")
+            }
+        }
+    }
+
+    private var authControls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // No caption over the group: the tabs sit directly on top of it and say
-            // which of the two it is, and repeating that in ash underneath them was
-            // the same word twice.
             ModeTabs(mode: $model.authMode)
 
             RowGroup {
                 SettingsRow(title: "メールアドレス") {
-                    SettingsField(placeholder: "you@example.com", text: $model.email) {
-                        submit()
-                    }
-                    .frame(width: Self.authFieldWidth)
+                    SettingsField(placeholder: "you@example.com", text: $model.email) { submit() }
+                        .frame(width: Self.authFieldWidth)
                 }
                 Hairline()
                 SettingsRow(
                     title: "パスワード",
                     subtitle: model.authMode == .signUp ? "6文字以上" : nil
                 ) {
-                    SettingsField(placeholder: "", text: $model.password, secure: true) {
-                        submit()
-                    }
-                    .frame(width: Self.authFieldWidth)
+                    SettingsField(placeholder: "", text: $model.password, secure: true) { submit() }
+                        .frame(width: Self.authFieldWidth)
                 }
                 if model.authMode == .signUp {
                     Hairline()
@@ -172,14 +230,7 @@ struct AccountView: View {
                     }
                 }
             }
-            // The one place on this page a group is *not* full width. A settings row
-            // flings its control to the far edge, which is right for a switch and wrong
-            // for a field you are about to type an address into — at the pane's full
-            // width the label and its input end up 200 pt apart.
-            .frame(maxWidth: Self.authGroupWidth, alignment: .leading)
 
-            // Outside the group, not inside a row: the message is about the whole
-            // attempt, and a row group whose height changes as you type is unsettling.
             if let error = model.authError {
                 Text(error)
                     .font(Tokens.Font.body(13))
@@ -193,9 +244,6 @@ struct AccountView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            // Two buttons in one row, and no rule between them. The 「または」 divider
-            // is the auth-page cliché and it was separating a primary action from an
-            // alternative that is right beside it anyway.
             HStack(spacing: 10) {
                 ActionButton(
                     model.authMode == .signIn ? "サインイン" : "アカウントを作成",
@@ -212,8 +260,8 @@ struct AccountView: View {
     }
 
     /// Wide enough for an address, narrow enough that the row still reads as a row.
-    private static let authFieldWidth: CGFloat = 300
-    private static let authGroupWidth: CGFloat = 540
+    private static let authFieldWidth: CGFloat = 240
+    private static let authGroupWidth: CGFloat = 460
 
     private func submit() {
         guard canSubmit else { return }
@@ -223,6 +271,39 @@ struct AccountView: View {
     private var canSubmit: Bool {
         guard !model.isAuthenticating else { return false }
         return model.email.contains("@") && model.password.count >= 6
+    }
+}
+
+private struct AuthBenefit: View {
+    let icon: Icon.Name
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 9) {
+            IconPlate(icon: icon, diameter: 28, tinted: false)
+            Text(text)
+                .font(Tokens.Font.body(13, weight: .medium))
+                .foregroundStyle(Tokens.Window.textPrimary)
+        }
+    }
+}
+
+private struct StatusBadge: View {
+    let title: String
+    var isPositive = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(isPositive ? Tokens.Window.success : Tokens.Window.controlOff)
+                .frame(width: 6, height: 6)
+            Text(title)
+                .font(Tokens.Font.body(12, weight: .medium))
+        }
+        .foregroundStyle(Tokens.Window.textSecondary)
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(Capsule().fill(Tokens.Window.surface))
     }
 }
 

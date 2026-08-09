@@ -29,6 +29,10 @@ final class MainModel: NSObject, ObservableObject {
 
     @Published var page: Page = .home
     @Published var showsPreferences = false
+    /// Which ⚙︎ pane is open. On the model rather than in `PreferencesSheet` because
+    /// the overlay opens it on プラン when a free user hits the monthly cap (§9 row
+    /// 41), and a `@State` in the view is unreachable from there.
+    @Published var preferencesSection: PreferencesSheet.Section = .general
 
     // MARK: Account
 
@@ -72,6 +76,11 @@ final class MainModel: NSObject, ObservableObject {
     /// The row currently open for editing. Only ever one — an inline editor per row
     /// would make the list unreadable at seven buttons.
     @Published var editingPromptId: UUID?
+    /// Arrow clicks may arrive faster than Supabase round trips. Keep only the newest
+    /// not-yet-written snapshot and drain it behind the active write, so responses can
+    /// never land out of order and snap the visible list backwards.
+    private var pendingPromptOrder: [UserPrompt]?
+    private var promptOrderSaveTask: Task<Void, Never>?
 
     // MARK: History
 
@@ -96,11 +105,26 @@ final class MainModel: NSObject, ObservableObject {
     @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
     @Published private(set) var replyModeEnabled = ClipboardWatcher.isEnabled
 
+    // MARK: Plan
+
+    /// Nil until the first successful read. **Never persisted and never assumed**:
+    /// `docs/billing.md` §3.4 makes entitlement a function of `now()`, so a cached
+    /// value would keep reporting `pro` for up to 14 days after a grace window ran
+    /// out. Re-read on every `refresh()`.
+    @Published private(set) var entitlement: Entitlement?
+    @Published private(set) var entitlementError: String?
+    @Published private(set) var isLoadingEntitlement = false
+    /// Guards the two browser hand-offs so a double-click cannot open two tabs. The
+    /// server's `checkout_intents` row (§3.3a) is the real defence; this is the
+    /// cheap one that stops the user seeing two windows.
+    @Published private(set) var isOpeningBilling = false
+
     let appVersion: String
 
     private let auth: AuthService
     private let promptStore: UserPromptRemoteStore
     private let profileStore: ProfileRemoteStore
+    private let billingStore: BillingRemoteStore
     private let history_: RewriteHistoryStore
     /// Re-reads the hover row. Every button mutation ends here, so the overlay never
     /// disagrees with the list the user is looking at.
@@ -111,6 +135,7 @@ final class MainModel: NSObject, ObservableObject {
         auth: AuthService,
         promptStore: UserPromptRemoteStore,
         profileStore: ProfileRemoteStore,
+        billingStore: BillingRemoteStore,
         history: RewriteHistoryStore,
         appVersion: String,
         onPromptsChanged: @escaping () async -> Void
@@ -118,6 +143,7 @@ final class MainModel: NSObject, ObservableObject {
         self.auth = auth
         self.promptStore = promptStore
         self.profileStore = profileStore
+        self.billingStore = billingStore
         self.history_ = history
         self.appVersion = appVersion
         self.onPromptsChanged = onPromptsChanged
@@ -136,9 +162,80 @@ final class MainModel: NSObject, ObservableObject {
         Task {
             signedInEmail = await auth.currentEmail
             await reloadHistory()
-            guard signedInEmail != nil else { return }
+            guard signedInEmail != nil else {
+                entitlement = nil
+                return
+            }
             await loadProfile()
+            await reloadEntitlement()
             if prompts.isEmpty { await reloadPrompts() }
+        }
+    }
+
+    // MARK: - Plan
+
+    /// Re-read rather than cached, every time. See `entitlement`.
+    func reloadEntitlement() async {
+        guard signedInEmail != nil else {
+            entitlement = nil
+            return
+        }
+        isLoadingEntitlement = true
+        defer { isLoadingEntitlement = false }
+        do {
+            entitlement = try await billingStore.fetchEntitlement()
+            entitlementError = nil
+        } catch {
+            // Keep the last good value on screen. A transient network failure that
+            // blanked the plan card would read as "you have been downgraded".
+            entitlementError = "プランを読み込めませんでした。"
+        }
+    }
+
+    /// ホーム's アップグレード button. It opens the プラン pane rather than jumping
+    /// straight to Stripe: the monthly/annual choice is the decision being made, and
+    /// `PlanView` is where the two prices sit side by side with the 特商法 §10 items
+    /// (請求総額, 自動更新, 解約) around them.
+    func openPlanSettings() {
+        preferencesSection = .plan
+        showsPreferences = true
+    }
+
+    func beginCheckout(_ price: BillingRemoteStore.PriceKey) {
+        openBilling { try await self.billingStore.checkoutURL(for: price) }
+    }
+
+    /// Opens the Billing Portal, optionally on a specific screen.
+    ///
+    /// The default stays `.overview` so existing call sites are unchanged, and it is
+    /// also the right destination for un-cancelling — the overview is where Stripe
+    /// puts the renew button.
+    func openBillingPortal(_ flow: BillingRemoteStore.PortalFlow = .overview) {
+        openBilling { try await self.billingStore.portalURL(flow: flow) }
+    }
+
+    /// Both hand-offs go to the default browser rather than an in-app web view:
+    /// Stripe Checkout wants Apple Pay, and Apple Pay needs Safari's payment sheet.
+    /// §8 calls that the highest-impact single item in the funnel.
+    private func openBilling(_ resolve: @escaping () async throws -> URL) {
+        guard !isOpeningBilling else { return }
+        isOpeningBilling = true
+        Task {
+            defer { isOpeningBilling = false }
+            do {
+                NSWorkspace.shared.open(try await resolve())
+                entitlementError = nil
+            } catch RewriteError.backend(let message) {
+                entitlementError = message
+            } catch RewriteError.notSignedIn {
+                entitlementError = "サインインしてください。"
+            } catch {
+                entitlementError = "接続できませんでした。"
+            }
+            // The browser round trip finishes out of band, so the webhook may land
+            // before or after the user comes back. Re-reading on the next activation
+            // is what `refresh()` already does; this covers the same-window case.
+            await reloadEntitlement()
         }
     }
 
@@ -319,18 +416,31 @@ final class MainModel: NSObject, ObservableObject {
         isLoadingPrompts = true
         defer { isLoadingPrompts = false }
         do {
-            prompts = try await promptStore.fetch().sortedForEditing
+            prompts = UserPromptOrder.sortedForEditing(try await promptStore.fetch())
             promptsError = nil
         } catch {
             promptsError = "ボタンを読み込めませんでした。"
         }
     }
 
+    func applyOnboardingButtons(_ drafts: [OnboardingButtonDraft]) async throws {
+        let replacements = drafts.enumerated().map { index, draft in
+            draft.userPrompt(at: index)
+        }
+        prompts = UserPromptOrder.sortedForEditing(
+            try await promptStore.replaceAll(with: replacements)
+        )
+        promptsError = nil
+        await onPromptsChanged()
+    }
+
     func addPrompt() {
+        let slot: UserPrompt.Slot = prompts.isEmpty ? .main : .sub
         mutate {
             let created = try await self.promptStore.create(
                 title: "新しいボタン",
                 prompt: "",
+                slot: slot,
                 sortOrder: (self.prompts.map(\.sortOrder).max() ?? 0) + 1
             )
             self.editingPromptId = created.id
@@ -350,75 +460,64 @@ final class MainModel: NSObject, ObservableObject {
         save(next)
     }
 
-    /// Builtins can be disabled and reworded but not removed — the phone re-seeds
-    /// them from `builtin_key`, so a delete here would come back on the next sync and
-    /// look like the button ignored you.
-    func canDelete(_ prompt: UserPrompt) -> Bool {
-        prompt.builtinKey == nil
-    }
-
     func delete(_ prompt: UserPrompt) {
-        guard canDelete(prompt) else { return }
         prompts.removeAll { $0.id == prompt.id }
+        prompts = UserPromptOrder.normalized(prompts)
         editingPromptId = nil
-        mutate { try await self.promptStore.delete(id: prompt.id) }
+        let remaining = prompts
+        mutate {
+            try await self.promptStore.delete(id: prompt.id)
+            try await self.persistPromptOrder(remaining)
+        }
     }
 
     // MARK: - Reordering
-    //
-    // Split in two because the grip is dragged, not clicked. `moveLocally` runs many
-    // times per gesture and touches only the array; `commitOrder` runs once, on
-    // release, and is the only thing that talks to the server. A PATCH per frame would
-    // be both slow and a way to leave the table half-reordered if the drag is
-    // interrupted.
 
-    /// Moves within a slot only.
-    ///
-    /// `main` is the phone's single primary toolbar button; dragging a `sub` past it
-    /// would either create a second `main` or silently reorder nothing, since the
-    /// hover row always renders `main` first (`enabledForHoverRow`).
-    func canMove(_ prompt: UserPrompt, by offset: Int) -> Bool {
-        guard let index = prompts.firstIndex(where: { $0.id == prompt.id }) else { return false }
-        let target = index + offset
-        guard prompts.indices.contains(target) else { return false }
-        return prompts[target].slot == prompt.slot
-    }
-
-    /// - Returns: whether the swap happened, which is what tells the drag gesture
-    ///   whether to absorb a row's worth of travel or let the row rubber-band.
+    /// Moves one row by one position. Position zero becomes `main`; every other row
+    /// becomes `sub`, so moving a secondary button above the first row replaces the
+    /// iPhone's primary toolbar button without a separate "set as main" state.
     @discardableResult
-    func moveLocally(_ prompt: UserPrompt, by offset: Int) -> Bool {
-        guard canMove(prompt, by: offset),
-              let index = prompts.firstIndex(where: { $0.id == prompt.id })
-        else { return false }
-        prompts.swapAt(index, index + offset)
+    func movePrompt(id: UUID, by offset: Int) -> Bool {
+        guard let next = UserPromptOrder.moving(
+            prompts,
+            id: id,
+            by: offset
+        ) else { return false }
+        prompts = next
+        editingPromptId = nil
+        commitOrder()
         return true
     }
 
-    /// Renumbers each slot from the array's current order and pushes only the rows
-    /// that actually changed.
-    ///
-    /// Renumbering a whole slot rather than swapping two values is deliberate: rows
-    /// written before `sort_order` mattered all share a `0`, and swapping two zeroes
-    /// is a no-op that the list would happily animate.
+    /// Serializes order snapshots. Repeated clicks while a write is active coalesce to
+    /// the newest complete order; secondary rows are always written before the main so
+    /// a partial network failure cannot leave two main rows.
     func commitOrder() {
-        var changed: [UserPrompt] = []
-        for slot in [UserPrompt.Slot.main, .sub] {
-            var order = 0
-            for i in prompts.indices where prompts[i].slot == slot {
-                if prompts[i].sortOrder != order {
-                    prompts[i].sortOrder = order
-                    changed.append(prompts[i])
-                }
-                order += 1
-            }
-        }
-        guard !changed.isEmpty else { return }
+        pendingPromptOrder = prompts
+        guard promptOrderSaveTask == nil else { return }
 
-        mutate {
-            for prompt in changed {
-                try await self.promptStore.update(prompt)
+        promptOrderSaveTask = Task { [weak self] in
+            guard let self else { return }
+            while let ordered = self.pendingPromptOrder {
+                self.pendingPromptOrder = nil
+                do {
+                    try await self.persistPromptOrder(ordered)
+                    self.promptsError = nil
+                } catch {
+                    self.promptsError = "保存できませんでした。"
+                }
             }
+            self.promptOrderSaveTask = nil
+            await self.reloadPrompts()
+            await self.onPromptsChanged()
+        }
+    }
+
+    private func persistPromptOrder(_ prompts: [UserPrompt]) async throws {
+        let secondary = prompts.filter { $0.slot == .sub }
+        let main = prompts.filter { $0.slot == .main }
+        for prompt in secondary + main {
+            try await promptStore.update(prompt)
         }
     }
 
@@ -537,16 +636,5 @@ extension MainModel: ASWebAuthenticationPresentationContextProviding {
         MainActor.assumeIsolated {
             NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible } ?? NSWindow()
         }
-    }
-}
-
-private extension Array where Element == UserPrompt {
-    /// The ボタン list's order, which has to match the hover row's: `main` first, then
-    /// `sub`, each by `sortOrder`. Unlike `enabledForHoverRow` this keeps the disabled
-    /// ones — the whole point of the page is turning them back on.
-    var sortedForEditing: [UserPrompt] {
-        let main = filter { $0.slot == .main }.sorted { $0.sortOrder < $1.sortOrder }
-        let sub = filter { $0.slot == .sub }.sorted { $0.sortOrder < $1.sortOrder }
-        return main + sub
     }
 }

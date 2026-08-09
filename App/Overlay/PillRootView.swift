@@ -70,21 +70,57 @@ struct PillRootView: View {
     @ViewBuilder
     private var content: some View {
         switch controller.state {
-        case .pill, .generating, .result:
-            // The padding is load-bearing, not decoration. The window follows this
-            // measurement, so a bare 16 pt mark would make the collapsed pill 16 pt
-            // wide — a naked icon, not the pill `normal.png` shows. 16 + 2×14 lands
-            // on `Tokens.Geometry.pillCollapsedWidth`, which also means the window
-            // never resizes on first layout and so never drifts off centre.
-            BrandMark()
-                .padding(.horizontal, (Tokens.Geometry.pillCollapsedWidth - 16) / 2)
+        case .pill:
+            // The right-click catcher is attached here and on `HoverRow` only — never
+            // on `.inputBar` / `.replyInput`, where the field underneath already has
+            // AppKit's own right-click edit menu (copy/paste/etc.) and an ancestor
+            // claiming the right-click first would break it.
+            pillMark.background(RightClickCatcher { controller.toggleSnoozeMenu() })
+        case .generating, .result:
+            pillMark
         case .hoverRow:
             HoverRow(controller: controller)
+                .background(RightClickCatcher { controller.toggleSnoozeMenu() })
         case .inputBar, .replyInput:
             InputBar(controller: controller)
         case .replyArmed:
             ReplyBar()
         }
+    }
+
+    // The padding is load-bearing, not decoration. The window follows this
+    // measurement, so a bare 16 pt mark would make the collapsed pill 16 pt wide — a
+    // naked icon, not the pill `normal.png` shows. 16 + 2×14 lands on
+    // `Tokens.Geometry.pillCollapsedWidth`, which also means the window never resizes
+    // on first layout and so never drifts off centre.
+    private var pillMark: some View {
+        BrandMark()
+            .padding(.horizontal, (Tokens.Geometry.pillCollapsedWidth - 16) / 2)
+    }
+}
+
+/// Catches a right click and hands it to `OverlayController.toggleSnoozeMenu()`.
+///
+/// **Not `.contextMenu`.** A SwiftUI context menu opens a system `NSMenu`, which
+/// renders in the OS's own material and font no matter what `Tokens.Overlay` says —
+/// `SnoozeMenuPanel` is a custom window styled from the same tokens as the rest of the
+/// bar instead (see its own doc comment for why that is worth the extra window).
+private struct RightClickCatcher: NSViewRepresentable {
+    let onRightClick: () -> Void
+
+    func makeNSView(context: Context) -> TriggerView {
+        let view = TriggerView()
+        view.onRightClick = onRightClick
+        return view
+    }
+
+    func updateNSView(_ nsView: TriggerView, context: Context) {
+        nsView.onRightClick = onRightClick
+    }
+
+    final class TriggerView: NSView {
+        var onRightClick: (() -> Void)?
+        override func rightMouseDown(with event: NSEvent) { onRightClick?() }
     }
 }
 
@@ -93,8 +129,10 @@ struct PillRootView: View {
 /// The colour cut, not the outline one — see `BrandGlyph`. It must stay 16×16: the
 /// collapsed pill's width is `16 + 2 × padding` and the window measures the content.
 struct BrandMark: View {
+    var animation: MascotAnimation = .idle
+
     var body: some View {
-        BrandGlyph(size: 16)
+        BrandGlyph(size: 16, animation: animation)
     }
 }
 
@@ -108,7 +146,7 @@ struct HoverRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            BrandMark()
+            BrandMark(animation: .engaged)
             divider
 
             if controller.displayedPrompts.isEmpty {
@@ -198,7 +236,7 @@ struct RowPill: View {
 struct ReplyBar: View {
     var body: some View {
         HStack(spacing: 8) {
-            BrandMark()
+            BrandMark(animation: .engaged)
 
             Text("返信")
                 .font(Tokens.Font.body(Tokens.Overlay.labelSmall, weight: .medium))
@@ -237,7 +275,7 @@ struct InputBar: View {
         // wrapped, and it is on one line almost always — which left the text sitting
         // high in the bar in the common case.
         HStack(spacing: 8) {
-            BrandMark()
+            BrandMark(animation: .engaged)
 
             if isReply {
                 // The bar arrived here from a state that showed the copied message, and

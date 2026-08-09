@@ -2,8 +2,45 @@
 # ../Japanese/supabase/config.toml; this file exists so `supabase functions deploy`
 # from this repo carries the right gateway setting.
 #
+# **Deploying from this repo needs `--project-ref` on the command line.** The CLI's
+# link state lives in `../Japanese/supabase/.temp/`, not here, so a bare
+# `supabase functions deploy` run from `laptop/` fails with
+# `LegacyProjectNotLinkedError` and no hint that the ref it wants is one directory
+# over. `project_id` below does **not** fix that — it is local-dev metadata and the
+# link check ignores it (verified: `supabase functions list` still fails without the
+# flag). It is recorded anyway because two repos point at one project and which one
+# this is should not have to be inferred.
+#
+#   supabase functions deploy <names…> --project-ref eercsucvxnszqletxued
+#
+# Only functions are ever deployed from here, never migrations — `AGENTS.md` §12's
+# "one project, one migration history" keeps those in the iOS repo.
+project_id = "eercsucvxnszqletxued"
+#
 # `verify_jwt = true` is load-bearing: index.ts trusts the `sub` claim without
 # re-verifying the signature, so the gateway check is the only thing standing
 # between the public internet and "act as any user". Do not set this to false.
 [functions.desktop-rewrite]
 verify_jwt = true
+
+[functions.desktop-checkout]
+verify_jwt = true
+
+[functions.desktop-portal]
+verify_jwt = true
+
+# The one exception, and it is not a relaxation. Stripe does not send a Supabase
+# JWT, so the gateway has nothing to check; the HMAC-SHA256 signature check inside
+# index.ts is the authentication. Setting this to true would make every event 401
+# at the gateway and the endpoint would look dead while Stripe retried for 3 days.
+[functions.desktop-stripe-webhook]
+verify_jwt = false
+
+# `docs/billing.md` §2. Pinned here as well as in `_shared/billing.ts` because §2's
+# instruction is to record the exact string in config.toml — an endpoint and an API
+# client on different versions disagree about where the billing period lives, and
+# the endpoint keeps the version it was created with indefinitely.
+#
+#   Stripe API version: 2026-07-29.dahlia
+#
+# The Dashboard webhook endpoint MUST be created on this same version.

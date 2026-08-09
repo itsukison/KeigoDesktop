@@ -27,6 +27,13 @@ enum PostgRESTCoding {
         plain.string(from: date)
     }
 
+    /// The same two-shape fallback as `decoder`, for the one place a timestamp
+    /// arrives outside a `Decodable`: the 429 body from `desktop-rewrite`, which is
+    /// hand-built JSON rather than a PostgREST row.
+    static func date(from raw: String) -> Date? {
+        fractional.date(from: raw) ?? plain.date(from: raw)
+    }
+
     private static let fractional: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

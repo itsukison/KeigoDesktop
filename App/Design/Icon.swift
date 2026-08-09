@@ -21,6 +21,8 @@ struct Icon: View {
         case add = "icon-add"
         case edit = "icon-edit"
         case trash = "icon-trash"
+        case arrowUp = "icon-arrow-up"
+        case arrowDown = "icon-arrow-down"
         case copy = "icon-copy"
         case user = "icon-user"
         case profile = "icon-profile"
@@ -33,10 +35,15 @@ struct Icon: View {
         case sliders = "icon-sliders"
         case info = "icon-info"
         case window = "icon-window"
+        /// Drawn to Reicon's grid rather than extracted from it — the set has no card
+        /// glyph. Filled outline at the same 1.5 px effective weight as the rest, so
+        /// it sits in the nav beside them without reading as a second hand.
+        case plan = "icon-plan"
 
         /// The one asset that is not a template, so it cannot be an `Icon`: the mark in
         /// full colour, for the overlay's dark ramp. Named here anyway so the catalog
-        /// mapping still lives in exactly one file. Drawn by `BrandGlyph`.
+        /// mapping still lives in exactly one file. Kept as the static source/fallback
+        /// for `BrandGlyph`'s generated animation atlases.
         ///
         /// `-filled`, not `-color`: Xcode generates `iconMark` as the symbol for both
         /// `icon-mark` and `icon-mark-color`, and warns about the collision.

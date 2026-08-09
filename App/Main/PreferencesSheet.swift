@@ -18,6 +18,7 @@ struct PreferencesSheet: View {
 
     enum Section: String, CaseIterable, Identifiable {
         case general
+        case plan
         case history
         case about
 
@@ -26,6 +27,7 @@ struct PreferencesSheet: View {
         var title: String {
             switch self {
             case .general: return "一般"
+            case .plan: return "プラン"
             case .history: return "履歴"
             case .about: return "このアプリ"
             }
@@ -34,14 +36,16 @@ struct PreferencesSheet: View {
         var icon: Icon.Name {
             switch self {
             case .general: return .sliders
+            case .plan: return .plan
             case .history: return .history
             case .about: return .info
             }
         }
     }
 
-    @State private var section: Section = .general
     @State private var confirmingClear = false
+
+    private var section: Section { model.preferencesSection }
 
     var body: some View {
         ZStack {
@@ -94,7 +98,7 @@ struct PreferencesSheet: View {
                     title: item.title,
                     isActive: section == item
                 ) {
-                    section = item
+                    model.preferencesSection = item
                 }
             }
             Spacer()
@@ -124,6 +128,7 @@ struct PreferencesSheet: View {
                 VStack(alignment: .leading, spacing: 24) {
                     switch section {
                     case .general: generalSection
+                    case .plan: PlanView(model: model)
                     case .history: historySection
                     case .about: aboutSection
                     }

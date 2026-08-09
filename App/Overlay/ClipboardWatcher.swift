@@ -25,6 +25,33 @@ final class ClipboardWatcher {
         set { UserDefaults.standard.set(newValue, forKey: enabledKey) }
     }
 
+    /// The right-click menu's "コピー機能を無効にする" — a temporary override on top of
+    /// `isEnabled`, not a replacement for it. Stored as an absolute deadline rather than
+    /// driven by a `Task.sleep`: 10 minutes or 1 hour is long enough to span the Mac
+    /// sleeping, and a suspend-clock timer is not guaranteed to keep counting through
+    /// that, while a stored `Date` compared against `Date()` on the next poll always
+    /// reads correctly regardless of what happened in between. Persisted, so quitting
+    /// mid-window does not undo it.
+    private static let copyDisabledUntilKey = "reply.clipboardWatchDisabledUntil"
+
+    static var copyDisabledUntil: Date? {
+        get { UserDefaults.standard.overlaySnoozeDeadline(forKey: copyDisabledUntilKey) }
+        set { UserDefaults.standard.setOverlaySnoozeDeadline(newValue, forKey: copyDisabledUntilKey) }
+    }
+
+    /// Self-clearing: there is no separate timer for this window, only this check on
+    /// every 0.5 s poll `poll()` already runs. Once the deadline has passed, the stored
+    /// value is cleared right here rather than left for the next `disableCopyTrigger`
+    /// call to overwrite.
+    private static var isCopyTemporarilyDisabled: Bool {
+        guard let until = copyDisabledUntil else { return false }
+        guard OverlaySnooze.isActive(until: until) else {
+            copyDisabledUntil = nil
+            return false
+        }
+        return true
+    }
+
     // MARK: - Our own writes
 
     /// **The app's own pasteboard traffic is indistinguishable from a ⌘C.** It clears
@@ -90,7 +117,7 @@ final class ClipboardWatcher {
         lastChangeCount = count
 
         guard Self.suspensionDepth == 0, count != Self.lastSelfChangeCount else { return }
-        guard Self.isEnabled else { return }
+        guard Self.isEnabled, !Self.isCopyTemporarilyDisabled else { return }
         guard let string = pasteboard.string(forType: .string),
               let source = ReplySource(copied: string)
         else { return }

@@ -49,6 +49,11 @@ type DesktopRewriteRequest = {
   /// §7 makes this the earliest signal that an app's AX tree changed — so it has
   /// to come over the wire or the column is permanently null.
   ioPath?: "ax" | "clipboard" | null;
+  /// A client-generated UUID, unique per USER INTENT and carried through
+  /// reserve → commit → release. `docs/billing.md` §6 makes it the idempotency key:
+  /// a client retry of the same rewrite returns the existing reservation and
+  /// cannot consume quota twice (§9 row 29).
+  requestId: string;
 };
 
 type RewriteCandidate = { replacement: string; changed: boolean };
@@ -166,7 +171,7 @@ Deno.serve(async (req) => {
   // Same posture as keyboard-rewrite: the usage guard is a full Postgres round
   // trip, so it runs alongside the provider call rather than in front of it.
   const guardStartedAt = Date.now();
-  const usagePromise = reserveUsage(userId, request.candidateCount)
+  const usagePromise = reserveUsage(userId, request.requestId, request.candidateCount)
     .then((value) => ({ ...value, guardMs: Date.now() - guardStartedAt }));
 
   const rewritePromise = rewriteWithProviders(providers, request);
@@ -175,7 +180,24 @@ Deno.serve(async (req) => {
   rewritePromise.catch(() => {});
 
   const usage = await usagePromise;
-  if (!usage.allowed) return jsonError("rate_limited", usage.message, 429);
+  if (!usage.allowed) {
+    // §6's analytics requirement, and the reason a bare 429 was not enough: today
+    // nothing distinguishes a monthly quota cap from an abuse brake, so the two
+    // cannot be told apart in the data OR in the UI. `reason` carries which, and
+    // `plan` / `used` / `month_limit` / `resets_at` are what the cap-hit surface
+    // needs — §4.5 makes the computed reset date required on every one of them.
+    (globalThis as any).EdgeRuntime?.waitUntil(
+      logBlockedEvent(userId, request, usage.reason ?? "guard_unavailable"),
+    );
+    return json({
+      error: { code: "rate_limited", message: usage.message },
+      reason: usage.reason,
+      plan: usage.plan,
+      used: usage.used,
+      monthLimit: usage.monthLimit,
+      resetsAt: usage.resetsAt,
+    }, 429);
+  }
 
   try {
     const rewrite = await rewritePromise;
@@ -200,12 +222,27 @@ Deno.serve(async (req) => {
     }));
 
     (globalThis as any).EdgeRuntime?.waitUntil(Promise.all([
+      // §6 puts commit alongside the event log rather than in front of the
+      // response: the rewrite is already generated and already being returned, so
+      // the round trip costs the user nothing. Only a DELIVERED rewrite consumes
+      // quota, and this is the moment it was delivered.
+      commitUsage(request.requestId),
       logRewriteEvent(eventId, { userId, request, result: rewrite.result, provider: rewrite.provider, model: rewrite.model, latencyMs }),
       recordActivation(userId, request.appVersion ?? "unknown"),
     ]));
 
     return json({ ...rewrite.result, eventId });
   } catch (error) {
+    // The user saw nothing, so they are charged nothing. The day/hour/minute brakes
+    // stay ticked — that asymmetry is deliberate (§6): the marketed number is a
+    // promise, the brakes are a defence, and releasing them on failure would let a
+    // script that induces failures run unbraked.
+    const releaseReason = error instanceof ProviderError ? error.code : "provider_error";
+    (globalThis as any).EdgeRuntime?.waitUntil(Promise.all([
+      releaseUsage(request.requestId, releaseReason),
+      logBlockedEvent(userId, request, releaseReason),
+    ]));
+
     const providerError = error instanceof ProviderError ? error : null;
     console.error(JSON.stringify({
       event: "desktop_rewrite",
@@ -279,6 +316,13 @@ function parseRequest(body: unknown): { value: DesktopRewriteRequest } | { error
       captureMode,
       browserURL: optionalString(data.browserURL),
       ioPath: data.ioPath === "ax" || data.ioPath === "clipboard" ? data.ioPath : null,
+      // A generated fallback keeps a pre-billing client working, and it degrades in
+      // the only direction that is safe: without a stable id a retry reserves twice
+      // rather than reusing one reservation, so the user is protected and the
+      // duplicate is bounded by the 5-minute reservation TTL.
+      requestId: typeof data.requestId === "string" && data.requestId.length > 0
+        ? data.requestId.slice(0, 100)
+        : crypto.randomUUID(),
     },
   };
 }
@@ -287,68 +331,121 @@ function parseRequest(body: unknown): { value: DesktopRewriteRequest } | { error
 // Usage guard
 // ---------------------------------------------------------------------------
 
-/// Fails CLOSED, unlike `web-rewrite`'s per-IP counter. That endpoint is an
+/// `docs/billing.md` §6 — reserve → execute → commit.
+///
+/// **This replaced a bump-then-check guard, and both of its failures were real.** The
+/// old code incremented four counters and then compared, so a REJECTED request
+/// consumed quota, and a request whose provider call then failed consumed a rewrite
+/// the user never saw. Neither is acceptable against a marketed 「月1,000回」.
+///
+///   reserve(request_id, units) → allowed | denied(reason)     pending += units
+///       ↓ generation succeeds                                 pending -= units
+///   commit(request_id)                                        committed += units
+///       ↓ generation fails / times out / provider error
+///   release(request_id, reason)                               pending -= units
+///
+/// Three things the SQL does that could not be done here, and are the reason this is
+/// one RPC rather than four:
+///
+///   - **Admission counts `pending`.** `committed + pending + units <= limit` is what
+///     stops two concurrent requests both passing at 999. Under one advisory lock
+///     with the increment, so the race is closed rather than narrowed.
+///   - **Quota counts successes; brakes count attempts.** The month counter moves on
+///     commit and is released on failure; the day/hour/minute brakes move on reserve
+///     and are never released. A provider outage must not bill the user for it, and
+///     a script that induces failures must still be braked.
+///   - **The limit is a `plan_limits` row**, so it participates in the same
+///     transaction instead of being an env var compared afterwards.
+///
+/// Still fails CLOSED, unlike `web-rewrite`'s per-IP counter: that endpoint is an
 /// unauthenticated free tool where a database hiccup should degrade rather than
-/// break; this one is authenticated and metered, so an unmeasurable request is
-/// one we decline.
+/// break; this one is authenticated and metered, so an unmeasurable request is one
+/// we decline.
+type Reservation = {
+  allowed: boolean;
+  reason: string | null;
+  message: string;
+  plan: string | null;
+  used: number | null;
+  monthLimit: number | null;
+  resetsAt: string | null;
+};
+
+const DENIAL_MESSAGES: Record<string, string> = {
+  // §9 rows 41–42. Two different situations and they must not share a string: the
+  // free user has somewhere to go and the Pro user does not.
+  quota_month: "今月の書き換え上限に達しました。",
+  brake_day: "本日のAI利用上限に達しました。明日もう一度お試しください。",
+  brake_hour: "短時間のAI利用が多すぎます。少し待ってからもう一度お試しください。",
+  brake_minute: "短時間のAI利用が多すぎます。少し待ってからもう一度お試しください。",
+};
+
+const GUARD_UNAVAILABLE = "利用状況を確認できませんでした。少し待ってからもう一度お試しください。";
+
 async function reserveUsage(
   userId: string,
+  requestId: string,
   units: number,
-): Promise<{ allowed: boolean; message: string }> {
-  const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !key) {
-    return { allowed: false, message: "利用状況を確認できませんでした。少し待ってからもう一度お試しください。" };
-  }
-
-  const now = new Date().toISOString();
-  const checks: Array<[string, number, "units" | "requests", string]> = [
-    [`day:${now.slice(0, 10)}`, envInt("DESKTOP_DAILY_UNITS", 900), "units", "本日のAI利用上限に達しました。明日もう一度お試しください。"],
-    [`hour:${now.slice(0, 13)}`, envInt("DESKTOP_HOURLY_REQUESTS", 120), "requests", "短時間のAI利用が多すぎます。少し待ってからもう一度お試しください。"],
-    [`minute:${now.slice(0, 16)}`, envInt("DESKTOP_MINUTE_REQUESTS", 12), "requests", "短時間のAI利用が多すぎます。少し待ってからもう一度お試しください。"],
-  ];
+): Promise<Reservation> {
+  const denied = (reason: string | null, message: string): Reservation => ({
+    allowed: false,
+    reason,
+    message,
+    plan: null,
+    used: null,
+    monthLimit: null,
+    resetsAt: null,
+  });
 
   try {
-    for (const [bucketKey, limit, field, message] of checks) {
-      // The tables live in the `desktop` schema, but every entry point is a
-      // SECURITY DEFINER function in `public` — see the migration header. That is
-      // what keeps this working without adding `desktop` to the shared project's
-      // exposed-schema list.
-      const res = await fetch(`${url}/rest/v1/rpc/desktop_bump_usage`, {
-        method: "POST",
-        headers: {
-          apikey: key,
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          p_user_id: userId,
-          p_bucket_key: bucketKey,
-          p_units: units,
-        }),
-      });
-      if (!res.ok) {
-        console.error(JSON.stringify({
-          event: "desktop_rewrite_usage_guard",
-          status: "error",
-          httpStatus: res.status,
-          message: (await res.text()).slice(0, 300),
-        }));
-        return { allowed: false, message: "利用状況を確認できませんでした。少し待ってからもう一度お試しください。" };
-      }
-      const rows = await res.json();
-      const row = Array.isArray(rows) ? rows[0] : rows;
-      if (Number(row?.[field]) > limit) return { allowed: false, message };
+    const res = await desktopRPC("desktop_reserve_usage", {
+      p_user_id: userId,
+      p_request_id: requestId,
+      p_units: units,
+    });
+    if (!res || !res.ok) {
+      console.error(JSON.stringify({
+        event: "desktop_rewrite_usage_guard",
+        status: "error",
+        httpStatus: res?.status ?? null,
+        message: res ? (await res.text()).slice(0, 300) : "no response",
+      }));
+      return denied(null, GUARD_UNAVAILABLE);
     }
-    return { allowed: true, message: "" };
+
+    const rows = await res.json();
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (!row) return denied(null, GUARD_UNAVAILABLE);
+
+    const reason = typeof row.reason === "string" ? row.reason : null;
+    return {
+      allowed: row.allowed === true,
+      reason,
+      message: reason ? DENIAL_MESSAGES[reason] ?? GUARD_UNAVAILABLE : "",
+      plan: typeof row.plan === "string" ? row.plan : null,
+      used: typeof row.used === "number" ? row.used : null,
+      monthLimit: typeof row.month_limit === "number" ? row.month_limit : null,
+      resetsAt: typeof row.resets_at === "string" ? row.resets_at : null,
+    };
   } catch (error) {
     console.error(JSON.stringify({
       event: "desktop_rewrite_usage_guard",
       status: "exception",
       message: error instanceof Error ? error.message : "unknown",
     }));
-    return { allowed: false, message: "利用状況を確認できませんでした。少し待ってからもう一度お試しください。" };
+    return denied(null, GUARD_UNAVAILABLE);
   }
+}
+
+/// Idempotent and terminal — whichever of commit/release lands first wins and the
+/// second is a no-op. Both are fire-and-forget from the caller's point of view: the
+/// user's rewrite is already decided by the time either runs.
+async function commitUsage(requestId: string): Promise<void> {
+  await desktopRPC("desktop_commit_usage", { p_request_id: requestId });
+}
+
+async function releaseUsage(requestId: string, reason: string): Promise<void> {
+  await desktopRPC("desktop_release_usage", { p_request_id: requestId, p_reason: reason });
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +515,42 @@ async function logRewriteEvent(
       input_text: storeText ? redactPII(request.text) : null,
       output_text: storeText ? redactPII(result.candidates[0]?.replacement ?? "") : null,
       consent_version: storeText ? (consent.version ?? DEFAULT_CONSENT_VERSION) : null,
+    },
+  });
+}
+
+/// §6's analytics half: blocked and failed attempts are recorded SEPARATELY, with
+/// the reason from `reserve` (`quota_month` / `brake_day` / `brake_hour` /
+/// `brake_minute`) or the release reason (`provider_error` / `content_blocked` /
+/// `provider_rate_limited`).
+///
+/// `pricing.md` §8 asks for exactly this. Without it a 429 is a 429 and the data
+/// cannot tell "we sold someone a plan that is too small" from "someone is hammering
+/// the endpoint" — which are opposite problems with opposite fixes.
+///
+/// Never carries text, whatever the consent state: there is no output, and the input
+/// of an attempt that produced nothing is not worth the retention surface.
+async function logBlockedEvent(
+  userId: string,
+  request: DesktopRewriteRequest,
+  reason: string,
+): Promise<void> {
+  if ((Deno.env.get("DESKTOP_EVENT_LOGGING_ENABLED") ?? "true") === "false") return;
+
+  await desktopRPC("desktop_log_rewrite_event", {
+    p_event: {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      command_key: request.commandKey,
+      prompt_origin: request.promptOrigin,
+      capture_mode: request.captureMode,
+      host_app_bundle_id: request.hostAppBundleId,
+      io_path: request.ioPath,
+      locale: request.locale,
+      app_version: request.appVersion,
+      candidate_count: 0,
+      input_length: [...request.text].length,
+      status: reason,
     },
   });
 }

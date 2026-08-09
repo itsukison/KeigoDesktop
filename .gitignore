@@ -59,6 +59,9 @@ supabase/.temp/
 supabase/.branch/
 .env
 .env.*
+*.p12
+*.p8
+sparkle-private-key
 
 # Editor / agent local state
 .claude/

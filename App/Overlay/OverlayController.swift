@@ -12,7 +12,7 @@ final class OverlayController: ObservableObject {
 
     @Published private(set) var state: OverlayState = .pill
     @Published private(set) var prompts: [UserPrompt] = []
-    @Published private(set) var tutorialPrompt: UserPrompt?
+    @Published private(set) var tutorialPrompts: [UserPrompt] = []
     /// Set only when the fetch failed **and** left nothing to show — see `refreshPrompts`.
     @Published private(set) var promptsFailed = false
 
@@ -33,6 +33,28 @@ final class OverlayController: ObservableObject {
     private var errorPanel: ErrorPanel?
     private var errorDismissTask: Task<Void, Never>?
     private var lastWorkArea: NSRect = .zero
+
+    // MARK: Right-click snooze
+
+    /// The right-click menu's "非表示にする" — stored as an absolute deadline, not driven
+    /// by a `Task.sleep`, for the same reason `ClipboardWatcher.copyDisabledUntil` is:
+    /// a 10-minute or 1-hour window has to survive the Mac sleeping, and only a stored
+    /// `Date` compared against `Date()` does that reliably. Persisted, so quitting
+    /// mid-window does not undo it — `show()` re-applies it on the next launch.
+    private static let hiddenUntilKey = "overlay.pill.hiddenUntil"
+
+    private static var hiddenUntil: Date? {
+        get { UserDefaults.standard.overlaySnoozeDeadline(forKey: hiddenUntilKey) }
+        set { UserDefaults.standard.setOverlaySnoozeDeadline(newValue, forKey: hiddenUntilKey) }
+    }
+
+    /// Set only while the pill is hidden *because of* the snooze — as opposed to
+    /// onboarding, which also calls `setVisible(false)` for a lifecycle reason of its
+    /// own. `checkHiddenExpiry` only acts while this is true, so an expiring deadline
+    /// never pops the bar back up over a state the snooze did not create.
+    private var hiddenBySnooze = false
+
+    private var snoozeMenuPanel: SnoozeMenuPanel?
 
     // MARK: Reply mode (§16)
 
@@ -56,9 +78,30 @@ final class OverlayController: ObservableObject {
     /// gets inserted is the last one produced.
     private var lastHistoryEntryId: UUID?
     private var tutorialInserted: (() -> Void)?
+    private var replyTutorialActive = false
+
+    /// Opens the paywall when a **free** user hits the monthly cap (§9 row 41).
+    ///
+    /// A closure rather than a reference to the window: `AppDelegate` owns both this
+    /// controller and `MainWindowController`, and §14's rule is that the overlay and
+    /// the window have no lifetime relationship at all. Giving the bar a handle on the
+    /// window would be the first one.
+    var onQuotaPaywall: (() -> Void)?
+
+    /// Opens the returning-user sign-in surface when a rewrite discovers that the
+    /// saved session is missing. Kept as a callback for the same ownership reason as
+    /// `onQuotaPaywall`: the overlay must not own or retain the main window.
+    var onSignInRequired: (() -> Void)?
 
     var displayedPrompts: [UserPrompt] {
-        tutorialPrompt.map { [$0] } ?? prompts
+        tutorialPrompts.isEmpty ? prompts : tutorialPrompts
+    }
+
+    /// A scheduled updater window may take key, which is safe only while the bar is
+    /// fully at rest. In every other state that would interrupt capture, typing, a
+    /// rewrite in flight, or a result the user is still judging.
+    var allowsUpdateCheck: Bool {
+        state == .pill
     }
 
     init(
@@ -129,10 +172,140 @@ final class OverlayController: ObservableObject {
 
     func show() {
         panel.contentView = NSHostingView(rootView: PillRootView(controller: self))
-        panel.orderFrontRegardless()
         startPositionTracking()
-        startClipboardWatching()
+
+        // A snooze started before the last quit is still checked against the wall
+        // clock here, not against how long the app was closed — see `hiddenUntilKey`.
+        if OverlaySnooze.isActive(until: Self.hiddenUntil) {
+            hiddenBySnooze = true
+            setVisible(false)
+        } else {
+            Self.hiddenUntil = nil // clears a deadline that had already passed
+            panel.orderFrontRegardless()
+            startClipboardWatching()
+        }
         Task { await refreshPrompts() }
+    }
+
+    // MARK: - Right-click snooze
+
+    /// Whether the bar is currently down because of a right-click hide — as opposed to
+    /// hidden, say, during onboarding. `AppDelegate`'s status-bar menu reads this to
+    /// decide whether "再表示する" belongs on screen at all.
+    var isHiddenBySnooze: Bool { hiddenBySnooze }
+
+    /// `nil` unless `isHiddenBySnooze` — there is no deadline to read a countdown off
+    /// of otherwise.
+    var hiddenRemainingMinutes: Int? {
+        guard hiddenBySnooze, let until = Self.hiddenUntil else { return nil }
+        return OverlaySnooze.remainingMinutes(until: until)
+    }
+
+    /// The right-click menu's "非表示にする" rows. Reuses `setVisible(false)` wholesale —
+    /// it already dismisses the auxiliary panels and stops the clipboard watcher, and
+    /// none of that needs a second implementation just because this hide is timed.
+    func hideOverlay(for duration: OverlaySnooze.Duration) {
+        Self.hiddenUntil = OverlaySnooze.until(duration)
+        hiddenBySnooze = true
+        setVisible(false) // also dismisses the menu this was very likely called from
+    }
+
+    /// The status-bar menu's "今すぐ再表示する" — the only way back once the pill itself
+    /// is gone and there is nothing left to right-click.
+    func cancelHideNow() {
+        guard hiddenBySnooze else { return }
+        hiddenBySnooze = false
+        Self.hiddenUntil = nil
+        setVisible(true)
+    }
+
+    /// The right-click menu's "コピー機能を無効にする" rows. This does not touch the bar at
+    /// all — `ClipboardWatcher` keeps polling, it just stops arming reply mode — so there
+    /// is nothing here for `OverlayController` to own beyond forwarding the call.
+    func disableCopyTrigger(for duration: OverlaySnooze.Duration) {
+        ClipboardWatcher.copyDisabledUntil = OverlaySnooze.until(duration)
+    }
+
+    /// Checked from the position-tracking timer below, which is already polling at the
+    /// interval this needs and would otherwise be the only other timer in the app.
+    private func checkHiddenExpiry() {
+        guard hiddenBySnooze, !OverlaySnooze.isActive(until: Self.hiddenUntil) else { return }
+        hiddenBySnooze = false
+        Self.hiddenUntil = nil
+        setVisible(true)
+    }
+
+    /// The pill's own right-click menu (§17) — not `.contextMenu`, see
+    /// `SnoozeMenuPanel`'s doc comment for why. A second right-click while it is open
+    /// closes it, the same as clicking any other control twice would toggle it.
+    func toggleSnoozeMenu() {
+        if snoozeMenuPanel != nil {
+            dismissSnoozeMenu()
+        } else {
+            presentSnoozeMenu()
+        }
+    }
+
+    private func presentSnoozeMenu() {
+        // A menu opened mid-grace-period should not have its own open-ness raced by a
+        // collapse timer that was scheduled before it existed — `mouseExited` re-checks
+        // `snoozeMenuPanel` at fire time so this is belt-and-suspenders, but there is no
+        // reason to leave a stale task sitting around either.
+        collapseTask?.cancel()
+        collapseTask = nil
+
+        let copyDisabledUntil = ClipboardWatcher.copyDisabledUntil
+        let isCopyDisabled = OverlaySnooze.isActive(until: copyDisabledUntil)
+
+        let menu = SnoozeMenuPanel(
+            anchor: panel.frame,
+            isCopyDisabled: isCopyDisabled,
+            copyDisabledRemainingMinutes: copyDisabledUntil.map { OverlaySnooze.remainingMinutes(until: $0) },
+            onHide: { [weak self] duration in self?.hideOverlay(for: duration) },
+            onDisableCopy: { [weak self] duration in
+                self?.disableCopyTrigger(for: duration)
+                self?.dismissSnoozeMenu()
+            },
+            onCancelCopyDisable: { [weak self] in
+                ClipboardWatcher.copyDisabledUntil = nil
+                self?.dismissSnoozeMenu()
+            },
+            onDismiss: { [weak self] in self?.dismissSnoozeMenu() }
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(snoozeMenuResignedKey),
+            name: NSWindow.didResignKeyNotification,
+            object: menu
+        )
+        menu.makeKeyAndOrderFront(nil)
+        snoozeMenuPanel = menu
+    }
+
+    /// Same bounce guard as `panelResignedKey`: an accessory app taking key on a
+    /// non-activating panel can resign once as focus settles before it actually holds
+    /// key, and dismissing on that would close the menu the instant it opened.
+    @objc private func snoozeMenuResignedKey() {
+        Task { @MainActor [weak self] in
+            guard let self, self.snoozeMenuPanel?.isKeyWindow != true else { return }
+            self.dismissSnoozeMenu()
+        }
+    }
+
+    private func dismissSnoozeMenu() {
+        guard let menu = snoozeMenuPanel else { return }
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: menu)
+        menu.orderOut(nil)
+        snoozeMenuPanel = nil
+
+        // `mouseExited` asked this question and got told to stand down while the menu
+        // was up (it re-checks `snoozeMenuPanel`, which is why nothing collapsed while
+        // the cursor moved off the bar to read this). Now that it is gone, ask again:
+        // if the cursor is not sitting back over the bar, the row should still collapse
+        // — just on its own grace delay, the same as any other exit.
+        if case .hoverRow = state, !panel.frame.contains(NSEvent.mouseLocation) {
+            mouseExited()
+        }
     }
 
     func setVisible(_ visible: Bool) {
@@ -144,6 +317,9 @@ final class OverlayController: ObservableObject {
             dismissGeneratingPanel()
             dismissResultPanel()
             dismissErrorToast()
+            // The right-click menu is only ever reachable while the pill is on screen
+            // — once it is gone, so is whatever this was anchored to.
+            dismissSnoozeMenu()
             // Watching the clipboard while the bar is hidden would arm a state with no
             // window to show it in, and re-arm it the moment the bar came back with a
             // copy from minutes ago.
@@ -175,15 +351,33 @@ final class OverlayController: ObservableObject {
         }
     }
 
-    func beginTutorial(prompt: UserPrompt, onInserted: @escaping () -> Void) {
-        tutorialPrompt = prompt
+    func beginTutorial(prompts: [UserPrompt], onInserted: @escaping () -> Void) {
+        replyTutorialActive = false
+        tutorialPrompts = prompts
         tutorialInserted = onInserted
         transition(to: .pill)
     }
 
+    func beginReplyTutorial(onInserted: @escaping () -> Void) {
+        tutorialPrompts = []
+        replyTutorialActive = true
+        tutorialInserted = onInserted
+        transition(to: .pill)
+    }
+
+    func copyReplyTutorialSource(_ text: String) {
+        guard replyTutorialActive, let source = ReplySource(copied: text) else { return }
+        ClipboardWatcher.writingOurselves {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+        armReply(source)
+    }
+
     func endTutorial() {
-        tutorialPrompt = nil
+        tutorialPrompts = []
         tutorialInserted = nil
+        replyTutorialActive = false
         if case .pill = state { return }
         transition(to: .pill)
     }
@@ -207,6 +401,7 @@ final class OverlayController: ObservableObject {
         positionTracker = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
+                self.checkHiddenExpiry()
                 let area = OverlayPlacement.workArea(on: OverlayPlacement.screen(containing: self.panel.frame))
                 guard area != self.lastWorkArea else { return }
                 self.reanchor()
@@ -325,12 +520,24 @@ final class OverlayController: ObservableObject {
 
     /// §4: collapse needs a grace delay. Without it a diagonal path toward a button
     /// on the far end of the row collapses it mid-travel.
+    ///
+    /// **Re-checked at fire time, not just at schedule time.** `mouseExited` fires the
+    /// instant the cursor leaves the pill for `SnoozeMenuPanel` sitting above it (§17)
+    /// — a different window, so the bar sees exactly what it would see for any other
+    /// exit. Collapsing out from under an open menu would take the menu with it
+    /// (`transition` dismisses it unconditionally), so the guard below reads
+    /// `snoozeMenuPanel` at the moment the timer actually fires rather than trusting
+    /// whatever was true when it was scheduled — the same reason §4 re-derives
+    /// `anchorY` instead of carrying it over. `dismissSnoozeMenu` is what asks this
+    /// question again once the menu is gone.
     func mouseExited() {
         guard case .hoverRow = state else { return }
         collapseTask?.cancel()
         collapseTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Tokens.Geometry.collapseGrace * 1_000_000_000))
-            guard !Task.isCancelled, let self, case .hoverRow = self.state else { return }
+            guard !Task.isCancelled, let self, case .hoverRow = self.state,
+                  self.snoozeMenuPanel == nil
+            else { return }
             self.transition(to: .pill)
         }
     }
@@ -362,7 +569,7 @@ final class OverlayController: ObservableObject {
                     buttonTitle: prompt.title,
                     commandKey: prompt.builtinKey,
                     promptOrigin: prompt.origin.rawValue,
-                    isTutorial: prompt.id == self.tutorialPrompt?.id
+                    isTutorial: self.tutorialPrompts.contains { $0.id == prompt.id }
                 )
             } catch {
                 ClipboardWatcher.resume()
@@ -453,7 +660,7 @@ final class OverlayController: ObservableObject {
                 buttonTitle: "返信",
                 commandKey: nil,
                 promptOrigin: nil,
-                isTutorial: false
+                isTutorial: replyTutorialActive
             )
 
         case .pill, .hoverRow, .generating, .result, .replyArmed:
@@ -618,9 +825,10 @@ final class OverlayController: ObservableObject {
                         selectedIndex: context.selectedIndex
                     )
                 }
+                let tutorialCompletion = context.pending.isTutorial ? self.tutorialInserted : nil
                 if context.pending.isTutorial {
-                    self.tutorialInserted?()
                     self.tutorialInserted = nil
+                    if context.pending.replyTo != nil { self.replyTutorialActive = false }
                 }
                 // The reply has been sent where it was going, so the copy behind it is
                 // spent. Cancelling the clock as well keeps a late expiry from firing
@@ -628,6 +836,7 @@ final class OverlayController: ObservableObject {
                 self.replyExpiryTask?.cancel()
                 self.replyExpiryTask = nil
                 self.transition(to: .pill)
+                tutorialCompletion?()
             } catch {
                 ClipboardWatcher.resume()
                 // The panel was already dismissed to get out of ⌘V's way, so a failure
@@ -639,7 +848,7 @@ final class OverlayController: ObservableObject {
                 }
                 self.presentResultPanel(context)
                 self.present(
-                    message: "書き戻せませんでした。クリップボードにコピーしたので ⌘V で貼り付けてください。"
+                    message: "挿入できませんでした。文章をクリップボードにコピーしました。元の入力欄で ⌘V を押して貼り付けてください。"
                 )
             }
         }
@@ -703,6 +912,12 @@ final class OverlayController: ObservableObject {
     private func transition(to next: OverlayState) {
         let wasResult = { if case .result = state { return true } else { return false } }()
         let wasGenerating = { if case .generating = state { return true } else { return false } }()
+
+        // The menu is anchored to `.pill` / `.hoverRow`, and every other state either
+        // hides the bar outright or takes key away from it — either way, a state
+        // change means the menu's own anchor is no longer the state it was opened
+        // against.
+        dismissSnoozeMenu()
 
         state = next
 
@@ -924,8 +1139,62 @@ final class OverlayController: ObservableObject {
     // MARK: - Errors
 
     private func present(_ error: Error) {
+        if case RewriteError.notSignedIn = error {
+            present(message: Self.message(for: error))
+            onSignInRequired?()
+            return
+        }
+        if case RewriteError.quotaExceeded(let denial) = error {
+            presentQuotaDenial(denial)
+            return
+        }
         present(message: Self.message(for: error))
     }
+
+    /// `docs/billing.md` §9 rows 41–43 — three cap-hit surfaces, and the whole point
+    /// is that they are not one.
+    ///
+    /// - **Free user at 50** → the paywall. The user pressed a button and got nothing,
+    ///   so the upgrade surface *is* the answer, and it opens on the プラン pane with
+    ///   annual already selected (`PlanView`'s default, per pricing §4).
+    /// - **Pro user at 1,000** → *not* a paywall. There is no tier above, so offering
+    ///   one would be selling them what they already own.
+    /// - **A brake** → its own message, because upgrading does not lift it. §6 keeps
+    ///   the reason distinct in analytics for the same reason.
+    ///
+    /// Every branch carries the reset date. §4.5's finding is that the driver of
+    /// billing support tickets is an invisible reset date rather than the lock, and
+    /// the date is per-user — a Pro window resets on the subscription anchor, a free
+    /// one on the 1st — so it can only come from the server.
+    private func presentQuotaDenial(_ denial: QuotaDenial) {
+        let reset = denial.resetsAt.map { "\(Self.resetFormatter.string(from: $0))にリセットされます。" }
+
+        let message: String
+        switch denial.reason {
+        case .month where denial.plan == .free:
+            message = [
+                "今月の無料枠（\(denial.monthLimit ?? 50)回）を使い切りました。",
+                reset,
+            ].compactMap { $0 }.joined()
+        case .month:
+            message = ["今月の上限に達しました。", reset].compactMap { $0 }.joined()
+        case .day, .hour, .minute:
+            message = denial.message
+        }
+
+        present(message: message)
+        if denial.offersUpgrade { onQuotaPaywall?() }
+    }
+
+    /// 「10月20日」 — the date alone. The hour is never the interesting part, and a
+    /// timestamp in a toast reads as a system log rather than an answer.
+    private static let resetFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
+        formatter.dateFormat = "M月d日"
+        return formatter
+    }()
 
     /// Every failure path ends here, including the ones that leave the state alone.
     ///
@@ -990,7 +1259,7 @@ final class OverlayController: ObservableObject {
         case TextIOError.writeFailed:
             return "書き戻しに失敗しました。もう一度お試しください。"
         case RewriteError.notSignedIn:
-            return "サインインが必要です。"
+            return "サインインが必要です。アカウント画面からサインインしてください。"
         case RewriteError.rateLimited(let message), RewriteError.contentBlocked(let message),
              RewriteError.backend(let message):
             return message

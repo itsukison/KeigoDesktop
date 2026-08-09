@@ -163,10 +163,37 @@ public actor AXTextIO {
     /// `.success` and does nothing in plenty of web and Electron views, which surfaced
     /// as "the rewrite said it worked and the text never changed". Throwing here is
     /// what lets the coordinator fall back to a synthesized paste.
-    public func write(_ replacement: String, to target: TextTarget) throws {
+    public func write(_ replacement: String, to target: TextTarget) async throws {
         guard AXPermission.isTrusted else { throw TextIOError.notTrusted }
         guard let handle = target.element else { throw TextIOError.writeFailed }
 
+        // Cross-process AX is synchronous IPC and belongs on this actor. The practice
+        // editor is the one exception: its AX element belongs to this process, so the
+        // setter enters AppKit's NSTextView implementation directly. AppKit requires
+        // that path on the main queue and traps in `_dispatch_assert_queue_fail` when
+        // it arrives from a cooperative executor.
+        if Self.writeRequiresMainActor(
+            targetPID: handle.pid,
+            currentPID: ProcessInfo.processInfo.processIdentifier
+        ) {
+            try await MainActor.run {
+                try Self.performWrite(replacement, to: target, handle: handle)
+            }
+            return
+        }
+
+        try Self.performWrite(replacement, to: target, handle: handle)
+    }
+
+    static func writeRequiresMainActor(targetPID: pid_t, currentPID: pid_t) -> Bool {
+        targetPID == currentPID
+    }
+
+    private static func performWrite(
+        _ replacement: String,
+        to target: TextTarget,
+        handle: AXElementHandle
+    ) throws {
         let element = handle.element
         element.applyMessagingTimeout()
 
@@ -198,7 +225,7 @@ public actor AXTextIO {
             throw TextIOError.writeFailed
         }
 
-        guard Self.writeLanded(replacement, in: element, before: before, mode: target.captureMode) else {
+        guard writeLanded(replacement, in: element, before: before, mode: target.captureMode) else {
             throw TextIOError.writeFailed
         }
     }

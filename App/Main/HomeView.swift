@@ -18,10 +18,87 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 28) {
             usageRow
             statCard
+            if let entitlement = model.entitlement { planRow(entitlement) }
             if !model.isSignedIn || !model.isTrusted { setupRecovery }
             historySection
         }
     }
+
+    // MARK: - Plan and quota
+
+    /// `docs/billing.md` §4.5 makes this a requirement rather than a nicety, and the
+    /// finding behind it is unusually clean: the driver of billing support tickets is
+    /// **an invisible reset date**, not the cap. GitHub Copilot documents its quota
+    /// plainly and still carries a continuous stream of confused threads; Grammarly,
+    /// which surfaces 「次回リフィルまであと N 日」 at the block point, does not.
+    ///
+    /// So the date is on the row, and it is the server's computed date — never a fixed
+    /// one. A Pro window resets on the subscription anchor and a free one on the 1st,
+    /// so 「毎月1日にリセット」 would be wrong for every paying user.
+    ///
+    /// It sits below the stat card rather than above it because the stats are what the
+    /// app has *done*; this is what is left. It is also the only row on ホーム that
+    /// comes from the server, which is why it appears only once a read has succeeded —
+    /// `model.entitlement` is nil until then and a placeholder would be a claim.
+    private func planRow(_ entitlement: Entitlement) -> some View {
+        Card(padding: 16, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
+                Badge(entitlement.plan.displayName)
+                Text("\(entitlement.used) / \(entitlement.monthLimit) 回")
+                    .font(Tokens.Font.body(14, weight: .medium))
+                    .foregroundStyle(Tokens.Window.textPrimary)
+                Text("\(Self.resetFormatter.string(from: entitlement.resetsAt))にリセット")
+                    .font(Tokens.Font.body(12))
+                    .foregroundStyle(Tokens.Window.textSecondary)
+
+                Spacer(minLength: 16)
+
+                if entitlement.plan == .free {
+                    ActionButton("アップグレード", style: .primary) { model.openPlanSettings() }
+                } else {
+                    ActionButton("お支払い管理", style: .secondary, enabled: !model.isOpeningBilling) {
+                        model.openBillingPortal()
+                    }
+                }
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Tokens.Window.group)
+                    Capsule()
+                        .fill(entitlement.remaining == 0
+                              ? Tokens.Window.textSecondary
+                              : Tokens.Window.accent)
+                        .frame(width: max(0, geo.size.width * entitlement.fraction))
+                }
+            }
+            .frame(height: 6)
+
+            // §3.4 — `past_due` inside the 14-day grace window is still Pro. Saying so
+            // here rather than only in the ⚙︎ modal is the whole reason grace exists:
+            // the dominant cause of a failed renewal is an expired card, and a user
+            // who never opens settings would otherwise find out by being revoked.
+            if entitlement.needsPaymentAttention {
+                Text("お支払いを確認できませんでした。カード情報を更新してください。")
+                    .font(Tokens.Font.body(12))
+                    .foregroundStyle(Tokens.Window.textSecondary)
+            } else if entitlement.isCancelScheduled, let end = entitlement.cancelsAt {
+                // `cancelsAt`, not `cancelAtPeriodEnd` — the boolean is false on a
+                // real Portal cancellation under dahlia, so this row never appeared.
+                Text("解約手続き済みです。\(Self.resetFormatter.string(from: end))まで Pro をご利用いただけます。")
+                    .font(Tokens.Font.body(12))
+                    .foregroundStyle(Tokens.Window.textSecondary)
+            }
+        }
+    }
+
+    private static let resetFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
+        formatter.dateFormat = "M月d日"
+        return formatter
+    }()
 
     // MARK: - How to use it
 
@@ -34,7 +111,7 @@ struct HomeView: View {
             Text("画面の下の")
                 .font(Tokens.Font.body(15))
                 .foregroundStyle(Tokens.Window.textSecondary)
-            BarPreview()
+            PillPreview()
             Text("にカーソルを合わせると、ボタンが開きます")
                 .font(Tokens.Font.body(15))
                 .foregroundStyle(Tokens.Window.textSecondary)
@@ -65,30 +142,51 @@ struct HomeView: View {
 
     private var statCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Card(padding: 24) {
-                HStack(alignment: .top, spacing: 0) {
-                    StatCell(
-                        label: "今週の書き換え",
-                        value: Self.number(model.stats.rewritesThisWeek),
-                        unit: "回"
-                    )
-                    StatCell(
-                        label: "累計",
-                        value: Self.number(model.stats.totalRewrites),
-                        unit: "回"
-                    )
-                    StatCell(
-                        label: "書き換えた文字数",
-                        value: Self.number(model.stats.charactersRewritten),
-                        unit: "字"
-                    )
-                    StatCell(
-                        label: "連続利用",
-                        value: Self.number(model.stats.dayStreak),
-                        unit: "日"
-                    )
+            HStack(alignment: .top, spacing: 0) {
+                StatCell(
+                    label: "今週の書き換え",
+                    value: Self.number(model.stats.rewritesThisWeek),
+                    unit: "回"
+                )
+                StatDivider()
+                StatCell(
+                    label: "累計",
+                    value: Self.number(model.stats.totalRewrites),
+                    unit: "回"
+                )
+                StatDivider()
+                StatCell(
+                    label: "書き換えた文字数",
+                    value: Self.number(model.stats.charactersRewritten),
+                    unit: "字"
+                )
+                StatDivider()
+                StatCell(
+                    label: "連続利用",
+                    value: Self.number(model.stats.dayStreak),
+                    unit: "日"
+                )
+            }
+            .padding(.vertical, 22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                ZStack {
+                    Tokens.Window.canvas
+                    Image("StatsBackdrop")
+                        .resizable()
+                        .scaledToFill()
+                        // The raster supplies atmosphere, not a coloured card. At
+                        // full strength even this pale source read as a gradient.
+                        .opacity(0.55)
                 }
             }
+            .clipShape(
+                RoundedRectangle(cornerRadius: Tokens.Window.cardRadius, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Tokens.Window.cardRadius, style: .continuous)
+                    .strokeBorder(Tokens.Window.hairline, lineWidth: 1)
+            )
 
             if let bundleId = model.stats.topAppBundleId {
                 Text("よく使うアプリ: \(MainModel.appName(for: bundleId))（\(model.stats.topAppCount)回）")
@@ -238,25 +336,6 @@ struct HomeView: View {
     }()
 }
 
-/// The bar itself, in the usage row — not a label naming it, the real thing.
-///
-/// This used to be `Chip("バー")`, a plain accent-tinted word. Saying "hover the bar"
-/// without showing it made the reader build their own mental picture of a shape that
-/// looks nothing like the actual dark pill; this is `PillRootView`'s `.pill` state,
-/// same constants, same mark, so what is described is what is seen.
-private struct BarPreview: View {
-    var body: some View {
-        BrandMark()
-            .padding(.horizontal, (Tokens.Geometry.pillCollapsedWidth - 16) / 2)
-            .frame(height: Tokens.Geometry.pillHeight)
-            .background(
-                RoundedRectangle(cornerRadius: Tokens.Overlay.pillRadius, style: .continuous)
-                    .fill(Tokens.Overlay.canvas)
-            )
-            .shadow(color: .black.opacity(0.22), radius: 6, y: 2)
-    }
-}
-
 /// Label above, number below. The number is semibold — the reference's stat row reads
 /// as data because the figures are the heaviest type on the page, which is the exact
 /// opposite of the whisper-weight display face this window used to set them in.
@@ -280,7 +359,18 @@ private struct StatCell: View {
                     .foregroundStyle(Tokens.Window.textSecondary)
             }
         }
+        .padding(.horizontal, 20)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Willow's stat card is one object with four columns. A quiet internal rule keeps
+/// the values scannable without turning them into four separate tiles.
+private struct StatDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Tokens.Window.hairline.opacity(0.9))
+            .frame(width: 1, height: 48)
     }
 }
 

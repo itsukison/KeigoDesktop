@@ -36,6 +36,11 @@ final class PillPanel: NSPanel {
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = true
         isMovableByWindowBackground = true
+        // `CursorArea` reasserts the cursor from `mouseMoved`, because cursor
+        // rectangles are inactive while this panel is non-key. NSWindow drops
+        // mouse-moved events by default, so without this every declared cursor
+        // falls back to the arrow immediately after its enter event.
+        acceptsMouseMovedEvents = true
 
         // Over normal windows, below menu-bar dropdowns.
         level = .statusBar

@@ -266,6 +266,11 @@ enum Tokens {
 
         static let errorToastWidth: CGFloat = 360
 
+        /// The right-click snooze menu (§17). Narrower than the toast — a menu row is
+        /// one line of Japanese plus a duration phrase, not a wrapped sentence.
+        static let snoozeMenuWidth: CGFloat = 240
+        static let snoozeMenuRowHeight: CGFloat = 28
+
         /// Bounds on the measured height. `ResultPanel` has always clamped its own and
         /// the toast never did, which is why one of them survived a bad measurement and
         /// the other threw itself off the bottom of the screen — see
