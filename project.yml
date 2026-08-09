@@ -45,7 +45,7 @@ targets:
         # `Contents/MacOS/敬語ボタン`, and Xcode's debug-dylib signing flow then skips
         # it — the bundle signing fails with "code object is not signed at all".
         # The user-visible name is CFBundleDisplayName in Info.plist.
-        PRODUCT_NAME: KeigoButtonMac
+        PRODUCT_NAME: KeigoButton
         INFOPLIST_FILE: App/Resources/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES

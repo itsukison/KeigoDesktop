@@ -1203,7 +1203,7 @@ taller than the area it sits in.
   signs `*.debug.dylib` and `__preview.dylib` but silently skips the main
   executable — the bundle sign fails with `code object is not signed at all` /
   `Command CodeSign failed with a nonzero exit code`, which names neither the real
-  cause nor the file. `PRODUCT_NAME` is `KeigoButtonMac`; `CFBundleDisplayName` and
+  cause nor the file. `PRODUCT_NAME` is `KeigoButton`; `CFBundleDisplayName` and
   `CFBundleName` carry 敬語ボタン, and that is what Finder, the menu bar, and the
   Accessibility dialog display.
 

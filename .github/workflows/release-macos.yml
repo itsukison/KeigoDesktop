@@ -7,6 +7,11 @@ on:
         description: Release version without a leading v, for example 0.1.0
         required: true
         type: string
+      replace_unpublished_first_release:
+        description: Replace the unpublished 0.1.0 appcast while rebuilding the first release
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -23,7 +28,7 @@ jobs:
     runs-on: macos-15
     environment: production
     env:
-      APP_NAME: KeigoButtonMac
+      APP_NAME: KeigoButton
       PROJECT: KeigoButtonMac.xcodeproj
       SCHEME: KeigoButtonMac
       TEAM_ID: 4KS6YS23KT
@@ -49,6 +54,10 @@ jobs:
             echo "version must look like 0.1.0" >&2
             exit 1
           }
+          if [[ "${{ inputs.replace_unpublished_first_release }}" == "true" && "$VERSION" != "0.1.0" ]]; then
+            echo "replace_unpublished_first_release is restricted to the unpublished 0.1.0 release" >&2
+            exit 1
+          fi
           test -n "$SPARKLE_PUBLIC_ED_KEY"
           test -n "$CERTIFICATE_P12_BASE64"
           test -n "$CERTIFICATE_P12_PASSWORD"
@@ -185,19 +194,11 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_DIR="$RUNNER_TEMP/release"
-          DMG_ROOT="$RUNNER_TEMP/dmg-root"
-          mkdir -p "$RELEASE_DIR" "$DMG_ROOT"
-          cp -R "$APP_PATH" "$DMG_ROOT/"
-          ln -s /Applications "$DMG_ROOT/Applications"
+          mkdir -p "$RELEASE_DIR"
           UPDATE_ZIP="$RELEASE_DIR/$APP_NAME-$VERSION.zip"
-          DMG_PATH="$RELEASE_DIR/$APP_NAME-$VERSION.dmg"
+          DMG_PATH="$RELEASE_DIR/$APP_NAME.dmg"
           ditto -c -k --keepParent "$APP_PATH" "$UPDATE_ZIP"
-          hdiutil create \
-            -volname "敬語ボタン" \
-            -srcfolder "$DMG_ROOT" \
-            -format UDZO \
-            -ov \
-            "$DMG_PATH"
+          scripts/release/create-dmg.sh "$APP_PATH" "$DMG_PATH"
           codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$DMG_PATH"
           xcrun notarytool submit "$DMG_PATH" \
             --key "$NOTARY_KEY_PATH" \
@@ -230,10 +231,12 @@ jobs:
               "$VERSION" > "$NOTES_FILE"
           fi
           cp "$NOTES_FILE" "$APPCAST_DIR/$APP_NAME-$VERSION.md"
-          if curl --fail --silent --show-error \
-            https://itsukison.github.io/KeigoDesktop/appcast.xml \
-            --output "$APPCAST_DIR/appcast.xml"; then
-            echo "Updating the existing appcast"
+          if [[ "${{ inputs.replace_unpublished_first_release }}" == "true" ]]; then
+            echo "Rebuilding the unpublished first appcast from scratch"
+          elif curl --fail --silent --show-error \
+              https://itsukison.github.io/KeigoDesktop/appcast.xml \
+              --output "$APPCAST_DIR/appcast.xml"; then
+              echo "Updating the existing appcast"
           else
             echo "Creating the first appcast"
           fi
@@ -270,7 +273,7 @@ jobs:
       - name: Retain debug symbols
         uses: actions/upload-artifact@v4
         with:
-          name: KeigoButtonMac-${{ inputs.version }}-dSYMs
+          name: KeigoButton-${{ inputs.version }}-dSYMs
           path: ${{ env.ARCHIVE_PATH }}/dSYMs
           if-no-files-found: error
           retention-days: 90

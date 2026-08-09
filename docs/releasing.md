@@ -61,6 +61,10 @@ and ticket issued separately for every released build.
    DMG, signs the update ZIP with Sparkle, creates `vX.Y.Z`, uploads the GitHub release,
    and deploys `appcast.xml` to GitHub Pages.
 
+The public installer is always named `KeigoButton.dmg`, so the website can use the
+stable `/releases/latest/download/KeigoButton.dmg` URL. Sparkle update archives remain
+versioned as `KeigoButton-X.Y.Z.zip`.
+
 `CFBundleVersion` uses GitHub's monotonically increasing workflow run number. Sparkle
 uses that build number for comparisons; the `X.Y.Z` value is the user-facing version.
 
