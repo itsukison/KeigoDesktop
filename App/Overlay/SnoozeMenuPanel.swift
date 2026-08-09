@@ -119,19 +119,31 @@ struct SnoozeMenu: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(OverlaySnooze.Duration.allCases, id: \.self) { duration in
-                SnoozeMenuRow(title: "敬語ボタンを\(duration.label)非表示にする") { onHide(duration) }
+                SnoozeMenuRow(title: tr(
+                    "敬語ボタンを\(duration.label)非表示にする",
+                    "Hide the bar for \(duration.label)",
+                    "隐藏敬語ボタン\(duration.label)"
+                )) { onHide(duration) }
             }
 
             hairline
 
             if isCopyDisabled {
                 SnoozeMenuRow(
-                    title: "コピー機能を有効にする（残り\(copyDisabledRemainingMinutes ?? 0)分）",
+                    title: tr(
+                        "コピー機能を有効にする（残り\(copyDisabledRemainingMinutes ?? 0)分）",
+                        "Turn copy detection back on (\(copyDisabledRemainingMinutes ?? 0) min left)",
+                        "启用复制功能（剩余\(copyDisabledRemainingMinutes ?? 0)分钟）"
+                    ),
                     action: onCancelCopyDisable
                 )
             } else {
                 ForEach(OverlaySnooze.Duration.allCases, id: \.self) { duration in
-                    SnoozeMenuRow(title: "コピー機能を\(duration.label)無効にする") { onDisableCopy(duration) }
+                    SnoozeMenuRow(title: tr(
+                        "コピー機能を\(duration.label)無効にする",
+                        "Turn copy detection off for \(duration.label)",
+                        "停用复制功能\(duration.label)"
+                    )) { onDisableCopy(duration) }
                 }
             }
         }

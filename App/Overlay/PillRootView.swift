@@ -13,11 +13,15 @@ import SwiftUI
 /// Height is measured too. It is still a design decision — §4's 28/34 pt are a
 /// *floor* — but the input bar wraps to as many as `inputBarMaxLines`, and a window
 /// pinned to 34 pt would clip the second line.
+private struct ContentMeasurement: Equatable {
+    let size: CGSize
+    let layout: OverlayContentLayout
+}
+
 private struct ContentSizeKey: PreferenceKey {
-    static let defaultValue: CGSize = .zero
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        let next = nextValue()
-        value = CGSize(width: max(value.width, next.width), height: max(value.height, next.height))
+    static let defaultValue: ContentMeasurement? = nil
+    static func reduce(value: inout ContentMeasurement?, nextValue: () -> ContentMeasurement?) {
+        if let next = nextValue() { value = next }
     }
 }
 
@@ -38,14 +42,21 @@ struct PillRootView: View {
             content
                 .background(
                     GeometryReader { proxy in
-                        Color.clear.preference(key: ContentSizeKey.self, value: proxy.size)
+                        Color.clear.preference(
+                            key: ContentSizeKey.self,
+                            value: ContentMeasurement(
+                                size: proxy.size,
+                                layout: controller.state.contentLayout
+                            )
+                        )
                     }
                 )
         }
         .frame(minHeight: controller.state.contentHeight)
         .fixedSize(horizontal: true, vertical: true)
-        .onPreferenceChange(ContentSizeKey.self) { size in
-            controller.contentSizeChanged(size)
+        .onPreferenceChange(ContentSizeKey.self) { measurement in
+            guard let measurement else { return }
+            controller.contentSizeChanged(measurement.size, for: measurement.layout)
         }
         // The bar itself is a drag handle (`isMovableByWindowBackground`), so the
         // background says so. Buttons drawn on top of it declare `.pointingHand` and
@@ -155,10 +166,10 @@ struct HoverRow: View {
                 // ✎ can only end in a failed rewrite — so the row is replaced by the
                 // single action that changes that, rather than reporting that the
                 // buttons could not be loaded and leaving the user to guess why.
-                Text("サインインするとボタンが使えます")
+                Text(tr("サインインするとボタンが使えます", "Sign in to use your buttons", "登录后即可使用按钮"))
                     .font(Tokens.Font.body(Tokens.Overlay.labelMedium))
                     .foregroundStyle(Tokens.Overlay.textSecondary)
-                RowPill(title: "サインイン", emphasised: true) { controller.pressSignIn() }
+                RowPill(title: tr("サインイン", "Sign in", "登录"), emphasised: true) { controller.pressSignIn() }
             } else {
                 if controller.displayedPrompts.isEmpty {
                     // Two different empty states. Telling someone to go and make
@@ -166,8 +177,12 @@ struct HoverRow: View {
                     // than silence.
                     Text(
                         controller.promptsFailed
-                            ? "ボタンを読み込めませんでした"
-                            : "スマホでボタンを作成してください"
+                            ? tr("ボタンを読み込めませんでした", "Couldn't load your buttons", "无法加载按钮")
+                            : tr(
+                                "スマホでボタンを作成してください",
+                                "Create a button to get started",
+                                "请先创建一个按钮"
+                            )
                     )
                     .font(Tokens.Font.body(Tokens.Overlay.labelMedium))
                     .foregroundStyle(Tokens.Overlay.textTertiary)
@@ -265,7 +280,7 @@ struct ReplyBar: View {
         HStack(spacing: 8) {
             BrandMark(animation: .engaged)
 
-            Text("返信")
+            Text(tr("返信", "Reply", "回复"))
                 .font(Tokens.Font.body(Tokens.Overlay.labelSmall, weight: .medium))
                 .foregroundStyle(Tokens.Overlay.textPrimary)
                 .padding(.horizontal, 7)
@@ -309,7 +324,7 @@ struct InputBar: View {
                 // the message itself is too long to keep on screen while typing. This
                 // is what is left of it: a reminder of which mode Return is about to
                 // submit into.
-                Text("返信")
+                Text(tr("返信", "Reply", "回复"))
                     .font(Tokens.Font.body(Tokens.Overlay.labelSmall, weight: .medium))
                     .foregroundStyle(Tokens.Overlay.textPrimary)
                     .padding(.horizontal, 7)
@@ -321,7 +336,13 @@ struct InputBar: View {
             // instead of running off the side. Return still submits; the range only
             // governs wrapping.
             TextField(
-                isReply ? "どう返信しますか？（空欄でおまかせ）" : "どう書き換えますか？",
+                isReply
+                    ? tr(
+                        "どう返信しますか？（空欄でおまかせ）",
+                        "How should this be answered? (leave empty to let it decide)",
+                        "想怎么回复？（留空则自动判断）"
+                    )
+                    : tr("どう書き換えますか？", "How should this be rewritten?", "想怎么改写？"),
                 text: $text,
                 axis: .vertical
             )

@@ -15,7 +15,7 @@ public struct Entitlement: Sendable, Equatable {
 
         public var displayName: String {
             switch self {
-            case .free: return "無料"
+            case .free: return tr("無料", "Free", "免费")
             case .pro: return "Pro"
             }
         }
@@ -178,10 +178,10 @@ public struct BillingRemoteStore: Sendable {
         request.timeoutInterval = 15
         try await authorize(&request)
 
-        let data = try await send(request, action: "プランを読み込めませんでした。")
+        let data = try await send(request, action: tr("プランを読み込めませんでした。", "Couldn't load your plan.", "无法加载套餐信息。"))
         let rows = try PostgRESTCoding.decoder.decode([EntitlementRow].self, from: data)
         guard let row = rows.first else {
-            throw RewriteError.backend("プランを読み込めませんでした。")
+            throw RewriteError.backend(tr("プランを読み込めませんでした。", "Couldn't load your plan.", "无法加载套餐信息。"))
         }
         return row.entitlement
     }
@@ -195,7 +195,7 @@ public struct BillingRemoteStore: Sendable {
         try await billingURL(
             function: "desktop-checkout",
             body: ["price_lookup_key": price.rawValue],
-            failure: "決済ページを開けませんでした。"
+            failure: tr("決済ページを開けませんでした。", "Couldn't open the checkout page.", "无法打开结算页面。")
         )
     }
 
@@ -222,7 +222,7 @@ public struct BillingRemoteStore: Sendable {
         try await billingURL(
             function: "desktop-portal",
             body: flow == .overview ? [:] : ["flow": flow.rawValue],
-            failure: "お支払い管理を開けませんでした。"
+            failure: tr("お支払い管理を開けませんでした。", "Couldn't open billing management.", "无法打开付款管理。")
         )
     }
 

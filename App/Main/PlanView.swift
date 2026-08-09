@@ -56,8 +56,8 @@ struct PlanView: View {
 
     private var intervalToggle: some View {
         HStack(spacing: 0) {
-            segment(.year, title: "年払い", badge: "2ヶ月分お得")
-            segment(.month, title: "月払い", badge: nil)
+            segment(.year, title: tr("年払い", "Yearly", "年付"), badge: tr("2ヶ月分お得", "2 months free", "省2个月"))
+            segment(.month, title: tr("月払い", "Monthly", "月付"), badge: nil)
         }
         .padding(3)
         .background(Capsule().fill(Tokens.Window.group))
@@ -93,14 +93,14 @@ struct PlanView: View {
     private var cards: some View {
         HStack(alignment: .top, spacing: 14) {
             PlanCard(
-                name: "無料",
+                name: tr("無料", "Free", "免费"),
                 price: "¥0",
-                unit: "/ 月",
+                unit: tr("/ 月", "/ month", "/ 月"),
                 caption: nil,
                 features: [
-                    "月50回まで書き換え",
-                    "自分のボタンをそのまま同期",
-                    "どのアプリでも使える",
+                    tr("月50回まで書き換え", "50 rewrites a month", "每月50次改写"),
+                    tr("自分のボタンをそのまま同期", "Your own buttons, synced", "同步你自己的按钮"),
+                    tr("どのアプリでも使える", "Works in every app", "在任何应用中都能使用"),
                 ],
                 highlighted: false,
                 action: plan == .free
@@ -111,18 +111,28 @@ struct PlanView: View {
             PlanCard(
                 name: "Pro",
                 price: interval == .year ? "¥1,200" : "¥1,480",
-                unit: interval == .year ? "/ 月相当" : "/ 月",
+                unit: interval == .year ? tr("/ 月相当", "/ month, billed yearly", "/ 月（按年计费）") : tr("/ 月", "/ month", "/ 月"),
                 // **Not 「税込」.** Core7 is a 免税事業者 and not an 適格請求書発行事業者
                 // (`docs/billing.md` §10), so a 消費税 claim is one we are not in a
                 // position to make. 消費税法第63条's 総額表示義務 explicitly excludes
                 // 免税事業者, so nothing requires the word either — what the buyer
                 // needs is the amount that will actually be charged, which is what
                 // this says. 自動更新 stays because 特商法第12条の6 ①分量 requires it.
-                caption: interval == .year ? "年 ¥14,400 を一括・自動更新" : "毎月 ¥1,480 を自動更新",
+                caption: interval == .year
+                    ? tr(
+                        "年 ¥14,400 を一括・自動更新",
+                        "¥14,400 once a year, renews automatically",
+                        "每年一次性支付 ¥14,400，自动续订"
+                    )
+                    : tr(
+                        "毎月 ¥1,480 を自動更新",
+                        "¥1,480 every month, renews automatically",
+                        "每月 ¥1,480，自动续订"
+                    ),
                 features: [
-                    "月1,000回まで書き換え",
-                    "通常のご利用では到達しません",
-                    "いつでもワンクリックで解約",
+                    tr("月1,000回まで書き換え", "1,000 rewrites a month", "每月1,000次改写"),
+                    tr("通常のご利用では到達しません", "More than normal use reaches", "正常使用不会达到上限"),
+                    tr("いつでもワンクリックで解約", "Cancel any time, in one click", "随时一键取消"),
                 ],
                 highlighted: true,
                 action: proAction
@@ -140,7 +150,9 @@ struct PlanView: View {
             // enforces that; the button just stops being an obvious no-op.
             if model.entitlement?.isCancelScheduled == true { return .current }
             return .change(
-                title: interval == .year ? "年払いに変更" : "月払いに変更",
+                title: interval == .year
+                    ? tr("年払いに変更", "Switch to yearly", "改为年付")
+                    : tr("月払いに変更", "Switch to monthly", "改为月付"),
                 busy: model.isOpeningBilling,
                 // Changing interval on a LIVE subscription is a portal operation, not
                 // a purchase. `beginCheckout` would only hand back a portal URL here
@@ -153,7 +165,7 @@ struct PlanView: View {
             )
         }
         return .change(
-            title: "アップグレード",
+            title: tr("アップグレード", "Upgrade", "升级"),
             busy: model.isOpeningBilling,
             run: { model.beginCheckout(interval == .year ? .yearly : .monthly) }
         )
@@ -165,17 +177,20 @@ struct PlanView: View {
     /// a quota the user cannot see is a quota that ambushes them.
     private func usage(_ entitlement: Entitlement) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionCaption(text: "今月の書き換え")
+            SectionCaption(text: tr("今月の書き換え", "This month", "本月改写"))
             Card(padding: 16, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
                     Text("\(entitlement.used) / \(entitlement.monthLimit)")
                         .font(Tokens.Font.display(20))
                         .foregroundStyle(Tokens.Window.textPrimary)
-                    Text("回")
+                    Text(tr("回", "rewrites", "次"))
                         .font(Tokens.Font.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                     Spacer()
-                    Text("\(Self.resetFormatter.string(from: entitlement.resetsAt))にリセット")
+                    Text({
+                        let date = Self.resetFormatter.string(from: entitlement.resetsAt)
+                        return tr("\(date)にリセット", "Resets \(date)", "\(date)重置")
+                    }())
                         .font(Tokens.Font.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                 }
@@ -214,8 +229,12 @@ struct PlanView: View {
             // is the whole point of granting grace instead of revoking on failure.
             if entitlement.needsPaymentAttention {
                 noticeRow(
-                    "お支払いを確認できませんでした。カード情報を更新してください。",
-                    actions: [("お支払い方法を更新", .paymentMethod)]
+                    tr(
+                        "お支払いを確認できませんでした。カード情報を更新してください。",
+                        "We couldn't take your payment. Please update your card.",
+                        "无法完成付款。请更新银行卡信息。"
+                    ),
+                    actions: [(tr("お支払い方法を更新", "Update payment method", "更新付款方式"), .paymentMethod)]
                 )
             } else if entitlement.isCancelScheduled, let end = entitlement.cancelsAt {
                 // **`cancelsAt`, not `cancelAtPeriodEnd`.** The old branch tested the
@@ -226,16 +245,23 @@ struct PlanView: View {
                 // Accurate and reassuring, and §10 pairs it with the 解約 claim above
                 // for exactly that reason.
                 noticeRow(
-                    "解約手続き済みです。\(Self.resetFormatter.string(from: end))まで Pro をご利用いただけます。",
-                    actions: [("解約を取り消す", .overview)]
+                    {
+                        let date = Self.resetFormatter.string(from: end)
+                        return tr(
+                            "解約手続き済みです。\(date)まで Pro をご利用いただけます。",
+                            "Your subscription is cancelled. Pro stays active until \(date).",
+                            "已办理取消。Pro 可使用至\(date)。"
+                        )
+                    }(),
+                    actions: [(tr("解約を取り消す", "Resume subscription", "取消退订"), .overview)]
                 )
             } else if entitlement.plan == .pro {
                 noticeRow(
                     nil,
                     actions: [
-                        ("お支払い方法", .paymentMethod),
-                        ("請求書", .overview),
-                        ("解約する", .cancel),
+                        (tr("お支払い方法", "Payment method", "付款方式"), .paymentMethod),
+                        (tr("請求書", "Invoices", "账单"), .overview),
+                        (tr("解約する", "Cancel", "取消订阅"), .cancel),
                     ]
                 )
             }
@@ -243,11 +269,19 @@ struct PlanView: View {
             // The honest replacement for 「税込」. It is the thing 総額表示 exists to
             // guarantee — no amount appears at the card that was not on the page —
             // stated without making a 消費税 claim we cannot make (§10).
-            Text("表示価格が実際にご請求される金額です。")
+            Text(tr(
+                "表示価格が実際にご請求される金額です。",
+                "The price shown is the amount you are charged.",
+                "所示价格即为实际收费金额。"
+            ))
                 .font(Tokens.Font.body(12))
                 .foregroundStyle(Tokens.Window.textTertiary)
 
-            Text("iPhone版の「AIキーボード」はこれからも無料で、上限も変わりません。")
+            Text(tr(
+                "iPhone版の「AIキーボード」はこれからも無料で、上限も変わりません。",
+                "The iPhone keyboard stays free, with its own separate limit.",
+                "iPhone 版「AIキーボード」将持续免费，上限也不会改变。"
+            ))
                 .font(Tokens.Font.body(12))
                 .foregroundStyle(Tokens.Window.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -280,7 +314,7 @@ struct PlanView: View {
 
     private var signedOutNotice: some View {
         Card {
-            Text("プランを表示するにはサインインしてください。")
+            Text(tr("プランを表示するにはサインインしてください。", "Sign in to see your plan.", "请登录后查看套餐。"))
                 .font(Tokens.Font.body(13))
                 .foregroundStyle(Tokens.Window.textSecondary)
         }
@@ -292,7 +326,7 @@ struct PlanView: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
         formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
-        formatter.dateFormat = "M月d日"
+        formatter.dateFormat = tr("M月d日", "MMMM d", "M月d日")
         return formatter
     }()
 }
@@ -394,7 +428,7 @@ private struct PlanCard: View {
     private var actionView: some View {
         switch action {
         case .current:
-            Text("現在のプラン")
+            Text(tr("現在のプラン", "Current plan", "当前套餐"))
                 .font(Tokens.Font.body(13, weight: .medium))
                 .foregroundStyle(Tokens.Window.textTertiary)
                 .frame(maxWidth: .infinity)
@@ -404,7 +438,7 @@ private struct PlanCard: View {
                         .fill(Tokens.Window.group)
                 )
         case .change(let title, let busy, let run):
-            ActionButton(busy ? "開いています…" : title, style: .primary, enabled: !busy, action: run)
+            ActionButton(busy ? tr("開いています…", "Opening…", "正在打开…") : title, style: .primary, enabled: !busy, action: run)
                 .frame(maxWidth: .infinity)
         case .none:
             EmptyView()

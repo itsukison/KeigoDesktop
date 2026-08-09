@@ -17,10 +17,54 @@ struct HomeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             usageRow
+            if let version = model.availableUpdateVersion {
+                updateNotice(version: version)
+            }
             statCard
             if let entitlement = model.entitlement { planRow(entitlement) }
             if !model.isSignedIn || !model.isTrusted { setupRecovery }
             historySection
+        }
+    }
+
+    // MARK: - Updates
+
+    /// Sparkle's scheduled check runs quietly; this is its gentle reminder. It uses the
+    /// same white card, hairline, tinted icon plate and single indigo action as the rest
+    /// of the Willow window, so an update is discoverable without becoming an alert.
+    private func updateNotice(version: String) -> some View {
+        Card(padding: 16) {
+            HStack(spacing: 14) {
+                IconPlate(icon: .mark, diameter: 38)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(tr(
+                            "新しいバージョンがあります",
+                            "A new version is available",
+                            "有新版本可用"
+                        ))
+                            .font(Tokens.Font.body(14, weight: .medium))
+                            .foregroundStyle(Tokens.Window.textPrimary)
+                        Badge("v\(version)")
+                    }
+                    Text(tr(
+                        "敬語ボタン \(version) にアップデートできます。",
+                        "KeigoButton \(version) is ready to install.",
+                        "敬語ボタン \(version) 已可安装。"
+                    ))
+                        .font(Tokens.Font.body(12))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                }
+
+                Spacer(minLength: 16)
+
+                ActionButton(
+                    tr("アップデートする", "Update", "更新"),
+                    style: .primary,
+                    action: model.requestAvailableUpdate
+                )
+            }
         }
     }
 
@@ -44,19 +88,22 @@ struct HomeView: View {
         Card(padding: 16, spacing: 12) {
             HStack(alignment: .center, spacing: 10) {
                 Badge(entitlement.plan.displayName)
-                Text("\(entitlement.used) / \(entitlement.monthLimit) 回")
+                Text(tr("\(entitlement.used) / \(entitlement.monthLimit) 回", "\(entitlement.used) / \(entitlement.monthLimit) rewrites", "\(entitlement.used) / \(entitlement.monthLimit) 次"))
                     .font(Tokens.Font.body(14, weight: .medium))
                     .foregroundStyle(Tokens.Window.textPrimary)
-                Text("\(Self.resetFormatter.string(from: entitlement.resetsAt))にリセット")
+                Text({
+                    let date = Self.resetFormatter.string(from: entitlement.resetsAt)
+                    return tr("\(date)にリセット", "Resets \(date)", "\(date)重置")
+                }())
                     .font(Tokens.Font.body(12))
                     .foregroundStyle(Tokens.Window.textSecondary)
 
                 Spacer(minLength: 16)
 
                 if entitlement.plan == .free {
-                    ActionButton("アップグレード", style: .primary) { model.openPlanSettings() }
+                    ActionButton(tr("アップグレード", "Upgrade", "升级"), style: .primary) { model.openPlanSettings() }
                 } else {
-                    ActionButton("お支払い管理", style: .secondary, enabled: !model.isOpeningBilling) {
+                    ActionButton(tr("お支払い管理", "Manage billing", "付款管理"), style: .secondary, enabled: !model.isOpeningBilling) {
                         model.openBillingPortal()
                     }
                 }
@@ -79,13 +126,24 @@ struct HomeView: View {
             // the dominant cause of a failed renewal is an expired card, and a user
             // who never opens settings would otherwise find out by being revoked.
             if entitlement.needsPaymentAttention {
-                Text("お支払いを確認できませんでした。カード情報を更新してください。")
+                Text(tr(
+                    "お支払いを確認できませんでした。カード情報を更新してください。",
+                    "We couldn't take your payment. Please update your card.",
+                    "无法完成付款。请更新银行卡信息。"
+                ))
                     .font(Tokens.Font.body(12))
                     .foregroundStyle(Tokens.Window.textSecondary)
             } else if entitlement.isCancelScheduled, let end = entitlement.cancelsAt {
                 // `cancelsAt`, not `cancelAtPeriodEnd` — the boolean is false on a
                 // real Portal cancellation under dahlia, so this row never appeared.
-                Text("解約手続き済みです。\(Self.resetFormatter.string(from: end))まで Pro をご利用いただけます。")
+                Text({
+                    let date = Self.resetFormatter.string(from: end)
+                    return tr(
+                        "解約手続き済みです。\(date)まで Pro をご利用いただけます。",
+                        "Your subscription is cancelled. Pro stays active until \(date).",
+                        "已办理取消。Pro 可使用至\(date)。"
+                    )
+                }())
                     .font(Tokens.Font.body(12))
                     .foregroundStyle(Tokens.Window.textSecondary)
             }
@@ -96,7 +154,7 @@ struct HomeView: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
         formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
-        formatter.dateFormat = "M月d日"
+        formatter.dateFormat = tr("M月d日", "MMMM d", "M月d日")
         return formatter
     }()
 
@@ -106,13 +164,30 @@ struct HomeView: View {
     /// "Hold F1 to dictate on ⟨apps⟩" — rather than with the page's name. Ours says
     /// the same thing about hovering, and the icons beside it are the apps this Mac
     /// has actually rewritten in.
+    /// Japanese wraps the bar mid-sentence — 「画面の下の ⟨bar⟩ にカーソルを合わせると」 —
+    /// and English cannot, so the leading half is allowed to be empty and is then not
+    /// laid out at all. An empty `Text` would still take the HStack's spacing.
+    private var hoverSentenceBefore: String {
+        tr("画面の下の", "", "画面下方的")
+    }
+
+    private var hoverSentenceAfter: String {
+        tr(
+            "にカーソルを合わせると、ボタンが開きます",
+            " at the bottom of your screen opens your buttons on hover",
+            "，光标悬停即可展开按钮"
+        )
+    }
+
     private var usageRow: some View {
         HStack(spacing: 10) {
-            Text("画面の下の")
-                .font(Tokens.Font.body(15))
-                .foregroundStyle(Tokens.Window.textSecondary)
+            if !hoverSentenceBefore.isEmpty {
+                Text(hoverSentenceBefore)
+                    .font(Tokens.Font.body(15))
+                    .foregroundStyle(Tokens.Window.textSecondary)
+            }
             PillPreview()
-            Text("にカーソルを合わせると、ボタンが開きます")
+            Text(hoverSentenceAfter)
                 .font(Tokens.Font.body(15))
                 .foregroundStyle(Tokens.Window.textSecondary)
 
@@ -144,27 +219,27 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 0) {
                 StatCell(
-                    label: "今週の書き換え",
+                    label: tr("今週の書き換え", "This week", "本周改写"),
                     value: Self.number(model.stats.rewritesThisWeek),
-                    unit: "回"
+                    unit: tr("回", "rewrites", "次")
                 )
                 StatDivider()
                 StatCell(
-                    label: "累計",
+                    label: tr("累計", "All time", "累计"),
                     value: Self.number(model.stats.totalRewrites),
-                    unit: "回"
+                    unit: tr("回", "rewrites", "次")
                 )
                 StatDivider()
                 StatCell(
-                    label: "書き換えた文字数",
+                    label: tr("書き換えた文字数", "Characters", "改写字数"),
                     value: Self.number(model.stats.charactersRewritten),
-                    unit: "字"
+                    unit: tr("字", "chars", "字")
                 )
                 StatDivider()
                 StatCell(
-                    label: "連続利用",
+                    label: tr("連続利用", "Streak", "连续使用"),
                     value: Self.number(model.stats.dayStreak),
-                    unit: "日"
+                    unit: tr("日", "days", "天")
                 )
             }
             .padding(.vertical, 22)
@@ -189,11 +264,23 @@ struct HomeView: View {
             )
 
             if let bundleId = model.stats.topAppBundleId {
-                Text("よく使うアプリ: \(MainModel.appName(for: bundleId))（\(model.stats.topAppCount)回）")
+                Text({
+                    let app = MainModel.appName(for: bundleId)
+                    let count = model.stats.topAppCount
+                    return tr(
+                        "よく使うアプリ: \(app)（\(count)回）",
+                        "Most used in \(app) (\(count) rewrites)",
+                        "最常用的应用：\(app)（\(count)次）"
+                    )
+                }())
                     .font(Tokens.Font.body(13))
                     .foregroundStyle(Tokens.Window.textTertiary)
             } else {
-                Text("この Mac に保存された記録から集計しています。")
+                Text(tr(
+                    "この Mac に保存された記録から集計しています。",
+                    "Counted from the history stored on this Mac.",
+                    "根据本机保存的记录统计。"
+                ))
                     .font(Tokens.Font.body(13))
                     .foregroundStyle(Tokens.Window.textTertiary)
             }
@@ -210,17 +297,27 @@ struct HomeView: View {
                     diameter: 38
                 )
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(model.isSignedIn ? "アクセシビリティを確認してください" : "サインインが必要です")
+                    Text(model.isSignedIn
+                        ? tr("アクセシビリティを確認してください", "Check Accessibility access", "请检查辅助功能权限")
+                        : tr("サインインが必要です", "You need to sign in", "需要登录"))
                         .font(Tokens.Font.body(14, weight: .medium))
                         .foregroundStyle(Tokens.Window.textPrimary)
                     Text(model.isSignedIn
-                         ? "編集中の文章を読み書きするための許可が外れています。"
-                         : "ボタンを同期して書き換えるには、共有アカウントへ接続します。")
+                         ? tr(
+                            "編集中の文章を読み書きするための許可が外れています。",
+                            "Permission to read and replace the text you are editing has been revoked.",
+                            "读写当前编辑文字的权限已被取消。"
+                         )
+                         : tr(
+                            "ボタンを同期して書き換えるには、共有アカウントへ接続します。",
+                            "Connect your account to sync your buttons and start rewriting.",
+                            "连接共享账户后即可同步按钮并开始改写。"
+                         ))
                         .font(Tokens.Font.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                 }
                 Spacer()
-                ActionButton(model.isSignedIn ? "許可する" : "サインイン", style: .primary) {
+                ActionButton(model.isSignedIn ? tr("許可する", "Grant access", "授予权限") : tr("サインイン", "Sign in", "登录"), style: .primary) {
                     if model.isSignedIn { model.requestAccessibility() } else { model.page = .account }
                 }
             }
@@ -231,10 +328,10 @@ struct HomeView: View {
 
     private var historySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "履歴") {
+            SectionHeader(title: tr("履歴", "History", "历史")) {
                 if !model.history.isEmpty {
                     SearchField(
-                        placeholder: "\(model.history.count)件を検索",
+                        placeholder: tr("\(model.history.count)件を検索", "Search \(model.history.count) rewrites", "搜索\(model.history.count)条记录"),
                         text: $model.historySearch,
                         width: 220
                     )
@@ -244,17 +341,24 @@ struct HomeView: View {
             if !model.historyEnabled {
                 emptyCard(
                     icon: .history,
-                    text: "履歴の保存はオフになっています。",
-                    action: ("環境設定を開く", { model.showsPreferences = true })
+                    text: tr("履歴の保存はオフになっています。", "History is turned off.", "历史保存已关闭。"),
+                    action: (
+                        tr("環境設定を開く", "Open Settings", "打开偏好设置"),
+                        { model.showsPreferences = true }
+                    )
                 )
             } else if model.history.isEmpty {
                 emptyCard(
                     icon: .noteAdd,
-                    text: "まだ履歴がありません。バーのボタンを押すとここに残ります。",
+                    text: tr(
+                        "まだ履歴がありません。バーのボタンを押すとここに残ります。",
+                        "Nothing here yet. Press a button on the bar and it will show up.",
+                        "还没有记录。按下工具栏上的按钮后就会出现在这里。"
+                    ),
                     action: nil
                 )
             } else if model.filteredHistory.isEmpty {
-                emptyCard(icon: .search, text: "該当する履歴がありません。", action: nil)
+                emptyCard(icon: .search, text: tr("該当する履歴がありません。", "No rewrites match that.", "没有匹配的记录。"), action: nil)
             } else {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     ForEach(groups, id: \.key) { group in
@@ -323,8 +427,8 @@ struct HomeView: View {
 
     static func dayLabel(_ day: Date) -> String {
         let calendar = Calendar.current
-        if calendar.isDateInToday(day) { return "今日" }
-        if calendar.isDateInYesterday(day) { return "昨日" }
+        if calendar.isDateInToday(day) { return tr("今日", "Today", "今天") }
+        if calendar.isDateInYesterday(day) { return tr("昨日", "Yesterday", "昨天") }
         return dayFormatter.string(from: day)
     }
 
@@ -402,7 +506,7 @@ private struct HistoryRow: View {
                             .foregroundStyle(Tokens.Window.textTertiary)
                     }
                     if entry.accepted {
-                        Text("挿入済み")
+                        Text(tr("挿入済み", "Inserted", "已插入"))
                             .font(Tokens.Font.body(11))
                             .foregroundStyle(Tokens.Window.textTertiary)
                     }
@@ -417,7 +521,7 @@ private struct HistoryRow: View {
 
                 if isExpanded {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("元の文章")
+                        Text(tr("元の文章", "Original", "原文"))
                             .font(Tokens.Font.body(11))
                             .foregroundStyle(Tokens.Window.textTertiary)
                         Text(entry.originalText)
@@ -432,7 +536,7 @@ private struct HistoryRow: View {
 
             Spacer(minLength: 0)
 
-            IconButton(icon: .copy, help: "コピー", action: onCopy)
+            IconButton(icon: .copy, help: tr("コピー", "Copy", "复制"), action: onCopy)
                 .opacity(hovering ? 1 : 0)
         }
         .padding(.horizontal, 16)

@@ -1,4 +1,5 @@
 import AppKit
+import DesktopRewriteKit
 import SwiftUI
 
 /// Errors used to be an `.overlay` on `PillRootView` offset 34 pt above the pill —
@@ -110,7 +111,7 @@ struct ErrorToast: View {
 
                 // Says the toast is dismissible, and — more usefully — that it is not
                 // going to stand there forever if it is ignored.
-                Text("クリックで閉じる")
+                Text(tr("クリックで閉じる", "Click to dismiss", "点击关闭"))
                     .font(Tokens.Font.body(Tokens.Overlay.labelSmall))
                     .foregroundStyle(Tokens.Overlay.textTertiary)
             }

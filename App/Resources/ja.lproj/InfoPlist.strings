@@ -1,0 +1,9 @@
+/* §17. The Accessibility prompt is drawn by macOS from the bundle, not by us, so
+   it is the one user-visible string `tr` cannot reach. macOS picks the .lproj by
+   the SYSTEM language — it has no way to know what the user chose on §15's page —
+   which is the seam to remember: our own windows follow the in-app choice, this
+   dialog follows the Mac. A Japanese Mac gets this file. */
+"NSAccessibilityUsageDescription" = "編集中の文章を読み取って書き換えた文章を戻すために、アクセシビリティの許可が必要です。画面の内容を記録したり、他の目的で使用することはありません。";
+
+"CFBundleName" = "敬語ボタン";
+"CFBundleDisplayName" = "敬語ボタン";

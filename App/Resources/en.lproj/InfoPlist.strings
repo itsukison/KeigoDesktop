@@ -1,0 +1,6 @@
+/* See ja.lproj/InfoPlist.strings — this is chosen by the SYSTEM language, not by
+   the language picked on the first-run page. */
+"NSAccessibilityUsageDescription" = "KeigoButton needs Accessibility access to read the text you are editing and write the rewrite back into the same place. It does not record your screen or use this access for anything else.";
+
+"CFBundleName" = "KeigoButton";
+"CFBundleDisplayName" = "KeigoButton";

@@ -19,10 +19,14 @@ final class OnboardingProgressStoreTests: XCTestCase {
         super.tearDown()
     }
 
-    func testFreshInstallStartsAtWelcome() {
+    /// The head of `flow`, which §17 made `.language` rather than `.welcome`. A
+    /// fresh install is exactly the run the language page exists for, so this is the
+    /// assertion that stops it being skipped.
+    func testFreshInstallStartsAtTheHeadOfTheFlow() {
         let store = OnboardingProgressStore(defaults: defaults)
         XCTAssertFalse(store.isComplete)
-        XCTAssertEqual(store.savedStep, .welcome)
+        XCTAssertEqual(store.savedStep, .language)
+        XCTAssertEqual(store.savedStep, DesktopOnboardingStep.flow.first)
     }
 
     func testUnfinishedStepSurvivesAStoreReload() {
@@ -40,7 +44,8 @@ final class OnboardingProgressStoreTests: XCTestCase {
         store.save(step: .access)
 
         XCTAssertTrue(store.isComplete)
-        XCTAssertEqual(store.savedStep, .welcome)
+        // Completion clears the key, so this is the no-saved-value answer again.
+        XCTAssertEqual(store.savedStep, .language)
     }
 
     func testSelectedPackAndEditedDraftsSurviveAStoreReload() {
@@ -54,18 +59,27 @@ final class OnboardingProgressStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.savedDrafts, drafts)
     }
 
+    /// Every pack in every language — §17 gives English its own four-button sets and
+    /// resolves the two English-only packs differently in the Japanese branch, so
+    /// "four unique, complete, correctly ordered buttons" has to hold six ways.
     func testEveryPackProducesFourCompleteOrderedButtons() {
-        for pack in OnboardingPresetPack.allCases {
-            let drafts = pack.drafts()
-            XCTAssertEqual(drafts.count, 4, pack.rawValue)
-            XCTAssertEqual(Set(drafts.map(\.title)).count, 4, pack.rawValue)
-            XCTAssertTrue(drafts.allSatisfy { !$0.title.isEmpty && !$0.prompt.isEmpty })
+        defer { AppLanguageState.current = .japanese }
 
-            let prompts = drafts.enumerated().map { $0.element.userPrompt(at: $0.offset) }
-            XCTAssertEqual(prompts[0].slot, .main)
-            XCTAssertEqual(prompts[0].sortOrder, 0)
-            XCTAssertTrue(prompts.dropFirst().allSatisfy { $0.slot == .sub })
-            XCTAssertEqual(prompts.dropFirst().map(\.sortOrder), [0, 1, 2])
+        for language in AppLanguage.allCases {
+            AppLanguageState.current = language
+            for pack in OnboardingPresetPack.allCases {
+                let where_ = "\(language.rawValue)/\(pack.rawValue)"
+                let drafts = pack.drafts()
+                XCTAssertEqual(drafts.count, 4, where_)
+                XCTAssertEqual(Set(drafts.map(\.title)).count, 4, where_)
+                XCTAssertTrue(drafts.allSatisfy { !$0.title.isEmpty && !$0.prompt.isEmpty }, where_)
+
+                let prompts = drafts.enumerated().map { $0.element.userPrompt(at: $0.offset) }
+                XCTAssertEqual(prompts[0].slot, .main, where_)
+                XCTAssertEqual(prompts[0].sortOrder, 0, where_)
+                XCTAssertTrue(prompts.dropFirst().allSatisfy { $0.slot == .sub }, where_)
+                XCTAssertEqual(prompts.dropFirst().map(\.sortOrder), [0, 1, 2], where_)
+            }
         }
     }
 
@@ -87,10 +101,11 @@ final class OnboardingProgressStoreTests: XCTestCase {
         XCTAssertEqual(DesktopOnboardingStep.replyPractice.rawValue, 7)
         XCTAssertEqual(DesktopOnboardingStep.customPractice.rawValue, 8)
         XCTAssertEqual(DesktopOnboardingStep.source.rawValue, 9)
+        XCTAssertEqual(DesktopOnboardingStep.language.rawValue, 10)
         XCTAssertEqual(
             DesktopOnboardingStep.flow,
             [
-                .welcome, .purpose, .review, .access, .bar, .practice,
+                .language, .welcome, .purpose, .review, .access, .bar, .practice,
                 .customPractice, .replyPractice, .source, .complete,
             ]
         )
@@ -99,12 +114,12 @@ final class OnboardingProgressStoreTests: XCTestCase {
     func testVisualFlowHasMatchingForwardAndBackNavigation() {
         let flow = DesktopOnboardingStep.flow
         XCTAssertEqual(Array(flow.dropFirst()), [
-            .purpose, .review, .access, .bar, .practice, .customPractice,
+            .welcome, .purpose, .review, .access, .bar, .practice, .customPractice,
             .replyPractice, .source, .complete,
         ])
         XCTAssertEqual(Array(flow.dropLast().reversed()), [
             .source, .replyPractice, .customPractice, .practice, .bar, .access,
-            .review, .purpose, .welcome,
+            .review, .purpose, .welcome, .language,
         ])
     }
 

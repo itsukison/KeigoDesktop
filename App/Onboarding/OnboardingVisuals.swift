@@ -1,3 +1,4 @@
+import DesktopRewriteKit
 import SwiftUI
 
 struct OnboardingVisualStage<Content: View>: View {
@@ -80,11 +81,11 @@ struct OnboardingMailWindow<Editor: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            MockWindowChrome(title: "メール — 新規メッセージ")
+            MockWindowChrome(title: tr("メール — 新規メッセージ", "Mail — New Message", "邮件 — 新邮件"))
 
             HStack(spacing: 14) {
-                MockToolbarButton(icon: .edit, title: "送信")
-                MockToolbarButton(icon: .copy, title: "下書き")
+                MockToolbarButton(icon: .edit, title: tr("送信", "Send", "发送"))
+                MockToolbarButton(icon: .copy, title: tr("下書き", "Draft", "草稿"))
                 Spacer()
                 Icon(.close, size: 12)
                     .foregroundStyle(Tokens.Window.textTertiary)
@@ -93,9 +94,9 @@ struct OnboardingMailWindow<Editor: View>: View {
             .frame(height: 34)
             .background(Color(hex: 0xf8f8f9))
 
-            MailHeaderRow(label: "宛先", value: "佐藤さん")
+            MailHeaderRow(label: tr("宛先", "To", "收件人"), value: tr("佐藤さん", "Sam Rivera", "佐藤さん"))
             Hairline()
-            MailHeaderRow(label: "件名", value: "明日の打ち合わせについて")
+            MailHeaderRow(label: tr("件名", "Subject", "主题"), value: tr("明日の打ち合わせについて", "Tomorrow's meeting", "关于明天的会议"))
             Hairline()
 
             editor()
@@ -140,10 +141,10 @@ struct OnboardingSlackScene<Composer: View>: View {
                         .padding(.horizontal, 12)
                         .frame(height: 48)
 
-                        SlackSidebarRow(title: "スレッド")
-                        SlackSidebarRow(title: "メンション")
+                        SlackSidebarRow(title: tr("スレッド", "Threads", "话题"))
+                        SlackSidebarRow(title: tr("メンション", "Mentions", "提及"))
 
-                        Text("チャンネル")
+                        Text(tr("チャンネル", "Channels", "频道"))
                             .font(Tokens.Font.body(10, weight: .medium))
                             .foregroundStyle(.white.opacity(0.62))
                             .padding(.horizontal, 14)
@@ -163,7 +164,7 @@ struct OnboardingSlackScene<Composer: View>: View {
                             Text("# product")
                                 .font(Tokens.Font.body(14, weight: .medium))
                                 .foregroundStyle(Tokens.Window.textPrimary)
-                            Text("8人")
+                            Text(tr("8人", "8", "8人"))
                                 .font(Tokens.Font.body(10))
                                 .foregroundStyle(Tokens.Window.textTertiary)
                             Spacer()
@@ -203,7 +204,7 @@ struct OnboardingSlackScene<Composer: View>: View {
                                     Button(action: onCopy) {
                                         HStack(spacing: 6) {
                                             Icon(copied ? .check : .copy, size: 12)
-                                            Text(copied ? "コピーしました" : "メッセージをコピー")
+                                            Text(copied ? tr("コピーしました", "Copied", "已复制") : tr("メッセージをコピー", "Copy message", "复制消息"))
                                                 .font(Tokens.Font.body(11, weight: .medium))
                                         }
                                         .foregroundStyle(
@@ -226,7 +227,7 @@ struct OnboardingSlackScene<Composer: View>: View {
                             Spacer(minLength: 12)
 
                             VStack(alignment: .leading, spacing: 7) {
-                                Text(copied ? "返信先を選択済み" : "コピーすると返信モードになります")
+                                Text(copied ? tr("返信先を選択済み", "Ready to reply", "已选定回复对象") : tr("コピーすると返信モードになります", "Copying arms reply mode", "复制后即进入回复模式"))
                                     .font(Tokens.Font.body(10, weight: .medium))
                                     .foregroundStyle(
                                         copied ? Tokens.Window.success : Tokens.Window.textTertiary
@@ -283,9 +284,9 @@ struct OnboardingStaticMailBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
-            Text("佐藤さん")
+            Text(tr("佐藤さん", "Sam Rivera", "佐藤さん"))
             Text(text)
-            Text("よろしくお願いします。")
+            Text(tr("よろしくお願いします。", "Thanks!", "拜托了。"))
             Spacer(minLength: 0)
         }
         .font(Tokens.Font.body(12))
@@ -351,7 +352,7 @@ struct OnboardingSystemSettingsScene: View {
 
                     HStack(spacing: 7) {
                         Icon(.search, size: 12)
-                        Text("検索")
+                        Text(tr("検索", "Search", "搜索"))
                             .font(Tokens.Font.body(11))
                     }
                     .foregroundStyle(Tokens.Window.textTertiary)
@@ -360,11 +361,11 @@ struct OnboardingSystemSettingsScene: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 7).fill(.white.opacity(0.72)))
 
-                    SettingsSidebarRow(icon: .settings, title: "一般")
+                    SettingsSidebarRow(icon: .settings, title: tr("一般", "General", "通用"))
                         .padding(.top, 12)
-                    SettingsSidebarRow(icon: .user, title: "ユーザとグループ")
-                    SettingsSidebarRow(icon: .accessibility, title: "プライバシーとセキュリティ", selected: true)
-                    SettingsSidebarRow(icon: .info, title: "このMacについて")
+                    SettingsSidebarRow(icon: .user, title: tr("ユーザとグループ", "Users & Groups", "用户与群组"))
+                    SettingsSidebarRow(icon: .accessibility, title: tr("プライバシーとセキュリティ", "Privacy & Security", "隐私与安全"), selected: true)
+                    SettingsSidebarRow(icon: .info, title: tr("このMacについて", "About This Mac", "关于本机"))
                     Spacer()
                 }
                 .padding(14)
@@ -376,11 +377,11 @@ struct OnboardingSystemSettingsScene: View {
                     .frame(width: 1)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("アクセシビリティ")
+                    Text(tr("アクセシビリティ", "Accessibility", "辅助功能"))
                         .font(Tokens.Font.display(17))
                         .foregroundStyle(Tokens.Window.textPrimary)
 
-                    Text("以下のアプリケーションに、Macの操作を許可します。")
+                    Text(tr("以下のアプリケーションに、Macの操作を許可します。", "Allow the applications below to control your Mac.", "允许以下应用控制你的 Mac。"))
                         .font(Tokens.Font.body(11))
                         .foregroundStyle(Tokens.Window.textSecondary)
                         .padding(.top, 7)
@@ -394,9 +395,9 @@ struct OnboardingSystemSettingsScene: View {
                                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Tokens.Window.hairline))
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("敬語ボタン")
+                                Text(tr("敬語ボタン", "KeigoButton", "敬語ボタン"))
                                     .font(Tokens.Font.body(12, weight: .medium))
-                                Text("ほかのアプリの入力欄を読み書き")
+                                Text(tr("ほかのアプリの入力欄を読み書き", "Reads and replaces text in other apps", "读写其他应用的输入框"))
                                     .font(Tokens.Font.body(10))
                                     .foregroundStyle(Tokens.Window.textSecondary)
                             }
@@ -411,7 +412,7 @@ struct OnboardingSystemSettingsScene: View {
                             Icon(.add, size: 12)
                             Icon(.close, size: 12)
                             Spacer()
-                            Text(granted ? "許可済み" : "許可が必要です")
+                            Text(granted ? tr("許可済み", "Allowed", "已允许") : tr("許可が必要です", "Needs permission", "需要授权"))
                                 .font(Tokens.Font.body(10, weight: .medium))
                                 .foregroundStyle(granted ? Tokens.Window.success : Tokens.Window.textSecondary)
                         }
@@ -425,7 +426,7 @@ struct OnboardingSystemSettingsScene: View {
                     HStack(alignment: .top, spacing: 8) {
                         Icon(.info, size: 12)
                             .opticalCentre()
-                        Text("マイクや画面収録へのアクセスは必要ありません。")
+                        Text(tr("マイクや画面収録へのアクセスは必要ありません。", "No microphone or screen recording access is needed.", "无需麦克风或录屏权限。"))
                             .font(Tokens.Font.body(10))
                     }
                     .foregroundStyle(Tokens.Window.textSecondary)
@@ -497,7 +498,8 @@ private struct MailHeaderRow: View {
         HStack(spacing: 10) {
             Text(label)
                 .foregroundStyle(Tokens.Window.textTertiary)
-                .frame(width: 32, alignment: .trailing)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(width: 48, alignment: .trailing)
             Text(value)
                 .foregroundStyle(Tokens.Window.textPrimary)
             Spacer()

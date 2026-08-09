@@ -26,7 +26,7 @@ struct AppMark: View {
     }
 }
 
-enum MascotAnimation: String {
+enum MascotAnimation: String, CaseIterable {
     case idle = "MascotIdleSprite"
     case engaged = "MascotEngagedSprite"
     case thinking = "MascotThinkingSprite"
@@ -80,6 +80,10 @@ struct MascotSprite: View {
         SpriteSheetView(animation: animation)
             .frame(width: size, height: size)
     }
+
+    static func prewarmFrames() {
+        SpriteSheetView.prewarmFrames()
+    }
 }
 
 private struct SpriteSheetView: NSViewRepresentable {
@@ -108,10 +112,19 @@ private struct SpriteSheetView: NSViewRepresentable {
         view.stopAnimating()
     }
 
+    static func prewarmFrames() {
+        SpriteImageView.prewarmFrames()
+    }
+
     final class SpriteImageView: NSView {
         private static let columns = 4
         private static let frameCount = 16
         private static let frameDuration: TimeInterval = 0.25
+        private static let frameCache = Dictionary(
+            uniqueKeysWithValues: MascotAnimation.allCases.map { animation in
+                (animation, loadFrames(named: animation.rawValue))
+            }
+        )
 
         private var animation: MascotAnimation?
         private var frames: [NSImage] = []
@@ -154,7 +167,7 @@ private struct SpriteSheetView: NSViewRepresentable {
         func configure(_ animation: MascotAnimation) {
             guard self.animation != animation else { return }
             self.animation = animation
-            frames = Self.frames(named: animation.rawValue)
+            frames = Self.frameCache[animation] ?? []
             frameIndex = 0
             frameImage = frames.first
             needsDisplay = true
@@ -164,6 +177,10 @@ private struct SpriteSheetView: NSViewRepresentable {
         func stopAnimating() {
             timer?.invalidate()
             timer = nil
+        }
+
+        static func prewarmFrames() {
+            _ = frameCache
         }
 
         private func startAnimating() {
@@ -187,7 +204,7 @@ private struct SpriteSheetView: NSViewRepresentable {
             needsDisplay = true
         }
 
-        private static func frames(named assetName: String) -> [NSImage] {
+        private static func loadFrames(named assetName: String) -> [NSImage] {
             guard let sheet = NSImage(named: NSImage.Name(assetName)),
                   let image = sheet.cgImage(forProposedRect: nil, context: nil, hints: nil)
             else { return [] }

@@ -74,7 +74,13 @@ final class OverlayController: ObservableObject {
     /// Stands in for the prompt when the user submits an empty reply instruction.
     /// "Just write me a reply" is the strongest case for this feature, and the backend
     /// rejects an empty `prompt` outright (`parseRequest`), so something has to be sent.
-    private static let defaultReplyInstruction = "この内容に自然に返信してください。"
+    private static var defaultReplyInstruction: String {
+        tr(
+            "この内容に自然に返信してください。",
+            "Write a natural reply to this message.",
+            "この内容に自然に返信してください。"
+        )
+    }
 
     /// The row to flip to `accepted` if the user goes on to insert. Only one rewrite
     /// is ever in flight, and a regenerate deliberately replaces it — the entry that
@@ -174,7 +180,17 @@ final class OverlayController: ObservableObject {
     // MARK: - Lifecycle
 
     func show() {
-        panel.contentView = NSHostingView(rootView: PillRootView(controller: self))
+        // Decode the three tiny atlases before the panel is visible. Loading the
+        // engaged atlas on the first hover used to occupy the main thread during the
+        // same 160 ms in which AppKit was animating the window frame.
+        MascotSprite.prewarmFrames()
+
+        let hostingView = NSHostingView(rootView: PillRootView(controller: self))
+        // The controller below is the sole owner of the window frame. Leaving
+        // `.standardBounds` enabled lets NSHostingView reflect its new intrinsic size
+        // into NSWindow while `resize` is animating that same frame.
+        hostingView.sizingOptions = []
+        panel.contentView = hostingView
         startPositionTracking()
 
         // A snooze started before the last quit is still checked against the wall
@@ -359,6 +375,17 @@ final class OverlayController: ObservableObject {
         }
     }
 
+    /// The bar's own labels — 生成中, the signed-out row, the ✎ placeholder — come
+    /// from `tr`, which reads a global that SwiftUI cannot observe. `objectWillChange`
+    /// is the whole mechanism: every overlay view is built from this object, so one
+    /// send redraws all of them. The window then follows on its own, because the row
+    /// reports its measured width up through a preference (§4) and
+    /// "Sign in to use your buttons" is not the width of
+    /// 「サインインするとボタンが使えます」.
+    func languageChanged() {
+        objectWillChange.send()
+    }
+
     func refreshPrompts() async {
         do {
             prompts = try await promptStore.fetch().enabledForHoverRow
@@ -533,7 +560,11 @@ final class OverlayController: ObservableObject {
                 guard !self.warnedNoReplyTarget else { return }
                 self.warnedNoReplyTarget = true
                 self.present(
-                    message: "返信を書き込む入力欄が見つかりません。返信したい場所をクリックしてから、バーにカーソルを合わせてください。"
+                    message: tr(
+                        "返信を書き込む入力欄が見つかりません。返信したい場所をクリックしてから、バーにカーソルを合わせてください。",
+                        "No text field to reply in. Click where you want to write, then hover the bar.",
+                        "找不到可以写回复的输入框。请先点击要回复的位置，再将光标移到工具栏上。"
+                    )
                 )
             }
         }
@@ -711,7 +742,7 @@ final class OverlayController: ObservableObject {
                 replyTo: source.text,
                 // Labels the ホーム history row. A reply has no button behind it and
                 // 「カスタム」 would file it with the ✎ rewrites it is not.
-                buttonTitle: "返信",
+                buttonTitle: tr("返信", "Reply", "回复"),
                 commandKey: nil,
                 promptOrigin: nil,
                 isTutorial: tutorialMode?.marksReply == true
@@ -770,7 +801,11 @@ final class OverlayController: ObservableObject {
             hostAppBundleId: captured.target.hostAppBundleId,
             captureMode: captured.target.captureMode,
             browserURL: captured.target.browserURL,
-            ioPath: captured.target.path.rawValue
+            ioPath: captured.target.path.rawValue,
+            // The language the buttons write in, which is not the interface language:
+            // a 简体中文 user reads Chinese and writes Japanese (§17). Read at send
+            // time so a language changed mid-session takes effect on the next press.
+            writingLanguage: AppLanguageState.current.writingLanguageCode
         )
 
         rewriteTask?.cancel()
@@ -903,7 +938,11 @@ final class OverlayController: ObservableObject {
                 }
                 self.presentResultPanel(context)
                 self.present(
-                    message: "挿入できませんでした。文章をクリップボードにコピーしました。元の入力欄で ⌘V を押して貼り付けてください。"
+                    message: tr(
+                        "挿入できませんでした。文章をクリップボードにコピーしました。元の入力欄で ⌘V を押して貼り付けてください。",
+                        "Couldn't insert it. The text is on your clipboard — press ⌘V in the original field.",
+                        "无法插入。文本已复制到剪贴板，请在原输入框中按 ⌘V 粘贴。"
+                    )
                 )
             }
         }
@@ -1022,11 +1061,9 @@ final class OverlayController: ObservableObject {
         // `resize` and therefore re-anchors it against the bar's final height.
         syncReplyContextPanel(for: next)
 
-        // Height comes from the new state, width from the last measurement. If the
-        // content's width also changed, `contentWidthChanged` supersedes this within
-        // the same layout pass; this call is what makes a height-only change (hover
-        // row → input bar, same width) still apply.
-        applyMeasuredSize()
+        // Do not resize from the outgoing subtree's measurement. `PillRootView` tags
+        // its preference with `contentLayout`, so even a height-only state change
+        // reports one fresh measurement and starts one complete frame animation.
     }
 
     /// SwiftUI's measured content size, reported up from `PillRootView`.
@@ -1042,8 +1079,8 @@ final class OverlayController: ObservableObject {
     /// measurement rather than the reverse. `transition` deliberately does **not**
     /// resize: doing both meant one frame at the outgoing state's width — a 44 pt
     /// window holding a 267 pt row — before this corrected it.
-    func contentSizeChanged(_ size: CGSize) {
-        guard size.width > 1 else { return }
+    func contentSizeChanged(_ size: CGSize, for layout: OverlayContentLayout) {
+        guard layout == state.contentLayout, size.width > 1 else { return }
         measuredSize = size
         applyMeasuredSize()
     }
@@ -1164,7 +1201,9 @@ final class OverlayController: ObservableObject {
             // capsule that is not replacing anything yet — nothing has been written
             // back at this point and the rewrite may still fail. The one thing that is
             // true while it is on screen is that a candidate is being generated.
-            label: pending.replyTo == nil ? "生成中" : "返信を生成中",
+            label: pending.replyTo == nil
+                ? tr("生成中", "Writing…", "生成中")
+                : tr("返信を生成中", "Replying…", "生成回复中"),
             onCancel: { [weak self] in self?.cancelRewrite() }
         )
         generating.orderFrontRegardless()
@@ -1222,17 +1261,27 @@ final class OverlayController: ObservableObject {
     /// the date is per-user — a Pro window resets on the subscription anchor, a free
     /// one on the 1st — so it can only come from the server.
     private func presentQuotaDenial(_ denial: QuotaDenial) {
-        let reset = denial.resetsAt.map { "\(Self.resetFormatter.string(from: $0))にリセットされます。" }
+        let reset = denial.resetsAt.map {
+            let date = Self.resetFormatter.string(from: $0)
+            return tr("\(date)にリセットされます。", " Resets on \(date).", "将于\(date)重置。")
+        }
 
         let message: String
         switch denial.reason {
         case .month where denial.plan == .free:
             message = [
-                "今月の無料枠（\(denial.monthLimit ?? 50)回）を使い切りました。",
+                tr(
+                    "今月の無料枠（\(denial.monthLimit ?? 50)回）を使い切りました。",
+                    "You've used this month's free \(denial.monthLimit ?? 50) rewrites.",
+                    "本月的免费额度（\(denial.monthLimit ?? 50)次）已用完。"
+                ),
                 reset,
             ].compactMap { $0 }.joined()
         case .month:
-            message = ["今月の上限に達しました。", reset].compactMap { $0 }.joined()
+            message = [
+                tr("今月の上限に達しました。", "You've reached this month's limit.", "已达到本月上限。"),
+                reset,
+            ].compactMap { $0 }.joined()
         case .day, .hour, .minute:
             message = denial.message
         }
@@ -1243,13 +1292,13 @@ final class OverlayController: ObservableObject {
 
     /// 「10月20日」 — the date alone. The hour is never the interesting part, and a
     /// timestamp in a toast reads as a system log rather than an answer.
-    private static let resetFormatter: DateFormatter = {
+    private static var resetFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.locale = AppLanguageState.current.locale
         formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
-        formatter.dateFormat = "M月d日"
+        formatter.dateFormat = tr("M月d日", "MMMM d", "M月d日")
         return formatter
-    }()
+    }
 
     /// Every failure path ends here, including the ones that leave the state alone.
     ///
@@ -1306,20 +1355,44 @@ final class OverlayController: ObservableObject {
     private static func message(for error: Error) -> String {
         switch error {
         case TextIOError.notTrusted:
-            return "アクセシビリティの許可が必要です。設定から許可してください。"
+            return tr(
+                "アクセシビリティの許可が必要です。設定から許可してください。",
+                "KeigoButton needs Accessibility access. Grant it in System Settings.",
+                "需要辅助功能权限。请在系统设置中授予。"
+            )
         case TextIOError.noTarget:
-            return "書き換える文章が見つかりませんでした。文章を選択してもう一度お試しください。"
+            return tr(
+                "書き換える文章が見つかりませんでした。文章を選択してもう一度お試しください。",
+                "Couldn't find any text to rewrite. Select some text and try again.",
+                "找不到要改写的文字。请选中文字后重试。"
+            )
         case TextIOError.notEditable:
-            return "この場所には書き戻せません。編集できる入力欄で試してください。"
+            return tr(
+                "この場所には書き戻せません。編集できる入力欄で試してください。",
+                "Can't write back here. Try it in an editable text field.",
+                "无法在此处写回。请在可编辑的输入框中尝试。"
+            )
         case TextIOError.writeFailed:
-            return "書き戻しに失敗しました。もう一度お試しください。"
+            return tr(
+                "書き戻しに失敗しました。もう一度お試しください。",
+                "Writing the result back failed. Please try again.",
+                "写回失败。请重试。"
+            )
         case RewriteError.notSignedIn:
-            return "サインインが必要です。アカウント画面からサインインしてください。"
+            return tr(
+                "サインインが必要です。アカウント画面からサインインしてください。",
+                "You need to sign in. Open the account page to sign in.",
+                "需要登录。请在账户页面登录。"
+            )
         case RewriteError.rateLimited(let message), RewriteError.contentBlocked(let message),
              RewriteError.backend(let message):
             return message
         default:
-            return "エラーが発生しました。もう一度お試しください。"
+            return tr(
+                "エラーが発生しました。もう一度お試しください。",
+                "Something went wrong. Please try again.",
+                "发生错误。请重试。"
+            )
         }
     }
 }

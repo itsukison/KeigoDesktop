@@ -1,3 +1,4 @@
+import DesktopRewriteKit
 import SwiftUI
 
 /// アカウント — one identity across phone and laptop (§6).
@@ -15,8 +16,12 @@ struct AccountView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             PageTitle(
-                title: "アカウント",
-                subtitle: "スマホの敬語ボタンと同じアカウントです。ボタンと契約が共有されます。"
+                title: tr("アカウント", "Account", "账户"),
+                subtitle: tr(
+                    "スマホの敬語ボタンと同じアカウントです。ボタンと契約が共有されます。",
+                    "The same account as the app on your phone. Buttons and subscription are shared.",
+                    "与手机上敬語ボタン使用同一账户。按钮和订阅共享。"
+                )
             )
 
             if model.isSignedIn {
@@ -51,14 +56,17 @@ struct AccountView: View {
                             .foregroundStyle(Tokens.Window.textSecondary)
                     }
                     if let joined = model.joinedAt {
-                        Text("\(Self.joinedFormatter.string(from: joined)) から利用中")
+                        Text({
+                            let date = Self.joinedFormatter.string(from: joined)
+                            return tr("\(date) から利用中", "Member since \(date)", "\(date) 起使用")
+                        }())
                             .font(Tokens.Font.body(12))
                             .foregroundStyle(Tokens.Window.textTertiary)
                     }
                 }
 
                 Spacer()
-                StatusBadge(title: "接続済み", isPositive: true)
+                StatusBadge(title: tr("接続済み", "Connected", "已连接"), isPositive: true)
             }
         }
     }
@@ -68,21 +76,21 @@ struct AccountView: View {
     /// uses for account-like settings in its modal.
     private var profileSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionCaption(text: "プロフィール")
+            SectionCaption(text: tr("プロフィール", "Profile", "个人资料"))
             RowGroup {
                 SettingsRow(
-                    title: "表示名",
-                    subtitle: "スマホにも同じ名前が表示されます"
+                    title: tr("表示名", "Display name", "显示名称"),
+                    subtitle: tr("スマホにも同じ名前が表示されます", "Shown on your phone too", "手机上也会显示相同名称")
                 ) {
                     HStack(spacing: 8) {
                         SettingsField(
-                            placeholder: "名前を入力",
+                            placeholder: tr("名前を入力", "Your name", "输入名称"),
                             text: $model.displayNameDraft,
                             onSubmit: { model.saveDisplayName() }
                         )
                         .frame(width: Self.fieldWidth)
                         ActionButton(
-                            "保存",
+                            tr("保存", "Save", "保存"),
                             style: .primary,
                             enabled: model.canSaveDisplayName
                         ) {
@@ -91,14 +99,14 @@ struct AccountView: View {
                     }
                 }
                 Hairline()
-                SettingsRow(title: "メールアドレス") {
+                SettingsRow(title: tr("メールアドレス", "Email address", "邮箱地址")) {
                     Text(model.signedInEmail ?? "—")
                         .font(Tokens.Font.body(13))
                         .foregroundStyle(Tokens.Window.textSecondary)
                         .textSelection(.enabled)
                 }
                 Hairline()
-                SettingsRow(title: "利用開始") {
+                SettingsRow(title: tr("利用開始", "Joined", "开始使用")) {
                     Text(model.joinedAt.map { Self.joinedFormatter.string(from: $0) } ?? "—")
                         .font(Tokens.Font.body(13))
                         .foregroundStyle(Tokens.Window.textSecondary)
@@ -114,20 +122,20 @@ struct AccountView: View {
 
     private var syncSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionCaption(text: "同期")
+            SectionCaption(text: tr("同期", "Sync", "同步"))
             RowGroup {
                 SettingsRow(
-                    title: "ボタンと表示名",
-                    subtitle: "スマホとこの Mac の両方に反映されます"
+                    title: tr("ボタンと表示名", "Buttons and display name", "按钮与显示名称"),
+                    subtitle: tr("スマホとこの Mac の両方に反映されます", "Applied on both your phone and this Mac", "会同时应用到手机和这台 Mac")
                 ) {
-                    Badge("同期")
+                    Badge(tr("同期", "Synced", "同步"))
                 }
                 Hairline()
                 SettingsRow(
-                    title: "履歴と統計",
-                    subtitle: "文章の記録はこの端末から出ません"
+                    title: tr("履歴と統計", "History and stats", "历史与统计"),
+                    subtitle: tr("文章の記録はこの端末から出ません", "Your text never leaves this Mac", "文字记录不会离开这台设备")
                 ) {
-                    Badge("この Mac")
+                    Badge(tr("この Mac", "This Mac", "这台 Mac"))
                 }
             }
         }
@@ -135,13 +143,13 @@ struct AccountView: View {
 
     private var sessionSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionCaption(text: "セッション")
+            SectionCaption(text: tr("セッション", "Session", "会话"))
             RowGroup {
                 SettingsRow(
-                    title: "この Mac からサインアウト",
-                    subtitle: "履歴は端末に残り、同期だけが停止します"
+                    title: tr("この Mac からサインアウト", "Sign out of this Mac", "从这台 Mac 退出登录"),
+                    subtitle: tr("履歴は端末に残り、同期だけが停止します", "History stays on the Mac; only syncing stops", "历史保留在本机，仅停止同步")
                 ) {
-                    ActionButton("サインアウト", style: .secondary) { model.signOut() }
+                    ActionButton(tr("サインアウト", "Sign out", "退出登录"), style: .secondary) { model.signOut() }
                 }
             }
         }
@@ -184,21 +192,21 @@ struct AccountView: View {
             ModeTabs(mode: $model.authMode)
 
             RowGroup {
-                SettingsRow(title: "メールアドレス") {
+                SettingsRow(title: tr("メールアドレス", "Email address", "邮箱地址")) {
                     SettingsField(placeholder: "you@example.com", text: $model.email) { submit() }
                         .frame(width: Self.fieldWidth)
                 }
                 Hairline()
                 SettingsRow(
-                    title: "パスワード",
-                    subtitle: model.authMode == .signUp ? "6文字以上" : nil
+                    title: tr("パスワード", "Password", "密码"),
+                    subtitle: model.authMode == .signUp ? tr("6文字以上", "At least 6 characters", "至少6个字符") : nil
                 ) {
                     SettingsField(placeholder: "", text: $model.password, secure: true) { submit() }
                         .frame(width: Self.fieldWidth)
                 }
                 if model.authMode == .signUp {
                     Hairline()
-                    SettingsRow(title: "パスワード（確認）") {
+                    SettingsRow(title: tr("パスワード（確認）", "Confirm password", "确认密码")) {
                         SettingsField(
                             placeholder: "",
                             text: $model.passwordConfirm,
@@ -225,12 +233,14 @@ struct AccountView: View {
 
             HStack(spacing: 10) {
                 ActionButton(
-                    model.authMode == .signIn ? "サインイン" : "アカウントを作成",
+                    model.authMode == .signIn
+                        ? tr("サインイン", "Sign in", "登录")
+                        : tr("アカウントを作成", "Create account", "创建账户"),
                     style: .primary,
                     enabled: canSubmit,
                     action: submit
                 )
-                ActionButton("Google で続ける", style: .secondary, enabled: !model.isAuthenticating) {
+                ActionButton(tr("Google で続ける", "Continue with Google", "使用 Google 继续"), style: .secondary, enabled: !model.isAuthenticating) {
                     model.signInWithGoogle()
                 }
                 Spacer(minLength: 0)
@@ -243,27 +253,27 @@ struct AccountView: View {
     /// rather than making the claim in a marketing column that then disappears.
     private var authBenefits: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionCaption(text: "サインインすると")
+            SectionCaption(text: tr("サインインすると", "When you sign in", "登录后"))
             RowGroup {
                 SettingsRow(
-                    title: "ボタンが自動で同期されます",
-                    subtitle: "スマホで作ったボタンが、この Mac のバーにそのまま並びます"
+                    title: tr("ボタンが自動で同期されます", "Your buttons sync automatically", "按钮会自动同步"),
+                    subtitle: tr("スマホで作ったボタンが、この Mac のバーにそのまま並びます", "The buttons you made on your phone appear on this Mac's bar", "在手机上创建的按钮会直接出现在这台 Mac 的工具栏上")
                 ) {
-                    Badge("同期")
+                    Badge(tr("同期", "Synced", "同步"))
                 }
                 Hairline()
                 SettingsRow(
-                    title: "表示名と契約を共有します",
-                    subtitle: "アカウントはスマホとこの Mac で共通です"
+                    title: tr("表示名と契約を共有します", "Name and subscription are shared", "共享显示名称与订阅"),
+                    subtitle: tr("アカウントはスマホとこの Mac で共通です", "One account across your phone and this Mac", "手机与这台 Mac 使用同一账户")
                 ) {
-                    Badge("同期")
+                    Badge(tr("同期", "Synced", "同步"))
                 }
                 Hairline()
                 SettingsRow(
-                    title: "履歴と統計はこの Mac に残ります",
-                    subtitle: "文章の記録はこの端末から出ません"
+                    title: tr("履歴と統計はこの Mac に残ります", "History and stats stay on this Mac", "历史与统计保留在这台 Mac"),
+                    subtitle: tr("文章の記録はこの端末から出ません", "Your text never leaves this Mac", "文字记录不会离开这台设备")
                 ) {
-                    Badge("この Mac")
+                    Badge(tr("この Mac", "This Mac", "这台 Mac"))
                 }
             }
         }
@@ -306,8 +316,8 @@ private struct ModeTabs: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            tab("サインイン", .signIn)
-            tab("新規登録", .signUp)
+            tab(tr("サインイン", "Sign in", "登录"), .signIn)
+            tab(tr("新規登録", "Create account", "注册"), .signUp)
         }
         .padding(3)
         .background(

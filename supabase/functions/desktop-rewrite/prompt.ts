@@ -1,10 +1,21 @@
 export type RefinementIntent = "morePolite" | "moreDetailed" | "moreConcise";
 
+/// The language the user's **buttons** write in, which is not the language of the
+/// app's interface: a 简体中文 user reads Chinese and writes Japanese, so they send
+/// `"ja"` like a Japanese user does.
+///
+/// Absent is meaningful and is the only safe default. Every build shipped before
+/// this field existed omits it, and those users are Japanese — so `undefined` has
+/// to reproduce the original instructions exactly rather than fall into a neutral
+/// branch that would quietly change their output.
+export type WritingLanguage = "ja" | "en";
+
 export type PromptRequest = {
   prompt: string;
   text: string;
   replyTo?: string | null;
   locale?: string;
+  writingLanguage?: WritingLanguage | null;
   candidateCount: number;
   refinement?: RefinementIntent | null;
   selection?: boolean;
@@ -13,6 +24,17 @@ export type PromptRequest = {
   hostAppBundleId?: string | null;
   browserURL?: string | null;
 };
+
+/// `"You are a Japanese writing assistant on macOS."` is not a statement about the
+/// output language — 英訳 has always been a Japanese user's button and has always
+/// returned English. It is a statement about whose writing this is, and for an
+/// English user it is the wrong one: it biases register, punctuation and sentence
+/// length toward Japanese conventions on text that has none.
+function assistantIdentity(request: PromptRequest): string {
+  return request.writingLanguage === "en"
+    ? "You are an English writing assistant on macOS."
+    : "You are a Japanese writing assistant on macOS.";
+}
 
 function candidateInstruction(count: number): string {
   if (count === 1) {
@@ -61,7 +83,7 @@ export function systemInstructions(request: PromptRequest): string {
 
   if (request.selection) {
     return [
-      "You are a Japanese writing assistant on macOS.",
+      assistantIdentity(request),
       "The target text is a fragment the user selected inside a larger text. Apply the user-supplied command instruction to the fragment only.",
       "Rewrite the fragment so it fits seamlessly where it stands: match its grammatical role, and continue naturally from <context_before> into <context_after> when they are provided. The fragment may start or end mid-sentence — keep it that way.",
       "Never rewrite, repeat, or complete the surrounding context.",
@@ -73,7 +95,7 @@ export function systemInstructions(request: PromptRequest): string {
   }
 
   return [
-    "You are a Japanese writing assistant on macOS.",
+    assistantIdentity(request),
     "The target text is the entire contents of the field the user is editing. Apply the user-supplied command instruction to it.",
     "Preserve meaning, names, numbers, URLs, dates, and emoji. Preserve line breaks and paragraph structure unless the command explicitly asks to restructure or format the text.",
     "Do not add explanations, markdown, quotes, commentary, or unsupported facts. Add greetings or closings only when the command explicitly requests them.",

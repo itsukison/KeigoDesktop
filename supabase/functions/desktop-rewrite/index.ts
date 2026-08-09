@@ -46,6 +46,12 @@ type DesktopRewriteRequest = {
   hostAppBundleId?: string | null;
   captureMode: CaptureMode;
   browserURL?: string | null;
+  /// 'ja' | 'en' — the language the user's BUTTONS write in, which is not the
+  /// interface language: a 简体中文 user reads Chinese and writes Japanese, so they
+  /// send 'ja'. Absent on every build older than this field, and absent must keep
+  /// those users' output identical — `systemInstructions` treats anything but 'en'
+  /// as Japanese for exactly that reason.
+  writingLanguage?: "ja" | "en" | null;
   /// 'ax' | 'clipboard'. Only the client knows which path it actually used, and
   /// §7 makes this the earliest signal that an app's AX tree changed — so it has
   /// to come over the wire or the column is permanently null.
@@ -316,6 +322,7 @@ function parseRequest(body: unknown): { value: DesktopRewriteRequest } | { error
       hostAppBundleId: optionalString(data.hostAppBundleId),
       captureMode,
       browserURL: optionalString(data.browserURL),
+      writingLanguage: data.writingLanguage === "en" ? "en" : null,
       ioPath: data.ioPath === "ax" || data.ioPath === "clipboard" ? data.ioPath : null,
       // A generated fallback keeps a pre-billing client working, and it degrades in
       // the only direction that is safe: without a stable id a retry reserves twice

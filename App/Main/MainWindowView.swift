@@ -41,7 +41,7 @@ struct MainWindowView: View {
             HStack(spacing: 8) {
                 AppMark(size: 15)
                     .opticalCentre()
-                Text("敬語ボタン")
+                Text(tr("敬語ボタン", "KeigoButton", "敬語ボタン"))
                     .font(Tokens.Font.body(15, weight: .semibold))
                     .foregroundStyle(Tokens.Window.textPrimary)
             }
@@ -52,12 +52,12 @@ struct MainWindowView: View {
             .padding(.bottom, 20)
 
             VStack(spacing: 2) {
-                NavRow(icon: .home, title: "ホーム", isActive: model.page == .home) {
+                NavRow(icon: .home, title: tr("ホーム", "Home", "主页"), isActive: model.page == .home) {
                     model.page = .home
                 }
                 NavRow(
                     icon: .buttons,
-                    title: "ボタン",
+                    title: tr("ボタン", "Buttons", "按钮"),
                     isActive: model.page == .buttons
                 ) {
                     model.page = .buttons
@@ -92,7 +92,7 @@ struct MainWindowView: View {
                             .foregroundStyle(Tokens.Window.textPrimary)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Text(model.isSignedIn ? "アカウント" : "サインイン")
+                        Text(model.isSignedIn ? tr("アカウント", "Account", "账户") : tr("サインイン", "Sign in", "登录"))
                             .font(Tokens.Font.body(11))
                             .foregroundStyle(Tokens.Window.textTertiary)
                     }
@@ -103,7 +103,7 @@ struct MainWindowView: View {
             .buttonStyle(.plain)
             .cursor(.pointingHand)
 
-            IconButton(icon: .settings, help: "環境設定") {
+            IconButton(icon: .settings, help: tr("環境設定", "Settings", "偏好设置")) {
                 model.showsPreferences = true
             }
         }

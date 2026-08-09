@@ -152,7 +152,7 @@ public struct DesktopRewriteService: Sendable {
         if (200..<300).contains(http.statusCode) { return data }
 
         let payload = try? JSONDecoder().decode(ErrorPayload.self, from: data)
-        let message = payload?.error.message ?? "書き換えに失敗しました。"
+        let message = payload?.error.message ?? tr("書き換えに失敗しました。", "The rewrite failed.", "改写失败。")
         switch payload?.error.code {
         case "rate_limited":
             // An unattributed 429 is still possible — the guard itself can be

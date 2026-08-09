@@ -26,10 +26,10 @@ struct PreferencesSheet: View {
 
         var title: String {
             switch self {
-            case .general: return "一般"
-            case .plan: return "プラン"
-            case .history: return "履歴"
-            case .about: return "このアプリ"
+            case .general: return tr("一般", "General", "通用")
+            case .plan: return tr("プラン", "Plan", "套餐")
+            case .history: return tr("履歴", "History", "历史")
+            case .about: return tr("このアプリ", "About", "关于本应用")
             }
         }
 
@@ -118,7 +118,7 @@ struct PreferencesSheet: View {
                     .font(Tokens.Font.display(17))
                     .foregroundStyle(Tokens.Window.textPrimary)
                 Spacer()
-                RoundIconButton(icon: .close, help: "閉じる", action: dismiss)
+                RoundIconButton(icon: .close, help: tr("閉じる", "Close", "关闭"), action: dismiss)
             }
             .padding(.horizontal, 28)
             .padding(.top, 24)
@@ -146,21 +146,29 @@ struct PreferencesSheet: View {
         VStack(alignment: .leading, spacing: 20) {
             // §5: the permission is tied to the binary's signature, so a rebuild
             // silently revokes it. `MainModel.refresh()` re-checks on every activation.
-            group("権限") {
+            group(tr("権限", "Permission", "权限")) {
                 SettingsRow(
-                    title: "アクセシビリティ",
+                    title: tr("アクセシビリティ", "Accessibility", "辅助功能"),
                     subtitle: model.isTrusted
-                        ? "編集中の文章を読み書きできます。"
-                        : "編集中の文章を読み取って書き換えた文章を戻すために必要です。"
+                        ? tr(
+                            "編集中の文章を読み書きできます。",
+                            "The app can read and replace the text you are editing.",
+                            "可以读写正在编辑的文字。"
+                        )
+                        : tr(
+                            "編集中の文章を読み取って書き換えた文章を戻すために必要です。",
+                            "Needed to read the text you are editing and write the rewrite back.",
+                            "用于读取正在编辑的文字并写回改写结果。"
+                        )
                 ) {
                     HStack(spacing: 10) {
                         StatusDot(ok: model.isTrusted)
                         if model.isTrusted {
-                            Text("許可済み")
+                            Text(tr("許可済み", "Granted", "已授权"))
                                 .font(Tokens.Font.body(13))
                                 .foregroundStyle(Tokens.Window.textSecondary)
                         } else {
-                            ActionButton("許可する", style: .primary) {
+                            ActionButton(tr("許可する", "Grant access", "授予权限"), style: .primary) {
                                 model.requestAccessibility()
                             }
                         }
@@ -168,8 +176,38 @@ struct PreferencesSheet: View {
                 }
             }
 
-            group("基本") {
-                SettingsRow(title: "ログイン時に起動", subtitle: "Mac の起動時に敬語ボタンを開きます。") {
+            group(tr("基本", "Basics", "基本")) {
+                // The only entry point for everyone who finished onboarding before
+                // §15's language page existed — they are never asked, so this row is
+                // the whole answer for them (§17).
+                SettingsRow(
+                    title: tr("言語", "Language", "语言"),
+                    subtitle: tr(
+                        "アプリの表示言語です。ボタンの文章は変わりません。",
+                        "The app's interface. Your existing buttons are not rewritten.",
+                        "应用的界面语言。已有按钮的内容不会改变。"
+                    )
+                ) {
+                    Picker("", selection: Binding(
+                        get: { model.language },
+                        set: { model.setLanguage($0) }
+                    )) {
+                        ForEach(AppLanguage.allCases, id: \.rawValue) { language in
+                            Text(language.endonym).tag(language)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 160)
+                }
+                Hairline()
+                SettingsRow(
+                    title: tr("ログイン時に起動", "Launch at login", "登录时启动"),
+                    subtitle: tr(
+                        "Mac の起動時に敬語ボタンを開きます。",
+                        "Opens KeigoButton when your Mac starts.",
+                        "Mac 启动时自动打开敬語ボタン。"
+                    )
+                ) {
                     Toggle("", isOn: Binding(
                         get: { model.launchAtLogin },
                         set: { model.setLaunchAtLogin($0) }
@@ -182,8 +220,12 @@ struct PreferencesSheet: View {
                 // watching what the user copies, and that is worth saying out loud
                 // rather than burying — the same reasoning as 履歴を保存する.
                 SettingsRow(
-                    title: "返信モード",
-                    subtitle: "文章をコピーすると、バーがその文章への返信モードに変わります。"
+                    title: tr("返信モード", "Reply mode", "回复模式"),
+                    subtitle: tr(
+                        "文章をコピーすると、バーがその文章への返信モードに変わります。",
+                        "When you copy a message, the bar switches to composing a reply to it.",
+                        "复制文字后，工具栏会切换为对该内容的回复模式。"
+                    )
                 ) {
                     Toggle("", isOn: Binding(
                         get: { model.replyModeEnabled },
@@ -193,8 +235,15 @@ struct PreferencesSheet: View {
                     .labelsHidden()
                 }
                 Hairline()
-                SettingsRow(title: "バーの位置", subtitle: "バーはドラッグで移動できます。") {
-                    ActionButton("位置をリセット", style: .secondary) { model.resetPosition() }
+                SettingsRow(
+                    title: tr("バーの位置", "Bar position", "工具栏位置"),
+                    subtitle: tr(
+                        "バーはドラッグで移動できます。",
+                        "The bar can be dragged anywhere along the bottom.",
+                        "可以拖动工具栏来移动位置。"
+                    )
+                ) {
+                    ActionButton(tr("位置をリセット", "Reset position", "重置位置"), style: .secondary) { model.resetPosition() }
                 }
             }
         }
@@ -206,10 +255,10 @@ struct PreferencesSheet: View {
     /// the ホーム list useful and also why both of these controls exist.
     private var historySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            group("保存") {
+            group(tr("保存", "Storage", "保存")) {
                 SettingsRow(
-                    title: "履歴を保存する",
-                    subtitle: "ホームの統計と履歴に使われます。"
+                    title: tr("履歴を保存する", "Keep history", "保存历史"),
+                    subtitle: tr("ホームの統計と履歴に使われます。", "Used for the stats and history on Home.", "用于主页的统计和历史。")
                 ) {
                     Toggle("", isOn: Binding(
                         get: { model.historyEnabled },
@@ -219,36 +268,54 @@ struct PreferencesSheet: View {
                     .labelsHidden()
                 }
                 Hairline()
-                SettingsRow(title: "履歴を消去", subtitle: "保存されている記録と統計をすべて削除します。") {
-                    ActionButton("消去", style: .secondary) { confirmingClear = true }
+                SettingsRow(
+                    title: tr("履歴を消去", "Erase history", "清除历史"),
+                    subtitle: tr(
+                        "保存されている記録と統計をすべて削除します。",
+                        "Deletes every stored rewrite and all statistics.",
+                        "删除所有已保存的记录和统计。"
+                    )
+                ) {
+                    ActionButton(tr("消去", "Erase", "清除"), style: .secondary) { confirmingClear = true }
                 }
             }
 
-            Text("書き換えた文章はこの Mac の中だけに保存されます。サーバーには送られません。最新の\(RewriteHistoryStore.capacity)件を保持します。")
+            Text(tr(
+                "書き換えた文章はこの Mac の中だけに保存されます。サーバーには送られません。最新の\(RewriteHistoryStore.capacity)件を保持します。",
+                "Rewrites are stored only on this Mac and never sent to a server. The most recent \(RewriteHistoryStore.capacity) are kept.",
+                "改写内容仅保存在这台 Mac 上，不会发送到服务器。保留最近 \(RewriteHistoryStore.capacity) 条。"
+            ))
                 .font(Tokens.Font.body(12))
                 .foregroundStyle(Tokens.Window.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .alert("履歴を消去しますか？", isPresented: $confirmingClear) {
-            Button("消去", role: .destructive) { model.clearHistory() }
-            Button("キャンセル", role: .cancel) {}
+        .alert(tr("履歴を消去しますか？", "Erase history?", "要清除历史吗？"), isPresented: $confirmingClear) {
+            Button(tr("消去", "Erase", "清除"), role: .destructive) { model.clearHistory() }
+            Button(tr("キャンセル", "Cancel", "取消"), role: .cancel) {}
         } message: {
-            Text("保存されている書き換えの記録と統計がすべて削除されます。元に戻せません。")
+            Text(tr(
+                "保存されている書き換えの記録と統計がすべて削除されます。元に戻せません。",
+                "Every stored rewrite and all statistics will be deleted. This can't be undone.",
+                "所有已保存的改写记录和统计都会被删除，且无法撤销。"
+            ))
         }
     }
 
     // MARK: - このアプリ
 
     private var aboutSection: some View {
-        group("敬語ボタン") {
-            SettingsRow(title: "バージョン", subtitle: nil) {
+        group(tr("敬語ボタン", "KeigoButton", "敬語ボタン")) {
+            SettingsRow(title: tr("バージョン", "Version", "版本"), subtitle: nil) {
                 Text(model.appVersion)
                     .font(Tokens.Font.mono(13))
                     .foregroundStyle(Tokens.Window.textSecondary)
             }
             Hairline()
-            SettingsRow(title: "終了", subtitle: "バーも一緒に閉じます。") {
-                ActionButton("敬語ボタンを終了", style: .secondary) { NSApp.terminate(nil) }
+            SettingsRow(
+                title: tr("終了", "Quit", "退出"),
+                subtitle: tr("バーも一緒に閉じます。", "Closes the bar as well.", "同时关闭工具栏。")
+            ) {
+                ActionButton(tr("敬語ボタンを終了", "Quit KeigoButton", "退出敬語ボタン"), style: .secondary) { NSApp.terminate(nil) }
             }
         }
     }

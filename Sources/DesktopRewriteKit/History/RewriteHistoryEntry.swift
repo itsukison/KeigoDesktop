@@ -43,6 +43,6 @@ public struct RewriteHistoryEntry: Codable, Identifiable, Equatable, Sendable {
 
     /// What the ホーム list labels the row. A custom-input rewrite has no button.
     public var label: String {
-        buttonTitle ?? "カスタム"
+        buttonTitle ?? tr("カスタム", "Custom", "自定义")
     }
 }

@@ -60,7 +60,7 @@ final class MainModel: NSObject, ObservableObject {
 
     /// What the sidebar, the avatar and the account card call this person.
     var accountLabel: String {
-        displayName.isEmpty ? (signedInEmail ?? "サインインしていません") : displayName
+        displayName.isEmpty ? (signedInEmail ?? tr("サインインしていません", "Not signed in", "未登录")) : displayName
     }
 
     var avatarInitial: String {
@@ -105,6 +105,50 @@ final class MainModel: NSObject, ObservableObject {
     @Published private(set) var isTrusted = AXPermission.isTrusted
     @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
     @Published private(set) var replyModeEnabled = ClipboardWatcher.isEnabled
+    /// Published so the window redraws when it changes. §15's first page is where most
+    /// users answer this; the ⚙︎ row is the only entry point for everyone who finished
+    /// onboarding before the page existed.
+    @Published private(set) var language = AppLanguageState.current
+    /// The menu bar cannot observe a published property — see `AppDelegate`.
+    var onLanguageChanged: (() -> Void)?
+
+    private let languageStore = AppLanguageStore()
+
+    func setLanguage(_ next: AppLanguage) {
+        guard next != language else { return }
+        languageStore.save(next)
+        languageChanged()
+    }
+
+    /// Also called from onboarding, which owns its own store instance.
+    func languageChanged() {
+        language = AppLanguageState.current
+        // A super property is stored, not computed, so it keeps whatever it was
+        // registered with until it is registered again (§7's same reason for
+        // re-registering the surface after a sign-out).
+        PostHogConfiguration.registerSurface()
+        onLanguageChanged?()
+    }
+
+    // MARK: Updates
+
+    /// Set only after Sparkle has selected a newer, compatible, signed appcast item.
+    /// The main window deliberately knows only the display version; Sparkle remains
+    /// the sole owner of update downloading, verification, skipping and installation.
+    @Published private(set) var availableUpdateVersion: String?
+    var onUpdateRequested: (() -> Void)?
+
+    func offerUpdate(version: String) {
+        availableUpdateVersion = version
+    }
+
+    func clearUpdateNotice() {
+        availableUpdateVersion = nil
+    }
+
+    func requestAvailableUpdate() {
+        onUpdateRequested?()
+    }
 
     // MARK: Plan
 
@@ -194,7 +238,7 @@ final class MainModel: NSObject, ObservableObject {
         } catch {
             // Keep the last good value on screen. A transient network failure that
             // blanked the plan card would read as "you have been downgraded".
-            entitlementError = "プランを読み込めませんでした。"
+            entitlementError = tr("プランを読み込めませんでした。", "Couldn't load your plan.", "无法加载套餐信息。")
         }
     }
 
@@ -237,9 +281,9 @@ final class MainModel: NSObject, ObservableObject {
             } catch RewriteError.backend(let message) {
                 entitlementError = message
             } catch RewriteError.notSignedIn {
-                entitlementError = "サインインしてください。"
+                entitlementError = tr("サインインしてください。", "Please sign in.", "请先登录。")
             } catch {
-                entitlementError = "接続できませんでした。"
+                entitlementError = tr("接続できませんでした。", "Couldn't connect.", "无法连接。")
             }
             // The browser round trip finishes out of band, so the webhook may land
             // before or after the user comes back. Re-reading on the next activation
@@ -281,7 +325,7 @@ final class MainModel: NSObject, ObservableObject {
                 displayName = trimmed
                 profileError = nil
             } catch {
-                profileError = "名前を保存できませんでした。"
+                profileError = tr("名前を保存できませんでした。", "Couldn't save your name.", "无法保存名称。")
             }
         }
     }
@@ -317,7 +361,7 @@ final class MainModel: NSObject, ObservableObject {
 
     func signUp() {
         guard password == passwordConfirm else {
-            authError = "パスワードが一致しません。"
+            authError = tr("パスワードが一致しません。", "The passwords don't match.", "两次输入的密码不一致。")
             return
         }
         submitAuth { [auth, email, password] in
@@ -328,7 +372,7 @@ final class MainModel: NSObject, ObservableObject {
                 // The account exists but nothing is signed in until the link is
                 // clicked. Saying "signed up" and showing a signed-out window would
                 // read as a failure.
-                return "確認メールを送信しました。メール内のリンクを開いてからサインインしてください。"
+                return tr("確認メールを送信しました。メール内のリンクを開いてからサインインしてください。", "We sent a confirmation email. Open the link in it, then sign in.", "确认邮件已发送。请打开邮件中的链接后再登录。")
             }
         }
     }
@@ -353,7 +397,7 @@ final class MainModel: NSObject, ObservableObject {
                     guard let callback else {
                         // Cancelling is a decision, not a failure — no error badge.
                         if (error as? ASWebAuthenticationSessionError)?.code != .canceledLogin {
-                            self.authError = "サインインできませんでした。"
+                            self.authError = tr("サインインできませんでした。", "Couldn't sign in.", "无法登录。")
                         }
                         return
                     }
@@ -378,7 +422,7 @@ final class MainModel: NSObject, ObservableObject {
             await onPromptsChanged()
             page = .home
         } catch {
-            authError = "サインインできませんでした。"
+            authError = tr("サインインできませんでした。", "Couldn't sign in.", "无法登录。")
         }
     }
 
@@ -411,13 +455,13 @@ final class MainModel: NSObject, ObservableObject {
     private static func message(for error: Error) -> String {
         switch error {
         case AuthError.invalidCredentials:
-            return "メールアドレスまたはパスワードが正しくありません。"
+            return tr("メールアドレスまたはパスワードが正しくありません。", "That email address or password is incorrect.", "邮箱地址或密码不正确。")
         case AuthError.emailAlreadyRegistered:
-            return "このメールアドレスは登録済みです。サインインしてください。"
+            return tr("このメールアドレスは登録済みです。サインインしてください。", "That email address already has an account. Sign in instead.", "该邮箱已注册，请直接登录。")
         case AuthError.weakPassword:
-            return "パスワードは6文字以上にしてください。"
+            return tr("パスワードは6文字以上にしてください。", "Passwords need at least 6 characters.", "密码需要至少6个字符。")
         default:
-            return "接続できませんでした。時間をおいてお試しください。"
+            return tr("接続できませんでした。時間をおいてお試しください。", "Couldn't connect. Try again in a moment.", "无法连接。请稍后重试。")
         }
     }
 
@@ -450,7 +494,7 @@ final class MainModel: NSObject, ObservableObject {
             prompts = UserPromptOrder.sortedForEditing(try await promptStore.fetch())
             promptsError = nil
         } catch {
-            promptsError = "ボタンを読み込めませんでした。"
+            promptsError = tr("ボタンを読み込めませんでした。", "Couldn't load your buttons.", "无法加载按钮。")
         }
     }
 
@@ -469,7 +513,7 @@ final class MainModel: NSObject, ObservableObject {
         let slot: UserPrompt.Slot = prompts.isEmpty ? .main : .sub
         mutate {
             let created = try await self.promptStore.create(
-                title: "新しいボタン",
+                title: tr("新しいボタン", "New", "新按钮"),
                 prompt: "",
                 slot: slot,
                 sortOrder: (self.prompts.map(\.sortOrder).max() ?? 0) + 1
@@ -549,7 +593,7 @@ final class MainModel: NSObject, ObservableObject {
                     try await self.persistPromptOrder(ordered)
                     self.promptsError = nil
                 } catch {
-                    self.promptsError = "保存できませんでした。"
+                    self.promptsError = tr("保存できませんでした。", "Couldn't save.", "无法保存。")
                 }
             }
             self.promptOrderSaveTask = nil
@@ -579,7 +623,7 @@ final class MainModel: NSObject, ObservableObject {
                 try await work()
                 promptsError = nil
             } catch {
-                promptsError = "保存できませんでした。"
+                promptsError = tr("保存できませんでした。", "Couldn't save.", "无法保存。")
             }
             await reloadPrompts()
             await onPromptsChanged()

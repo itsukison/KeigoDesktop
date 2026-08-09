@@ -23,8 +23,8 @@ public enum OverlaySnooze {
         /// The menu label's duration phrase — "敬語ボタンを**10分間**非表示にする".
         public var label: String {
             switch self {
-            case .tenMinutes: return "10分間"
-            case .oneHour: return "1時間"
+            case .tenMinutes: return tr("10分間", "10 min", "10分钟")
+            case .oneHour: return tr("1時間", "1 hour", "1小时")
             }
         }
     }

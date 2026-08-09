@@ -63,6 +63,23 @@ enum OverlayState: Equatable {
         }
     }
 
+    /// The SwiftUI subtree whose intrinsic size drives `PillPanel`.
+    ///
+    /// This is deliberately separate from the state itself: generating and result both
+    /// leave the hidden panel holding the same collapsed mark, while the two input bars
+    /// need distinct identities even when they happen to measure to the same size. A
+    /// changed identity makes the preference callback deliver a fresh measurement for
+    /// the new subtree before AppKit starts its one frame animation.
+    var contentLayout: OverlayContentLayout {
+        switch self {
+        case .pill, .generating, .result: return .pill
+        case .hoverRow: return .hoverRow
+        case .inputBar: return .inputBar
+        case .replyArmed: return .replyArmed
+        case .replyInput: return .replyInput
+        }
+    }
+
     /// Height is a design decision (§4 fixes it at 28 pt collapsed, 34 pt expanded).
     /// Width is not specified anywhere, so SwiftUI measures it — see `ContentWidthKey`.
     var contentHeight: CGFloat {
@@ -75,6 +92,14 @@ enum OverlayState: Equatable {
             return Tokens.Geometry.inputBarHeight
         }
     }
+}
+
+enum OverlayContentLayout: Equatable {
+    case pill
+    case hoverRow
+    case inputBar
+    case replyArmed
+    case replyInput
 }
 
 /// A target plus the frontmost app it came from. The pid is needed for the clipboard

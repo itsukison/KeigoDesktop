@@ -10,11 +10,14 @@ public enum RefinementIntent: String, Codable, CaseIterable, Sendable {
     case moreDetailed
     case moreConcise
 
+    /// A method rather than a computed property with a stored value: the language
+    /// can change while the app is running, and anything cached at init would keep
+    /// the language the user started in.
     public var title: String {
         switch self {
-        case .morePolite: return "より丁寧に"
-        case .moreDetailed: return "より詳しく"
-        case .moreConcise: return "より短く"
+        case .morePolite: return tr("より丁寧に", "More polite", "更礼貌")
+        case .moreDetailed: return tr("より詳しく", "More detail", "更详细")
+        case .moreConcise: return tr("より短く", "Shorter", "更简短")
         }
     }
 }
@@ -81,6 +84,12 @@ public struct RewriteRequest: Codable, Sendable {
     /// retry wants a fresh one and forcing them to generate it invites the mistake
     /// of hoisting one into a stored property and never changing it.
     public let requestId: String
+    /// `"ja"` or `"en"` — the language the user's *buttons* write in, which is not
+    /// the same question as the interface language: a 简体中文 user writes Japanese
+    /// (§17). Optional because absent is meaningful on the wire — `desktop-rewrite`
+    /// keeps its original Japanese-assistant instructions when the key is missing,
+    /// so an installed build that predates this field is unaffected.
+    public let writingLanguage: String?
 
     public init(
         prompt: String,
@@ -102,7 +111,8 @@ public struct RewriteRequest: Codable, Sendable {
         captureMode: CaptureMode,
         browserURL: String? = nil,
         ioPath: String? = nil,
-        requestId: String = UUID().uuidString
+        requestId: String = UUID().uuidString,
+        writingLanguage: String? = nil
     ) {
         self.prompt = prompt
         self.text = text
@@ -125,6 +135,7 @@ public struct RewriteRequest: Codable, Sendable {
         self.browserURL = browserURL
         self.ioPath = ioPath
         self.requestId = requestId
+        self.writingLanguage = writingLanguage
     }
 }
 

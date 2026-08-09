@@ -13,12 +13,17 @@ struct OnboardingFlowView: View {
 
             VStack(spacing: 0) {
                 ProgressRail(step: coordinator.step)
+                    // Hidden rather than absent on the language page: the rail owns a
+                    // fixed slice of a window that cannot resize, and removing it would
+                    // move every page down by its height for one step and back up again.
+                    .opacity(coordinator.step == .language ? 0 : 1)
                     .padding(.horizontal, OnboardingMetrics.pagePadding)
                     .padding(.top, 28)
                     .padding(.bottom, 18)
 
                 Group {
                     switch coordinator.step {
+                    case .language: LanguageStep(coordinator: coordinator)
                     case .welcome: WelcomeStep(coordinator: coordinator)
                     case .purpose: PurposeStep(coordinator: coordinator)
                     case .review: ButtonReviewStep(coordinator: coordinator)
@@ -35,6 +40,11 @@ struct OnboardingFlowView: View {
 
                 OnboardingNavigationBar(coordinator: coordinator)
             }
+            // `tr` reads a global, so nothing above is invalidated by a language
+            // change on its own. Re-identifying the panel rebuilds every step's body
+            // at once, which is what makes the picker's effect visible on the page
+            // that owns it.
+            .id(coordinator.language)
             .background(Tokens.Window.canvas)
             .clipShape(RoundedRectangle(cornerRadius: Tokens.Window.panelRadius, style: .continuous))
             .shadow(color: .black.opacity(0.06), radius: 6, y: 1)
@@ -42,7 +52,7 @@ struct OnboardingFlowView: View {
         }
         .ignoresSafeArea()
         .onExitCommand {
-            if coordinator.step != .welcome { coordinator.back() }
+            if coordinator.step != .language { coordinator.back() }
         }
     }
 }
@@ -70,62 +80,74 @@ private struct OnboardingNavigationBar: View {
             Hairline()
 
             HStack(spacing: 12) {
-                if coordinator.step != .welcome && coordinator.step != .complete {
-                    LinkButton(title: "戻る") { coordinator.back() }
+                if coordinator.step != .language && coordinator.step != .complete {
+                    LinkButton(title: tr("戻る", "Back", "返回")) { coordinator.back() }
                 }
 
                 Spacer()
 
                 switch coordinator.step {
+                case .language:
+                    primaryButton(tr("続ける", "Continue", "继续"))
+
                 case .welcome:
                     if model.isSignedIn {
                         primaryButton(
-                            coordinator.isPreparingPurpose ? "ボタンを読み込み中…" : "続ける",
+                            coordinator.isPreparingPurpose
+                                ? tr("ボタンを読み込み中…", "Loading your buttons…", "正在加载按钮…")
+                                : tr("続ける", "Continue", "继续"),
                             enabled: !coordinator.isPreparingPurpose
                         )
                     }
 
                 case .purpose:
-                    primaryButton("このセットを確認")
+                    primaryButton(tr("このセットを確認", "Review this set", "确认这组按钮"))
 
                 case .review:
                     primaryButton(
-                        coordinator.isSavingButtons ? "保存中…" : "保存して続ける",
+                        coordinator.isSavingButtons
+                            ? tr("保存中…", "Saving…", "保存中…")
+                            : tr("保存して続ける", "Save and continue", "保存并继续"),
                         enabled: coordinator.canConfirmButtons && !coordinator.isSavingButtons
                     )
 
                 case .access:
                     if model.isTrusted {
-                        primaryButton("続ける")
+                        primaryButton(tr("続ける", "Continue", "继续"))
                     } else {
-                        ActionButton("システム設定を開く", style: .secondary) {
+                        ActionButton(
+                            tr("システム設定を開く", "Open System Settings", "打开系统设置"),
+                            style: .secondary
+                        ) {
                             openAccessibilitySettings()
                         }
-                        ActionButton("許可する") { model.requestAccessibility() }
+                        ActionButton(tr("許可する", "Grant access", "授予权限")) {
+                            model.requestAccessibility()
+                        }
                     }
 
                 case .bar:
-                    LinkButton(title: "あとで始める") { coordinator.skipEducation() }
-                    primaryButton("書き換えを練習")
+                    LinkButton(title: tr("あとで始める", "Skip for now", "稍后再说")) { coordinator.skipEducation() }
+                    primaryButton(tr("書き換えを練習", "Try a rewrite", "练习改写"))
 
                 case .practice:
-                    LinkButton(title: "あとで始める") { coordinator.skipEducation() }
-                    primaryButton("カスタムも練習", enabled: coordinator.rewritePracticeCompleted)
+                    LinkButton(title: tr("あとで始める", "Skip for now", "稍后再说")) { coordinator.skipEducation() }
+                    primaryButton(tr("カスタムも練習", "Try a custom one", "练习自定义指令"), enabled: coordinator.rewritePracticeCompleted)
 
                 case .customPractice:
-                    LinkButton(title: "あとで始める") { coordinator.skipEducation() }
-                    primaryButton("返信も練習", enabled: coordinator.customPracticeCompleted)
+                    LinkButton(title: tr("あとで始める", "Skip for now", "稍后再说")) { coordinator.skipEducation() }
+                    primaryButton(tr("返信も練習", "Try a reply", "练习回复"), enabled: coordinator.customPracticeCompleted)
 
                 case .replyPractice:
-                    LinkButton(title: "あとで始める") { coordinator.skipEducation() }
-                    primaryButton("次へ", enabled: coordinator.replyPracticeCompleted)
+                    LinkButton(title: tr("あとで始める", "Skip for now", "稍后再说")) { coordinator.skipEducation() }
+                    primaryButton(tr("次へ", "Next", "下一步"), enabled: coordinator.replyPracticeCompleted)
 
                 case .source:
-                    LinkButton(title: "答えない") { coordinator.skipSource() }
-                    primaryButton("次へ", enabled: coordinator.selectedSource != nil)
+                    LinkButton(title: tr("答えない", "Skip", "不回答")) { coordinator.skipSource() }
+                    primaryButton(tr("次へ", "Next", "下一步"), enabled: coordinator.selectedSource != nil)
 
                 case .complete:
-                    primaryButton("敬語ボタンを使う")
+                    primaryButton(tr("敬語ボタンを使う", "Start using KeigoButton", "开始使用敬語ボタン"))
                 }
             }
             .frame(height: OnboardingMetrics.navigationHeight)
@@ -150,22 +172,30 @@ private struct OnboardingNavigationBar: View {
 private struct ProgressRail: View {
     let step: DesktopOnboardingStep
 
-    private let labels: [DesktopOnboardingStep: String] = [
-        .welcome: "アカウント",
-        .purpose: "用途",
-        .review: "ボタン",
-        .access: "アクセス",
-        .practice: "書き換え",
-        .customPractice: "カスタム",
-        .replyPractice: "返信",
-        .source: "きっかけ",
-        .complete: "完了",
-    ]
+    /// The language page is deliberately **not** a segment. It is asked before the run
+    /// starts and its answer is not part of setting the app up, so counting it would
+    /// both add an eleventh segment to a rail sized for ten and tell the user they are
+    /// 9 % done for having said which language they read.
+    private static let steps = DesktopOnboardingStep.flow.filter { $0 != .language }
+
+    private var labels: [DesktopOnboardingStep: String] {
+        [
+            .welcome: tr("アカウント", "Account", "账户"),
+            .purpose: tr("用途", "Use", "用途"),
+            .review: tr("ボタン", "Buttons", "按钮"),
+            .access: tr("アクセス", "Access", "权限"),
+            .practice: tr("書き換え", "Rewrite", "改写"),
+            .customPractice: tr("カスタム", "Custom", "自定义"),
+            .replyPractice: tr("返信", "Reply", "回复"),
+            .source: tr("きっかけ", "Source", "来源"),
+            .complete: tr("完了", "Done", "完成"),
+        ]
+    }
 
     var body: some View {
         HStack(spacing: 12) {
-            ForEach(Array(DesktopOnboardingStep.flow.enumerated()), id: \.element) { index, item in
-                let currentIndex = DesktopOnboardingStep.flow.firstIndex(of: step) ?? 0
+            ForEach(Array(Self.steps.enumerated()), id: \.element) { index, item in
+                let currentIndex = Self.steps.firstIndex(of: step) ?? 0
                 let isCurrent = item == step
                 VStack(alignment: .leading, spacing: 7) {
                     Group {
@@ -207,18 +237,18 @@ private struct WelcomeStep: View {
                 HStack(spacing: 9) {
                     AppMark(size: 20)
                         .opticalCentre()
-                    Text("敬語ボタン")
+                    Text(tr("敬語ボタン", "KeigoButton", "敬語ボタン"))
                         .font(Tokens.Font.body(14, weight: .medium))
                         .foregroundStyle(Tokens.Window.textPrimary)
                 }
 
-                Text("書きたいことを、\nどこでも整える。")
+                Text(tr("書きたいことを、\nどこでも整える。", "Write anywhere.\nPolish it in place.", "想写的内容，\n在任何地方都能整理好。"))
                     .font(Tokens.Font.display(26))
                     .tracking(Tokens.Font.displayTracking(26))
                     .foregroundStyle(Tokens.Window.textPrimary)
                     .padding(.top, 24)
 
-                Text("入力中の文章を、その場に合う言葉へ。\nボタンを選ぶだけで、同じ場所へ戻せます。")
+                Text(tr("入力中の文章を、その場に合う言葉へ。\nボタンを選ぶだけで、同じ場所へ戻せます。", "Turn what you are typing into the right words.\nPress a button and it goes back where it came from.", "把正在输入的文字，换成合适的表达。\n只需按下按钮，就会写回原处。"))
                     .font(Tokens.Font.body(14))
                     .foregroundStyle(Tokens.Window.textSecondary)
                     .lineSpacing(5)
@@ -261,7 +291,7 @@ private struct WelcomeStep: View {
                 HStack(spacing: 12) {
                     StatusDot(ok: true)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("アカウントに接続済み")
+                        Text(tr("アカウントに接続済み", "Connected to your account", "已连接账户"))
                             .font(Tokens.Font.body(14, weight: .medium))
                             .foregroundStyle(Tokens.Window.textPrimary)
                         Text(model.signedInEmail ?? "")
@@ -287,7 +317,7 @@ private struct WelcomeStep: View {
 
             HStack(spacing: 12) {
                 Hairline()
-                Text("または")
+                Text(tr("または", "or", "或"))
                     .font(Tokens.Font.body(11))
                     .foregroundStyle(Tokens.Window.textTertiary)
                 Hairline()
@@ -295,10 +325,10 @@ private struct WelcomeStep: View {
 
             if showsEmail {
                 VStack(alignment: .leading, spacing: 10) {
-                    SettingsField(placeholder: "メールアドレス", text: $model.email)
-                    SettingsField(placeholder: "パスワード", text: $model.password, secure: true)
+                    SettingsField(placeholder: tr("メールアドレス", "Email address", "邮箱地址"), text: $model.email)
+                    SettingsField(placeholder: tr("パスワード", "Password", "密码"), text: $model.password, secure: true)
                     if model.authMode == .signUp {
-                        SettingsField(placeholder: "パスワード（確認）", text: $model.passwordConfirm, secure: true)
+                        SettingsField(placeholder: tr("パスワード（確認）", "Confirm password", "确认密码"), text: $model.passwordConfirm, secure: true)
                     }
 
                     if let error = model.authError {
@@ -314,13 +344,17 @@ private struct WelcomeStep: View {
 
                     HStack(spacing: 12) {
                         ActionButton(
-                            model.authMode == .signIn ? "サインイン" : "アカウントを作成",
+                            model.authMode == .signIn
+                                ? tr("サインイン", "Sign in", "登录")
+                                : tr("アカウントを作成", "Create account", "创建账户"),
                             enabled: canSubmit
                         ) {
                             if model.authMode == .signIn { model.signIn() } else { model.signUp() }
                         }
                         LinkButton(
-                            title: model.authMode == .signIn ? "新規登録" : "サインインへ"
+                            title: model.authMode == .signIn
+                                ? tr("新規登録", "Create one", "注册")
+                                : tr("サインインへ", "Sign in instead", "去登录")
                         ) {
                             model.authMode = model.authMode == .signIn ? .signUp : .signIn
                         }
@@ -331,7 +365,7 @@ private struct WelcomeStep: View {
                 Button {
                     withAnimation(.easeOut(duration: 0.18)) { showsEmail = true }
                 } label: {
-                    Text("メールアドレスで続ける")
+                    Text(tr("メールアドレスで続ける", "Continue with email", "使用邮箱继续"))
                         .font(Tokens.Font.body(13, weight: .medium))
                         .foregroundStyle(Tokens.Window.textPrimary)
                         .frame(maxWidth: .infinity)
@@ -362,7 +396,7 @@ private struct GoogleSignInButton: View {
                     .resizable()
                     .interpolation(.high)
                     .frame(width: 18, height: 18)
-                Text(isLoading ? "接続中…" : "Google で続ける")
+                Text(isLoading ? tr("接続中…", "Connecting…", "连接中…") : tr("Google で続ける", "Continue with Google", "使用 Google 继续"))
                     .font(Tokens.Font.body(14, weight: .medium))
                     .foregroundStyle(Color(hex: 0x1f1f1f))
             }
@@ -384,6 +418,140 @@ private struct GoogleSignInButton: View {
     }
 }
 
+/// The first page, and the only one asked before setup begins.
+///
+/// It reuses 用途's composition — question left, choices on the lavender stage — rather
+/// than inventing a splash screen, for the same reason きっかけ does: a page that looks
+/// like a different product's is read as one.
+///
+/// Two things about it are deliberate. The **option labels are endonyms and are never
+/// translated**: a picker that renames 日本語 to "Japanese" in an English UI is unusable
+/// by the one person who needs it. And the choice **applies on click, not on 続ける** —
+/// this page is where the effect of the choice is visible, so applying it late would
+/// leave the user no way to check they picked the right one.
+private struct LanguageStep: View {
+    @ObservedObject var coordinator: OnboardingCoordinator
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 28) {
+            VStack(alignment: .leading, spacing: 22) {
+                StepHeading(
+                    eyebrow: tr("はじめに", "First", "首先"),
+                    title: tr("使う言語を選んでください", "Choose your language", "请选择使用的语言"),
+                    subtitle: tr(
+                        "アプリの表示言語です。あとから設定でいつでも変更できます。",
+                        "This sets the app's interface. You can change it any time in Settings.",
+                        "这是应用的界面语言。之后可随时在设置中更改。"
+                    )
+                )
+
+                HStack(alignment: .top, spacing: 10) {
+                    Icon(.info, size: 14)
+                        .foregroundStyle(Tokens.Window.accentText)
+                        .opticalCentre()
+                    Text(languageNote)
+                        .font(Tokens.Font.body(12))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: 250, alignment: .leading)
+            .frame(maxHeight: .infinity, alignment: .leading)
+
+            OnboardingVisualStage {
+                VStack(spacing: 12) {
+                    ForEach(AppLanguage.allCases, id: \.rawValue) { language in
+                        LanguageOptionCard(
+                            language: language,
+                            selected: coordinator.language == language
+                        ) {
+                            coordinator.select(language: language)
+                        }
+                    }
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            }
+        }
+        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
+        .padding(.horizontal, OnboardingMetrics.pagePadding)
+        .padding(.top, OnboardingMetrics.contentTopPadding)
+        .padding(.bottom, OnboardingMetrics.bottomPadding)
+    }
+
+    /// Said only in Chinese, because it is only true there: the interface is Chinese
+    /// and the buttons still write Japanese (§17). Saying it in Japanese or English
+    /// would be describing a choice the reader did not make.
+    private var languageNote: String {
+        tr(
+            "ボタンは、選んだ言語に合わせて用意します。",
+            "Your buttons will be set up for writing in English.",
+            "界面为中文，按钮仍然用于书写日语。这是为在日本工作的中文使用者准备的。"
+        )
+    }
+}
+
+private struct LanguageOptionCard: View {
+    let language: AppLanguage
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.endonym)
+                        .font(Tokens.Font.body(15, weight: .medium))
+                        .foregroundStyle(Tokens.Window.textPrimary)
+                    Text(caption)
+                        .font(Tokens.Font.body(12))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                }
+                Spacer(minLength: 8)
+                ZStack {
+                    Circle()
+                        .strokeBorder(
+                            selected ? Tokens.Window.accent : Tokens.Window.controlOff,
+                            lineWidth: 1.5
+                        )
+                        .frame(width: 18, height: 18)
+                    if selected {
+                        Circle().fill(Tokens.Window.accent).frame(width: 10, height: 10)
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(hovering && !selected ? Tokens.Window.surface : Tokens.Window.canvas)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(
+                        selected ? Tokens.Window.accent : Tokens.Window.hairline,
+                        lineWidth: selected ? 1.5 : 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .cursor(.pointingHand)
+    }
+
+    /// Written in the language of the row, not of the interface — the row is how a
+    /// reader who cannot read the current interface finds their way out of it.
+    private var caption: String {
+        switch language {
+        case .japanese: return "日本語で表示し、日本語の文章を書きます"
+        case .english: return "English interface, English writing buttons"
+        case .simplifiedChinese: return "中文界面，按钮书写日语"
+        }
+    }
+}
+
 private struct PurposeStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     private var model: MainModel { coordinator.mainModel }
@@ -397,16 +565,24 @@ private struct PurposeStep: View {
         HStack(alignment: .top, spacing: 28) {
             VStack(alignment: .leading, spacing: 22) {
                 StepHeading(
-                    eyebrow: "ボタンを選ぶ",
-                    title: "主にどこで使いますか？",
-                    subtitle: "用途に合う4つを用意します。次の画面で名前も指示も変更できます。"
+                    eyebrow: tr("ボタンを選ぶ", "Pick your buttons", "选择按钮"),
+                    title: tr("主にどこで使いますか？", "Where will you use it most?", "主要在哪里使用？"),
+                    subtitle: tr(
+                        "用途に合う4つを用意します。次の画面で名前も指示も変更できます。",
+                        "We'll set up four buttons for that. You can rename and reword them next.",
+                        "将为你准备合适的4个按钮。名称和指令都可在下一步修改。"
+                    )
                 )
 
                 HStack(alignment: .top, spacing: 10) {
                     Icon(.info, size: 14)
                         .foregroundStyle(Tokens.Window.accentText)
                         .opticalCentre()
-                    Text("ここで選ぶのは出発点です。名前、順番、AIへの指示は次の画面で自由に調整できます。")
+                    Text(tr(
+                        "ここで選ぶのは出発点です。名前、順番、AIへの指示は次の画面で自由に調整できます。",
+                        "This is only a starting point. Names, order and the instruction behind each button are all editable on the next page.",
+                        "这只是起点。名称、顺序和给AI的指令都可以在下一步自由调整。"
+                    ))
                         .font(Tokens.Font.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                         .lineSpacing(4)
@@ -422,8 +598,12 @@ private struct PurposeStep: View {
                         LazyVGrid(columns: columns, spacing: 12) {
                             if !model.prompts.isEmpty {
                                 PurposeOptionCard(
-                                    title: "現在のボタンを使う",
-                                    caption: "iPhoneと同期している設定をそのまま確認",
+                                    title: tr("現在のボタンを使う", "Keep my current buttons", "使用现有按钮"),
+                                    caption: tr(
+                                        "iPhoneと同期している設定をそのまま確認",
+                                        "Review the set already synced from your iPhone",
+                                        "查看已与 iPhone 同步的设置"
+                                    ),
                                     titles: model.prompts.prefix(4).map(\.title),
                                     selected: coordinator.usesCurrentButtons
                                 ) {
@@ -431,7 +611,7 @@ private struct PurposeStep: View {
                                 }
                             }
 
-                            ForEach(OnboardingPresetPack.allCases, id: \.rawValue) { pack in
+                            ForEach(OnboardingPresetPack.available(for: coordinator.language), id: \.rawValue) { pack in
                                 PurposeOptionCard(
                                     title: pack.title,
                                     caption: pack.caption,
@@ -559,9 +739,13 @@ private struct ButtonReviewStep: View {
             ScrollViewReader { scroll in
                 VStack(alignment: .leading, spacing: 18) {
                     StepHeading(
-                        eyebrow: "ボタンを確認",
-                        title: "使うボタンを確認",
-                        subtitle: "先頭がメインボタンです。名前、指示、順番はここで変更できます。"
+                        eyebrow: tr("ボタンを確認", "Review", "确认按钮"),
+                        title: tr("使うボタンを確認", "Check your buttons", "确认要使用的按钮"),
+                        subtitle: tr(
+                            "先頭がメインボタンです。名前、指示、順番はここで変更できます。",
+                            "The first row is your main button. Rename, reword and reorder them here.",
+                            "第一行是主按钮。可在此修改名称、指令和顺序。"
+                        )
                     )
 
                     ScrollView {
@@ -590,7 +774,7 @@ private struct ButtonReviewStep: View {
                     .frame(maxHeight: listViewportHeight)
 
                     if coordinator.buttonDrafts.count < 7 {
-                        ActionButton("ボタンを追加", icon: .add, style: .secondary) {
+                        ActionButton(tr("ボタンを追加", "Add a button", "添加按钮"), icon: .add, style: .secondary) {
                             coordinator.addDraft()
                         }
                     }
@@ -600,12 +784,16 @@ private struct ButtonReviewStep: View {
             }
 
             VStack(alignment: .leading, spacing: 16) {
-                PillCaption(suffix: "のプレビュー")
+                PillCaption(prefix: tr("", "Preview of ", ""), suffix: tr("のプレビュー", "", "的预览"))
 
                 OnboardingBarPreview(titles: coordinator.buttonDrafts.map(\.title))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                Text("一番上のボタンは、iPhoneでもメインとして表示されます。")
+                Text(tr(
+                    "一番上のボタンは、iPhoneでもメインとして表示されます。",
+                    "The top button is also the main one on your iPhone.",
+                    "最上面的按钮在 iPhone 上也会显示为主按钮。"
+                ))
                     .font(Tokens.Font.body(12))
                     .foregroundStyle(Tokens.Window.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -654,19 +842,19 @@ private struct ButtonDraftRow: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 VStack(spacing: 0) {
-                    IconButton(icon: .arrowUp, help: "上へ", enabled: index > 0) { onMove(-1) }
-                    IconButton(icon: .arrowDown, help: "下へ", enabled: index < count - 1) { onMove(1) }
+                    IconButton(icon: .arrowUp, help: tr("上へ", "Move up", "上移"), enabled: index > 0) { onMove(-1) }
+                    IconButton(icon: .arrowDown, help: tr("下へ", "Move down", "下移"), enabled: index < count - 1) { onMove(1) }
                 }
                 .frame(width: 26)
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
-                        Text(draft.title.isEmpty ? "名称未設定" : draft.title)
+                        Text(draft.title.isEmpty ? tr("名称未設定", "Untitled", "未命名") : draft.title)
                             .font(Tokens.Font.body(14, weight: .medium))
                             .foregroundStyle(Tokens.Window.textPrimary)
-                        if index == 0 { Badge("メイン") }
+                        if index == 0 { Badge(tr("メイン", "Main", "主要")) }
                     }
-                    Text(draft.prompt.isEmpty ? "指示を入力してください" : draft.prompt)
+                    Text(draft.prompt.isEmpty ? tr("指示を入力してください", "Write an instruction", "请输入指令") : draft.prompt)
                         .font(Tokens.Font.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                         .lineLimit(1)
@@ -674,8 +862,8 @@ private struct ButtonDraftRow: View {
                 }
 
                 Spacer(minLength: 10)
-                IconButton(icon: .edit, help: "編集") { onToggleEdit() }
-                IconButton(icon: .trash, help: "削除", enabled: count > 1) { onDelete() }
+                IconButton(icon: .edit, help: tr("編集", "Edit", "编辑")) { onToggleEdit() }
+                IconButton(icon: .trash, help: tr("削除", "Delete", "删除"), enabled: count > 1) { onDelete() }
             }
             .padding(.horizontal, 14)
             .frame(height: height)
@@ -683,9 +871,9 @@ private struct ButtonDraftRow: View {
             if isEditing {
                 Hairline()
                 VStack(alignment: .leading, spacing: 10) {
-                    SectionCaption(text: "ボタン名")
+                    SectionCaption(text: tr("ボタン名", "Button name", "按钮名称"))
                     SettingsField(
-                        placeholder: "ボタン名",
+                        placeholder: tr("ボタン名", "Button name", "按钮名称"),
                         text: Binding(
                             get: { draft.title },
                             set: { value in
@@ -696,7 +884,7 @@ private struct ButtonDraftRow: View {
                         )
                     )
 
-                    SectionCaption(text: "AIへの指示")
+                    SectionCaption(text: tr("AIへの指示", "Instruction for the AI", "给AI的指令"))
                     TextEditor(text: Binding(
                         get: { draft.prompt },
                         set: { value in
@@ -727,8 +915,8 @@ private struct OnboardingBarPreview: View {
 
     var body: some View {
         OnboardingVisualStage {
-            OnboardingMailScene(labels: titles.map { $0.isEmpty ? "未設定" : $0 }) {
-                OnboardingStaticMailBody(text: "明日の会議を15時に変更していただけますか。")
+            OnboardingMailScene(labels: titles.map { $0.isEmpty ? tr("未設定", "Untitled", "未设置") : $0 }) {
+                OnboardingStaticMailBody(text: tr("明日の会議を15時に変更していただけますか。", "Could we move tomorrow's meeting to 3pm?", "明日の会議を15時に変更していただけますか。"))
             }
         }
     }
@@ -747,19 +935,33 @@ private struct AccessStep: View {
         HStack(alignment: .top, spacing: 32) {
             VStack(alignment: .leading, spacing: 24) {
                 StepHeading(
-                    eyebrow: "必要な設定",
-                    title: "文章を読み、同じ場所へ戻すために",
-                    subtitle: "アクセシビリティは、いま選ばれている入力欄だけを読み書きするために必要です。マイクと画面収録は使いません。"
+                    eyebrow: tr("必要な設定", "One permission", "必要的设置"),
+                    title: tr(
+                        "文章を読み、同じ場所へ戻すために",
+                        "To read your text and write it back",
+                        "为了读取文字并写回原处"
+                    ),
+                    subtitle: tr(
+                        "アクセシビリティは、いま選ばれている入力欄だけを読み書きするために必要です。マイクと画面収録は使いません。",
+                        "Accessibility lets the app read and replace the field you are editing, and nothing else. No microphone, no screen recording.",
+                        "辅助功能权限仅用于读写当前选中的输入框。不使用麦克风和录屏。"
+                    )
                 )
 
                 Card(padding: 18) {
                     HStack(spacing: 14) {
                         IconPlate(icon: .accessibility, diameter: 42)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("アクセシビリティ")
+                            Text(tr("アクセシビリティ", "Accessibility", "辅助功能"))
                                 .font(Tokens.Font.body(14, weight: .medium))
                                 .foregroundStyle(Tokens.Window.textPrimary)
-                            Text(model.isTrusted ? "許可済みです" : "システム設定で敬語ボタンを許可してください")
+                            Text(model.isTrusted
+                                ? tr("許可済みです", "Granted", "已授权")
+                                : tr(
+                                    "システム設定で敬語ボタンを許可してください",
+                                    "Turn KeigoButton on in System Settings",
+                                    "请在系统设置中允许敬語ボタン"
+                                ))
                                 .font(Tokens.Font.body(12))
                                 .foregroundStyle(Tokens.Window.textSecondary)
                         }
@@ -799,10 +1001,10 @@ private struct BarStep: View {
                 PillStepHeading()
 
                 VStack(alignment: .leading, spacing: 14) {
-                    TeachingPillRow(number: "01", suffix: "にカーソルを合わせて開く")
-                    TeachingRow(number: "02", text: "ラベルを押して書き換える")
-                    TeachingRow(number: "03", text: "結果を確認して置き換え")
-                    TeachingRow(number: "04", text: "自由な指示をその場で入力")
+                    TeachingPillRow(number: "01", prefix: tr("", "Hover ", ""), suffix: tr("にカーソルを合わせて開く", " to open it", "，光标悬停即可展开"))
+                    TeachingRow(number: "02", text: tr("ラベルを押して書き換える", "Press a button to rewrite", "点击标签进行改写"))
+                    TeachingRow(number: "03", text: tr("結果を確認して置き換え", "Check the result and insert it", "确认结果后替换"))
+                    TeachingRow(number: "04", text: tr("自由な指示をその場で入力", "Or type a one-off instruction", "也可现场输入自由指令"))
                 }
 
             }
@@ -842,8 +1044,8 @@ private struct PracticeStep: View {
 
                 PracticeStatusBadge(
                     completed: coordinator.rewritePracticeCompleted,
-                    pendingText: "結果が出たら書き換える",
-                    completedText: "書き戻し完了"
+                    pendingText: tr("結果が出たら書き換える", "Insert when the result appears", "结果出来后进行改写"),
+                    completedText: tr("書き戻し完了", "Written back", "已写回")
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -854,7 +1056,7 @@ private struct PracticeStep: View {
                         text: $sample,
                         isFocused: $focused,
                         fontSize: 15,
-                        accessibilityLabel: "練習用メッセージ"
+                        accessibilityLabel: tr("練習用メッセージ", "Practice message", "练习用消息")
                     )
                     .background(.white)
                 }
@@ -870,8 +1072,20 @@ private struct PracticeStep: View {
 }
 
 private struct CustomPracticeStep: View {
-    private static let sourceDraft = "明日の15時の打ち合わせですが、資料の準備が間に合わないので、来週火曜日の同じ時間に変更したいです。"
-    private static let suggestedGuidance = "取引先向けに、簡潔なメールにしてください。"
+    private static var sourceDraft: String {
+        tr(
+            "明日の15時の打ち合わせですが、資料の準備が間に合わないので、来週火曜日の同じ時間に変更したいです。",
+            "About tomorrow's 3pm meeting — the materials won't be ready, so I'd like to move it to the same time next Tuesday.",
+            "明日の15時の打ち合わせですが、資料の準備が間に合わないので、来週火曜日の同じ時間に変更したいです。"
+        )
+    }
+    private static var suggestedGuidance: String {
+        tr(
+            "取引先向けに、簡潔なメールにしてください。",
+            "Make it a short client email that opens with an apology.",
+            "写成给客户的简洁邮件，开头先致歉。"
+        )
+    }
 
     @ObservedObject var coordinator: OnboardingCoordinator
     @State private var draft = Self.sourceDraft
@@ -889,11 +1103,11 @@ private struct CustomPracticeStep: View {
                     PracticeStatusBadge(
                         completed: true,
                         pendingText: "",
-                        completedText: "カスタム指示で書き戻しました"
+                        completedText: tr("カスタム指示で書き戻しました", "Written back with your instruction", "已使用自定义指令写回")
                     )
                 } else {
                     VStack(alignment: .trailing, spacing: 4) {
-                        Text("入力例")
+                        Text(tr("入力例", "Example", "输入示例"))
                             .font(Tokens.Font.body(10, weight: .medium))
                             .foregroundStyle(Tokens.Window.textTertiary)
                         Text(Self.suggestedGuidance)
@@ -914,7 +1128,7 @@ private struct CustomPracticeStep: View {
                         text: $draft,
                         isFocused: $focused,
                         fontSize: 15,
-                        accessibilityLabel: "カスタム練習用メッセージ"
+                        accessibilityLabel: tr("カスタム練習用メッセージ", "Custom practice message", "自定义练习用消息")
                     )
                     .background(.white)
                 }
@@ -930,7 +1144,13 @@ private struct CustomPracticeStep: View {
 }
 
 private struct ReplyPracticeStep: View {
-    private static let sourceMessage = "明日の15時からのプロジェクト定例、参加できそうですか？"
+    private static var sourceMessage: String {
+        tr(
+            "明日の15時からのプロジェクト定例、参加できそうですか？",
+            "Can you make the project sync tomorrow at 3pm?",
+            "明日の15時からのプロジェクト定例、参加できそうですか？"
+        )
+    }
 
     @ObservedObject var coordinator: OnboardingCoordinator
     @State private var reply = ""
@@ -947,8 +1167,12 @@ private struct ReplyPracticeStep: View {
 
                 PracticeStatusBadge(
                     completed: coordinator.replyPracticeCompleted,
-                    pendingText: "例：参加できると丁寧に",
-                    completedText: "返信を書き戻しました"
+                    pendingText: tr(
+                        "例：参加できると丁寧に",
+                        "e.g. yes, politely",
+                        "例：礼貌地回答可以参加"
+                    ),
+                    completedText: tr("返信を書き戻しました", "Reply written back", "已写回回复")
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -964,8 +1188,8 @@ private struct ReplyPracticeStep: View {
                         isFocused: $focused,
                         fontSize: 13,
                         contentInset: NSSize(width: 14, height: 12),
-                        placeholder: "# product への返信",
-                        accessibilityLabel: "返信練習用メッセージ"
+                        placeholder: tr("# product への返信", "Reply in #product", "回复 #product"),
+                        accessibilityLabel: tr("返信練習用メッセージ", "Reply practice message", "回复练习用消息")
                     )
                     .background(.white)
                 }
@@ -1123,16 +1347,28 @@ private struct SourceStep: View {
         HStack(alignment: .top, spacing: 28) {
             VStack(alignment: .leading, spacing: 22) {
                 StepHeading(
-                    eyebrow: "最後にひとつ",
-                    title: "敬語ボタンをどこで知りましたか？",
-                    subtitle: "どこで見つけてもらえたのかを知るためだけの質問です。近いものを1つ選んでください。"
+                    eyebrow: tr("最後にひとつ", "One last thing", "最后一个问题"),
+                    title: tr(
+                        "敬語ボタンをどこで知りましたか？",
+                        "Where did you hear about KeigoButton?",
+                        "你是从哪里知道敬語ボタン的？"
+                    ),
+                    subtitle: tr(
+                        "どこで見つけてもらえたのかを知るためだけの質問です。近いものを1つ選んでください。",
+                        "Asked only so we know where people find us. Pick the closest one.",
+                        "只是想知道大家从哪里找到我们。请选择最接近的一项。"
+                    )
                 )
 
                 HStack(alignment: .top, spacing: 10) {
                     Icon(.info, size: 14)
                         .foregroundStyle(Tokens.Window.accentText)
                         .opticalCentre()
-                    Text("送るのは選んだ項目だけです。答えずに進んでも、機能は何も変わりません。")
+                    Text(tr(
+                        "送るのは選んだ項目だけです。答えずに進んでも、機能は何も変わりません。",
+                        "Only the option you pick is sent. Skipping changes nothing about the app.",
+                        "只会发送你选择的选项。跳过不会影响任何功能。"
+                    ))
                         .font(Tokens.Font.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                         .lineSpacing(4)
@@ -1258,11 +1494,11 @@ private struct CompleteStep: View {
                 IconPlate(icon: .check, diameter: 48)
                 CompleteStepHeading()
                 VStack(alignment: .leading, spacing: 10) {
-                    CompletionRow(text: "アカウントとボタンを同期")
-                    CompletionRow(text: "アクセシビリティを許可")
-                    CompletionRow(text: "書き換えの操作を確認")
-                    CompletionRow(text: "一度だけのカスタム指示を確認")
-                    CompletionRow(text: "コピーから返信する操作を確認")
+                    CompletionRow(text: tr("アカウントとボタンを同期", "Account and buttons synced", "账户与按钮已同步"))
+                    CompletionRow(text: tr("アクセシビリティを許可", "Accessibility granted", "已授予辅助功能权限"))
+                    CompletionRow(text: tr("書き換えの操作を確認", "Rewriting learned", "已了解改写操作"))
+                    CompletionRow(text: tr("一度だけのカスタム指示を確認", "One-off instructions learned", "已了解一次性自定义指令"))
+                    CompletionRow(text: tr("コピーから返信する操作を確認", "Replying from a copy learned", "已了解从复制内容回复"))
                 }
             }
             .frame(width: 380, alignment: .leading)
@@ -1271,7 +1507,11 @@ private struct CompleteStep: View {
             OnboardingVisualStage {
                 OnboardingMailScene(labels: coordinator.mainModel.prompts.enabledForHoverRow.map(\.title)) {
                     OnboardingStaticMailBody(
-                        text: "恐れ入りますが、明日の会議を15時に変更していただけますでしょうか。",
+                        text: tr(
+                            "恐れ入りますが、明日の会議を15時に変更していただけますでしょうか。",
+                            "Would it be possible to move tomorrow's meeting to 3pm?",
+                            "恐れ入りますが、明日の会議を15時に変更していただけますでしょうか。"
+                        ),
                         focused: false
                     )
                 }
@@ -1310,14 +1550,33 @@ private struct StepHeading: View {
 }
 
 private struct PillCaption: View {
+    var prefix: String = ""
     let suffix: String
 
     var body: some View {
-        HStack(spacing: 6) {
-            PillPreview(scale: 0.52)
-            Text(suffix)
-                .font(Tokens.Font.body(12, weight: .medium))
-                .foregroundStyle(Tokens.Window.textTertiary)
+        PillSentence(before: prefix, after: suffix, scale: 0.52, spacing: 6)
+            .font(Tokens.Font.body(12, weight: .medium))
+            .foregroundStyle(Tokens.Window.textTertiary)
+    }
+}
+
+/// A sentence with the real bar drawn inside it.
+///
+/// Japanese puts the pill mid-sentence and English almost never can — 「バーのプレビュー」
+/// is "Preview of ⟨bar⟩" — so both sides are translatable and either may be empty. An
+/// empty side is **omitted**, not laid out: an empty `Text` still takes the HStack's
+/// spacing, which leaves a gap beside the pill that nothing in the copy explains.
+private struct PillSentence: View {
+    let before: String
+    let after: String
+    var scale: CGFloat = 0.58
+    var spacing: CGFloat = 6
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            if !before.isEmpty { Text(before) }
+            PillPreview(scale: scale)
+            if !after.isEmpty { Text(after) }
         }
     }
 }
@@ -1325,26 +1584,26 @@ private struct PillCaption: View {
 private struct PillStepHeading: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("いつもの使い方")
+            Text(tr("いつもの使い方", "How you'll use it", "日常用法"))
                 .font(Tokens.Font.body(12, weight: .medium))
                 .foregroundStyle(Tokens.Window.accentText)
-            HStack(spacing: 8) {
-                Text("画面下の")
-                PillPreview(scale: 0.72)
-                Text("が待っています")
-            }
+            PillSentence(
+                before: tr("画面下の", "", "画面下方的"),
+                after: tr("が待っています", " lives at the bottom.", "在等着你"),
+                scale: 0.72,
+                spacing: 8
+            )
             .font(Tokens.Font.display(20))
             .tracking(Tokens.Font.displayTracking(20))
             .foregroundStyle(Tokens.Window.textPrimary)
             .lineLimit(1)
-            HStack(spacing: 6) {
-                Text("入力欄に文章を置いたまま、")
-                PillPreview(scale: 0.58)
-                Text("へカーソルを移動。")
-            }
+            PillSentence(
+                before: tr("入力欄に文章を置いたまま、", "Leave the field focused and hover ", "让文字留在输入框中，将光标移到"),
+                after: tr("へカーソルを移動。", ".", "上。")
+            )
             .font(Tokens.Font.body(14))
             .foregroundStyle(Tokens.Window.textSecondary)
-            Text("入力欄のフォーカスは失われません。")
+            Text(tr("入力欄のフォーカスは失われません。", "The field never loses focus.", "输入框不会失去焦点。"))
                 .font(Tokens.Font.body(14))
                 .foregroundStyle(Tokens.Window.textSecondary)
         }
@@ -1356,23 +1615,28 @@ private struct PracticeStepHeading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("実際に試す")
+            Text(tr("実際に試す", "Try it", "实际试用"))
                 .font(Tokens.Font.body(12, weight: .medium))
                 .foregroundStyle(Tokens.Window.accentText)
-            Text(completed ? "書き戻せました" : "選んだボタンで試してみましょう")
+            Text(completed
+                ? tr("書き戻せました", "It went back in", "已写回")
+                : tr("選んだボタンで試してみましょう", "Try one of your buttons", "用选好的按钮试试看"))
                 .font(Tokens.Font.display(20))
                 .tracking(Tokens.Font.displayTracking(20))
                 .foregroundStyle(Tokens.Window.textPrimary)
             if completed {
-                Text("いまの操作が、ほかのアプリでも同じように使えます。")
+                Text(tr(
+                    "いまの操作が、ほかのアプリでも同じように使えます。",
+                    "That same move works in every other app.",
+                    "同样的操作在其他应用中也能使用。"
+                ))
                     .font(Tokens.Font.body(14))
                     .foregroundStyle(Tokens.Window.textSecondary)
             } else {
-                HStack(spacing: 6) {
-                    Text("本文にフォーカスを残し、")
-                    PillPreview(scale: 0.58)
-                    Text("を開いて、好きなボタンを押します。")
-                }
+                PillSentence(
+                    before: tr("本文にフォーカスを残し、", "Leave the body focused, open ", "保持正文处于焦点状态，展开"),
+                    after: tr("を開いて、好きなボタンを押します。", " and press any button.", "，然后点击任意按钮。")
+                )
                 .font(Tokens.Font.body(14))
                 .foregroundStyle(Tokens.Window.textSecondary)
             }
@@ -1385,23 +1649,32 @@ private struct ReplyPracticeHeading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("返信を試す")
+            Text(tr("返信を試す", "Try a reply", "试试回复"))
                 .font(Tokens.Font.body(12, weight: .medium))
                 .foregroundStyle(Tokens.Window.accentText)
-            Text(completed ? "返信を書き戻せました" : "コピーしたメッセージに返信してみましょう")
+            Text(completed
+                ? tr("返信を書き戻せました", "The reply went back in", "回复已写回")
+                : tr("コピーしたメッセージに返信してみましょう", "Reply to the message you copied", "试着回复你复制的消息"))
                 .font(Tokens.Font.display(20))
                 .tracking(Tokens.Font.displayTracking(20))
                 .foregroundStyle(Tokens.Window.textPrimary)
             if completed {
-                Text("コピーから返信まで、実際の操作で完了しました。")
+                Text(tr(
+                    "コピーから返信まで、実際の操作で完了しました。",
+                    "Copy to reply, done for real.",
+                    "从复制到回复，已用真实操作完成。"
+                ))
                     .font(Tokens.Font.body(14))
                     .foregroundStyle(Tokens.Window.textSecondary)
             } else {
-                HStack(spacing: 6) {
-                    Text("メッセージをコピーし、返信欄にフォーカスしたまま")
-                    PillPreview(scale: 0.58)
-                    Text("を開きます。")
-                }
+                PillSentence(
+                    before: tr(
+                        "メッセージをコピーし、返信欄にフォーカスしたまま",
+                        "Copy the message, focus the reply box, then open ",
+                        "复制消息，将焦点留在回复框中，然后展开"
+                    ),
+                    after: tr("を開きます。", ".", "。")
+                )
                 .font(Tokens.Font.body(14))
                 .foregroundStyle(Tokens.Window.textSecondary)
             }
@@ -1414,26 +1687,35 @@ private struct CustomPracticeHeading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("カスタム指示を試す")
+            Text(tr("カスタム指示を試す", "Try a one-off", "试试自定义指令"))
                 .font(Tokens.Font.body(12, weight: .medium))
                 .foregroundStyle(Tokens.Window.accentText)
-            Text(completed ? "一度だけの指示で書き戻せました" : "このメールだけの仕上げ方を伝えましょう")
+            Text(completed
+                ? tr("一度だけの指示で書き戻せました", "Your one-off instruction went in", "已用一次性指令写回")
+                : tr("このメールだけの仕上げ方を伝えましょう", "Say how this one email should land", "告诉它这封邮件该怎么写"))
                 .font(Tokens.Font.display(20))
                 .tracking(Tokens.Font.displayTracking(20))
                 .foregroundStyle(Tokens.Window.textPrimary)
             if completed {
-                Text("保存済みのボタンを変えずに、その場だけの指示を使えます。")
+                Text(tr(
+                    "保存済みのボタンを変えずに、その場だけの指示を使えます。",
+                    "A one-off instruction, without touching your saved buttons.",
+                    "无需修改已保存的按钮，也能使用一次性指令。"
+                ))
                     .font(Tokens.Font.body(14))
                     .foregroundStyle(Tokens.Window.textSecondary)
             } else {
-                HStack(spacing: 6) {
-                    Text("本文にフォーカスを残し、")
-                    PillPreview(scale: 0.58)
-                    Text("を開いて右端の ✎ を押します。")
-                }
+                PillSentence(
+                    before: tr("本文にフォーカスを残し、", "Leave the body focused, open ", "保持正文处于焦点状态，展开"),
+                    after: tr("を開いて右端の ✎ を押します。", " and press ✎ on the right.", "，然后点击最右侧的 ✎。")
+                )
                 .font(Tokens.Font.body(14))
                 .foregroundStyle(Tokens.Window.textSecondary)
-                Text("✎ は、その書き換えに一度だけ使う指示を入力するボタンです。入力後に生成し、結果を入れ替えてください。")
+                Text(tr(
+                    "✎ は、その書き換えに一度だけ使う指示を入力するボタンです。入力後に生成し、結果を入れ替えてください。",
+                    "✎ takes an instruction used for this rewrite only. Type it, generate, then insert the result.",
+                    "✎ 用于输入仅本次改写使用的指令。输入后生成，再替换结果。"
+                ))
                     .font(Tokens.Font.body(13))
                     .foregroundStyle(Tokens.Window.textSecondary)
                     .lineSpacing(4)
@@ -1446,21 +1728,24 @@ private struct CustomPracticeHeading: View {
 private struct CompleteStepHeading: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("セットアップ完了")
+            Text(tr("セットアップ完了", "All set", "设置完成"))
                 .font(Tokens.Font.body(12, weight: .medium))
                 .foregroundStyle(Tokens.Window.accentText)
-            Text("準備できました")
+            Text(tr("準備できました", "You're ready", "准备就绪"))
                 .font(Tokens.Font.display(20))
                 .tracking(Tokens.Font.displayTracking(20))
                 .foregroundStyle(Tokens.Window.textPrimary)
-            HStack(spacing: 6) {
-                Text("文章にフォーカスを置き、画面下の")
-                PillPreview(scale: 0.58)
-                Text("を開くだけです。")
-            }
+            PillSentence(
+                before: tr("文章にフォーカスを置き、画面下の", "Focus your text and open ", "让焦点停在文字上，展开画面下方的"),
+                after: tr("を開くだけです。", " at the bottom. That's it.", "即可。")
+            )
             .font(Tokens.Font.body(14))
             .foregroundStyle(Tokens.Window.textSecondary)
-            Text("ウインドウを閉じても、敬語ボタンはメニューバーと画面下に残ります。")
+            Text(tr(
+                "ウインドウを閉じても、敬語ボタンはメニューバーと画面下に残ります。",
+                "Closing this window doesn't quit — KeigoButton stays in the menu bar and at the bottom of your screen.",
+                "关闭窗口后，敬語ボタン仍会保留在菜单栏和画面下方。"
+            ))
                 .font(Tokens.Font.body(14))
                 .foregroundStyle(Tokens.Window.textSecondary)
                 .lineSpacing(5)
@@ -1485,6 +1770,7 @@ private struct TeachingRow: View {
 
 private struct TeachingPillRow: View {
     let number: String
+    var prefix: String = ""
     let suffix: String
 
     var body: some View {
@@ -1493,12 +1779,9 @@ private struct TeachingPillRow: View {
                 .font(Tokens.Font.mono(12))
                 .foregroundStyle(Tokens.Window.accentText)
                 .frame(width: 22, alignment: .leading)
-            HStack(spacing: 6) {
-                PillPreview(scale: 0.58)
-                Text(suffix)
-            }
-            .font(Tokens.Font.body(14))
-            .foregroundStyle(Tokens.Window.textPrimary)
+            PillSentence(before: prefix, after: suffix)
+                .font(Tokens.Font.body(14))
+                .foregroundStyle(Tokens.Window.textPrimary)
         }
     }
 }
@@ -1598,13 +1881,19 @@ private struct BarIllustration: View {
     let prompts: [UserPrompt]
     private var labels: [String] {
         let titles = prompts.prefix(4).map(\.title)
-        return titles.isEmpty ? ["敬語", "自然に", "メール", "英訳"] : titles
+        return titles.isEmpty
+            ? OnboardingPresetPack.starter.buttonTitles
+            : titles
     }
 
     var body: some View {
         OnboardingVisualStage {
             OnboardingMailScene(labels: labels) {
-                OnboardingStaticMailBody(text: "明日の会議、15時に変更しといて")
+                OnboardingStaticMailBody(text: tr(
+                    "明日の会議、15時に変更しといて",
+                    "move tomorrows meeting to 3, i cant make the morning",
+                    "明日の会議、15時に変更しといて"
+                ))
             }
         }
     }

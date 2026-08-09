@@ -1,4 +1,5 @@
 import AppKit
+import DesktopRewriteKit
 import SwiftUI
 
 /// §4: may become key, and only after the target has already been captured.
@@ -332,7 +333,7 @@ struct ResultView: View {
 
             Button { controller.insert() } label: {
                 HStack(spacing: 6) {
-                    Text("挿入")
+                    Text(tr("挿入", "Insert", "插入"))
                         .font(Tokens.Font.body(Tokens.Overlay.labelLarge, weight: .medium))
                     Image(systemName: "return")
                         .font(.system(size: 10, weight: .medium))

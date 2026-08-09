@@ -17,6 +17,10 @@
 	<string>敬語ボタン</string>
 	<key>CFBundleDisplayName</key>
 	<string>敬語ボタン</string>
+	<!-- §17: without this, Finder and the Dock ignore the localized
+	     CFBundleDisplayName in the .lproj files and always show the value above. -->
+	<key>LSHasLocalizedDisplayName</key>
+	<true/>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

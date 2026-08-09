@@ -1,0 +1,6 @@
+/* See ja.lproj/InfoPlist.strings. The product name stays Japanese here: a 简体中文
+   user is writing Japanese and knows the app by its Japanese name (§17). */
+"NSAccessibilityUsageDescription" = "敬語ボタン 需要辅助功能权限，用于读取你正在编辑的文字，并把改写后的内容写回原处。不会录制屏幕，也不会将该权限用于其他用途。";
+
+"CFBundleName" = "敬語ボタン";
+"CFBundleDisplayName" = "敬語ボタン";

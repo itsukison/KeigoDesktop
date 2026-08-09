@@ -11,6 +11,41 @@ The first run produced `debug.png` and a round of overlay fixes (§4, §8).
 
 Verified (2026-08-07):
 
+- **2026-08-09 — Sparkle updates now announce themselves on ホーム.** This is
+  Sparkle's gentle-reminder path, not a second updater: a scheduled background check
+  that selects a valid compatible appcast item no longer opens the standard alert
+  behind whatever app an accessory process happens to be under. It publishes only the
+  display version into `MainModel`, and ホーム inserts one compact Willow card directly
+  below its usage row — white canvas, hairline, tinted product mark, version badge and
+  one indigo 「アップデートする」 action. Pressing it asks the existing
+  `SPUStandardUpdaterController` to bring that already-selected update into focus, so
+  Sparkle still owns release notes, skip/dismiss, EdDSA verification, download and
+  installation. Manual 「アップデートを確認…」 checks remain standard Sparkle UI, and
+  the dashboard card clears once the update receives the user's attention or its
+  session ends. The built debug binary advertises all five expected Objective-C gentle
+  reminder selectors, unsigned `xcodebuild` succeeds with no new warnings, and all 105
+  tests pass. **Not verified with a newer live release:** the current build needs an
+  appcast version above itself to exercise scheduled discovery → card → Sparkle window
+  end to end.
+- **2026-08-09 — hover expansion is one motion instead of two competing ones.**
+  The apparent display-size difference was an animation sequencing bug: changing to
+  `.hoverRow` immediately animated the new 34 pt height against the collapsed 44 pt
+  width, then SwiftUI reported the row's intrinsic width one layout pass later and a
+  second 0.16 s ease-out retargeted the same window. The smaller display made the
+  vertical-pop-then-horizontal-stretch discontinuity easier to see; it did not select
+  another animation path. Content measurements now carry the identity of the subtree
+  they measured, stale outgoing measurements are ignored, and the transition waits for
+  one fresh width/height pair before animating the frame once. `PillPanel`'s hosting
+  view also has `sizingOptions = []`, so AppKit's controller is the only owner of the
+  window frame instead of racing `NSHostingView.standardBounds`. All three mascot
+  atlases are decoded and sliced before the panel appears and retained, removing the
+  cold engaged-atlas decode from the first 160 ms hover. A reduced real-`NSHostingView`
+  harness confirmed that disabling sizing still reports the full intrinsic row width
+  from a 44 pt window and that the layout identity produces one fresh callback. An
+  isolated unsigned `xcodebuild` succeeds with only the existing concurrency/AppIntents
+  warnings, and all 105 tests pass. **Not verified on the MacBook screen:** hover in and
+  out repeatedly, including the first hover after launch and a pill parked near an
+  edge, to judge the motion itself.
 - **2026-08-09 — 「使うボタンを確認」 rebuilt around one cause.** Three complaints —
   the left column was not centred like every other page, pressing ✎ animated
   unnaturally, and the preview column moved when the left column did — were one
@@ -2232,3 +2267,252 @@ to 180 seconds it is also the only thing hover does. The ✕ is on the context c
 is on screen for both reply states — so it is one click from either, which is as far as
 this can be taken without contradicting "hovering just opens the input box". Whether
 that is enough is a question for a running build, not for this file.
+
+---
+
+## 17. Three languages
+
+日本語, English and 简体中文, across the overlay, the window, first run and the
+landing page. Two questions are kept apart throughout, and almost everything here
+follows from the split:
+
+- **The interface language** — what the user reads.
+- **The writing language** — what their buttons produce.
+
+They are the same question for Japanese and for English. They are *not* the same
+question for Chinese: a 简体中文 user is assumed to be **a Chinese speaker working
+in Japan**, so the interface is Chinese and the buttons still write Japanese.
+`AppLanguage.writesJapanese` is that fact and it is the only place it is decided;
+nothing else in the app branches on the raw language.
+
+| | interface | buttons write | packs offered |
+|---|---|---|---|
+| 日本語 | Japanese | Japanese | 定番 / 仕事 / 海外 / 日本語 / SNS |
+| English | English | English | Starter / Work / Outreach / Polish / Social |
+| 简体中文 | Chinese | **Japanese** | the Japanese five, unchanged |
+
+### `tr(ja, en, zh)`, and why it is not a String Catalog
+
+Every user-visible string is three literals at its point of use:
+
+```swift
+Text(tr("ホーム", "Home", "主页"))
+```
+
+**The failure mode this is chosen against is drift, not tooling.** The Japanese
+copy in this app is reworded constantly — most entries at the top of this file are
+a rewording — and both standard shapes lose the other two languages when it
+happens. A Japanese-keyed `.xcstrings` orphans the entry. A symbolic key is worse:
+`en` and `zh` keep a translation of a sentence that no longer exists, silently, in
+a JSON file nobody opens during the edit. Colocation makes that impossible by
+accident: rewording the Japanese means looking at the other two.
+
+The other half is runtime switching. §15's language page has to take effect on
+itself, and `String(localized:)` ignores SwiftUI's environment locale — it reads
+`Bundle.main` — so a catalog would need a bundle swizzle *plus* a second mechanism
+for the SPM package's own strings. `tr` has one mechanism for both targets.
+
+The cost is real and worth stating: no extraction, no translator hand-off, and
+three languages is the point at which the argument still holds. A fourth language,
+or a vendor in the loop, is when `tr` should be replaced — and it is one function.
+
+- `AppLanguageState.current` is a lock-guarded global, because `tr` is called from
+  view bodies, from AppKit callbacks and from pure model code in `DesktopRewriteKit`.
+- `AppLanguageStore` persists the choice in `UserDefaults`, **per Mac**. A
+  `language` column on `profiles` would be a migration in a project the iOS app
+  shares (§12), so this stays local by decision.
+- `activate()` runs in `applicationDidFinishLaunching` **before any window, menu or
+  view exists**. Anything built ahead of it is built in the wrong language.
+- Static `let`s holding a `tr` are a bug: a stored static is evaluated once and
+  cached, so it keeps whichever language the app started in.
+  `OnboardingCoordinator.fallbackTutorialPrompt` and
+  `OverlayController.resetFormatter` are `var`s for that reason.
+
+### What a language change has to reach
+
+Three surfaces cannot observe a global on their own, and each needs its own push:
+
+| Surface | Mechanism |
+|---|---|
+| Onboarding | `@Published language` on the coordinator + `.id(coordinator.language)` on the panel |
+| Overlay (three separate windows) | `OverlayController.languageChanged()` → `objectWillChange.send()`; the bar's width follows on its own, because the row reports its measured width up through a preference (§4) |
+| Menu bar and main menu | `AppDelegate.relabelForLanguage()` rebuilds both. They are AppKit objects built once at launch and are outside every SwiftUI observation graph |
+
+`MainModel.languageChanged()` is the one entry point, and it also re-registers the
+PostHog super properties — a super property is stored, not computed, so it keeps
+its value until it is registered again (the same reason §7 re-registers the surface
+after a sign-out).
+
+### The language page
+
+`DesktopOnboardingStep.language` is raw value **10** and sits **first** in `flow`.
+Raw values stay append-only so an unfinished saved run still resolves; the array
+owns the order. `currentVersion` stays **2**, which means users who finished
+onboarding before this page existed are never asked — the ⚙︎ 一般 row is the whole
+answer for them, and that is why it exists.
+
+- It is preselected from `Locale.preferredLanguages` and is still a question. A
+  preselection is not a choice, which is why `AppLanguageStore.stored` is nil until
+  answered and `resolved` falls back separately.
+- **`OnboardingProgressStore.savedStep` had to change with it.** With nothing saved
+  it answered `.welcome`, which was right only while `.welcome` was also the head of
+  `flow` — so a brand-new install, the one user this page exists for, would have
+  skipped it. It now returns `flow.first`. A *corrupt* value still falls back to
+  `.welcome`: that is a recovery path, and re-asking a language already chosen is
+  the wrong repair.
+- The choice **applies on click, not on 続ける**. This is the one page where the
+  effect of the choice is visible, so applying it late would leave the user no way
+  to check they picked the right one.
+- Option labels are **endonyms and are never translated**. A picker that renames
+  日本語 to "Japanese" in an English interface is unusable by the one person who
+  needs it. The captions are written in the language of their own row for the same
+  reason.
+- It has **no progress-rail segment**. The rail is 10 setting-up steps; the
+  language question is asked before setting up starts, and counting it would tell
+  someone they are 9 % done for having said which language they read. The rail is
+  hidden with `.opacity(0)` rather than removed, because the window cannot resize
+  and dropping it would move every page for one step and back again.
+
+### English is a different product surface, not a translated one
+
+敬語 has no English counterpart: the register a Japanese user needs a button for is
+grammatical, and the equivalent English problem is tone, length and correctness. So
+the starter pack's four axes replace the four honorific levels — **Polite / Email /
+Shorten / Proofread**: how it sounds, what shape it takes, how long it is, whether
+it is right. The other four packs are Work, Outreach, Polish and Social.
+
+Two things about those packs are load-bearing:
+
+1. **Titles are nine characters or fewer.** The hover row has *no overflow
+   handling* (§4) — it is intrinsically sized and simply gets wider. Nine characters
+   keeps a four-button English row within a few points of a Japanese one, and
+   `testEnglishButtonTitlesStayShortEnoughForTheHoverRow` pins it.
+2. **Polite and Email keep their `builtin_key`s.** `handle_new_user()` seeds every
+   account with all four keys and `user_prompts_user_builtin_unique` makes a key an
+   *identity* (§6), so an English pack claiming none of them would leave the seeded
+   Japanese rows to be deleted and re-created rather than reused.
+
+`outreach` and `polish` exist only in English; the Japanese branch resolves them to
+the nearest pack that does exist there, so a pack saved before a language change
+still yields four buttons rather than an empty list.
+
+**The practice drafts are wrong on purpose.** Each English sample carries the defect
+its button fixes — blunt for Polite, padded for Shorten, misspelled for Proofread,
+translated-sounding for Natural. A clean sample ends the lesson with a rewrite
+indistinguishable from the input.
+
+### `writingLanguage` on the wire
+
+`desktop-rewrite`'s system prompt opened with *"You are a Japanese writing
+assistant on macOS."* That is not a claim about the output language — 英訳 has
+always returned English — it is a claim about whose writing this is, and for an
+English user it biases register, punctuation and sentence length toward Japanese
+conventions on text that has none.
+
+`RewriteRequest.writingLanguage` (`"ja"` | `"en"`, optional) now selects it, and
+**absent is meaningful**: every installed build older than the field omits it and
+those users are Japanese, so `undefined` reproduces the original string exactly
+rather than falling into a neutral branch. A 简体中文 user sends `"ja"`.
+
+**iOS cannot be affected by any of this.** The keyboard is on `keyboard-rewrite`
+(v42), a different function that was not touched — the isolation is structural, not
+a matter of care. The reply branch is language-neutral and is deliberately left
+alone; four Deno tests pin the default, both English branches and the reply branch's
+independence.
+
+### The landing page
+
+Three static builds, one per language: `dist/`, `dist/en/`, `dist/zh/`, driven by
+`VITE_LOCALE` through `landing/vite.config.js`. Subdirectories on one origin is
+what Google documents, and it is the only arrangement where a shared URL opens in
+the language it was written in.
+
+- `hreflang` is emitted **self-referencing and symmetric** on all three, plus
+  `x-default` → the Japanese root. Those three properties are what make the set
+  valid; drop one and Google ignores the whole thing.
+- **No automatic redirect by `Accept-Language`.** Google advises against it, and it
+  is wrong for real people often enough — a VPN, a work laptop set to English.
+  `LocaleBanner` offers the match once, links rather than redirects, and remembers
+  being dismissed. The nav's language links are the primary control and are real
+  `<a href>`s, so they work before JavaScript does.
+- The **zh build loads Noto Sans SC** ahead of JP. 汉字 shared with Japanese have
+  different regional glyph forms, and a Japanese font draws the Japanese ones —
+  legible to a Chinese reader, but visibly the wrong shapes. JP stays behind it
+  because the Chinese page still shows Japanese text inside the product mockups.
+- Amounts never change with the language. The product is billed in yen on every
+  surface, and a converted figure on the page would not be the figure at the card.
+- `FeatureGrid`, `Continuity`, `Privacy` and `FinalCta` are unmounted (see
+  `App.jsx`) and were **not** translated. Mounting one is now also a translation
+  job.
+
+**Looking at it locally — the two modes behave differently, and the difference has
+already cost one round of confusion.** `npm run dev` serves **one** language; which
+one is `VITE_LOCALE`, and it is mounted at that locale's own base, so `dev:en` is at
+`http://localhost:5180/en/` and `/` merely redirects there. **All three languages
+only coexist in the built output**, so the way to check them side by side —
+and the closest thing to production — is `npm run preview`, which builds all three
+and serves `dist/` at `http://localhost:4173/`, `/en/` and `/zh/`. (`preview` builds
+first on purpose: previewing a stale `dist/` shows yesterday's copy with no hint
+that it is doing so.) The port is **5180 / 4173, never 3000.** A `trailingSlash`
+plugin redirects `/en` → `/en/` in dev, because without it that URL 404s and reads
+exactly like "the English build does not exist".
+
+### `opticalNudge` was checked and deliberately left alone
+
+§14 item 5's −1.5 pt was measured on **Japanese** line boxes, so English was an open
+question rather than a known-good. It is now measured — `scripts/opticalprobe.swift`,
+which reports ink centre against line-box centre per language, per size, per weight.
+Read its *differences*, not its absolutes: it uses the font's ascender+descender box
+where §14 used `ImageRenderer` on the real view, and the two are offset by a constant
+that cancels between languages at the same size.
+
+At 14 pt / medium, against Japanese: **简体中文 differs by 0.04 pt** — the same
+constant, no question. **English differs by 0.47 pt**, which would make its correction
+about 1.0 rather than 1.5.
+
+It is still not split, and the reason is in the same output: **the spread between
+English words is larger than the correction.** `Home`, `Buttons` and `Account` all
+measure −0.43; `History` and `Settings` measure −1.29 and −1.30, because a descender
+drops the ink box. So a per-language English constant would be right for half the
+labels and wrong by more than the correction for the other half — false precision, and
+0.5 pt is at the edge of visible anyway. Japanese and Chinese do not have this problem:
+their glyphs fill a consistent em box, which is why one constant works there.
+
+**If an English label does look off against its icon, this is the paragraph to reread**
+— the fix is a per-string nudge or an ink-aligned container, not a fourth constant.
+
+### Word order is a layout problem, and it was the real work
+
+Japanese wraps the product's own bar mid-sentence — 「画面下の ⟨bar⟩ が待っています」,
+「バーのプレビュー」 — and English cannot. `PillSentence` (onboarding) and
+`hoverSentenceBefore` / `After` (ホーム) take a translatable string on **each** side
+of the pill, and an empty side is *omitted* rather than laid out: an empty `Text`
+still takes the `HStack`'s spacing and leaves a gap beside the pill that nothing in
+the copy explains.
+
+### Not verified
+
+`swift test` passes **121 tests** (16 new), `xcodebuild` succeeds with no new
+warnings, ten Deno prompt tests plus `deno check` / `deno lint` are clean, and all
+three landing builds succeed with correct `hreflang`, `og:locale` and font sets in
+the emitted HTML.
+
+**Nothing has been looked at on screen, and this is the change where that matters
+most.** English is roughly 1.5–2× wider than Japanese for the same sentence, and
+the surfaces it lands on are fixed: the onboarding window is **1080×700 and cannot
+resize**, the error toast is 360 pt wide with a clamped height, the input bar is a
+fixed 360, and ボタン's list viewport is capped at `rowHeight` (74) × the row count
+(§15) — a wrapped English title in a closed row breaks that assumption directly.
+`desktop-rewrite` **v10 is ACTIVE with `verify_jwt = true`** and carries the
+`writingLanguage` branch. Its ten prompt tests, `deno check` and `deno lint` are clean,
+and the deployed gateway still returns 401 without a JWT.
+
+The **Accessibility prompt and the Finder name are the one seam** — macOS draws them
+from the bundle, so they follow `InfoPlist.strings` picked by the *system* language,
+not by the language chosen on §15's page. An English macOS running the app in
+Japanese sees an English permission dialog. That is the correct trade and there is no
+mechanism that would do better without forcing `AppleLanguages`, which would drag
+every system-drawn control with it.
+
+Open, and a decision rather than a bug: `user_prompts` is shared with the phone
+(§2), so an English user's English button titles appear in the iOS keyboard.

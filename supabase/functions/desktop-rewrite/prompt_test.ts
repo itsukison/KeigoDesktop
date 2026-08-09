@@ -79,3 +79,56 @@ Deno.test("normal whole-field rewrite prompt remains unchanged", () => {
   assert(prompt.startsWith("Command: 丁寧に\nLocale: ja-JP\nCandidates requested: 1"), "normal command framing changed");
   assert(prompt.endsWith("Target text (the whole field):\n<target>\n確認してください。\n</target>"), "normal target framing changed");
 });
+
+Deno.test("an absent writingLanguage keeps the original Japanese-assistant instructions", () => {
+  const rewrite = request({ replyTo: null, prompt: "敬語に", text: "変更しといて" });
+
+  assert(
+    systemInstructions(rewrite).startsWith("You are a Japanese writing assistant on macOS."),
+    "a request without writingLanguage must be byte-identical to the pre-i18n behaviour",
+  );
+  assert(
+    systemInstructions({ ...rewrite, selection: true })
+      .startsWith("You are a Japanese writing assistant on macOS."),
+    "the selection branch must default the same way",
+  );
+});
+
+Deno.test("writingLanguage 'en' switches the assistant identity in both rewrite branches", () => {
+  const rewrite = request({
+    replyTo: null,
+    prompt: "Make it polite",
+    text: "move the meeting to 3",
+    writingLanguage: "en",
+  });
+
+  assert(
+    systemInstructions(rewrite).startsWith("You are an English writing assistant on macOS."),
+    "whole-field branch did not switch",
+  );
+  assert(
+    systemInstructions({ ...rewrite, selection: true })
+      .startsWith("You are an English writing assistant on macOS."),
+    "selection branch did not switch",
+  );
+});
+
+Deno.test("writingLanguage 'ja' is what a 简体中文 user sends, and reads as Japanese", () => {
+  const rewrite = request({ replyTo: null, prompt: "敬語に", text: "変更しといて", writingLanguage: "ja" });
+
+  assert(
+    systemInstructions(rewrite).startsWith("You are a Japanese writing assistant on macOS."),
+    "an explicit 'ja' must match the absent case exactly",
+  );
+});
+
+Deno.test("the reply branch is language-neutral and is not touched by writingLanguage", () => {
+  const japanese = systemInstructions(request());
+  const english = systemInstructions(request({ writingLanguage: "en" }));
+
+  assert(japanese === english, "the reply instructions must not depend on writingLanguage");
+  assert(
+    japanese.startsWith("You are a writing assistant on macOS that composes complete replies."),
+    "reply identity changed",
+  );
+});

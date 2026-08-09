@@ -1,6 +1,11 @@
 name: KeigoButtonMac
 options:
   bundleIdPrefix: com.core7.keigobutton
+  # §17. Japanese is the base localization (CFBundleDevelopmentRegion), and the
+  # three .lproj directories under App/Resources carry InfoPlist.strings — the
+  # Accessibility prompt and the Finder name, which macOS draws from the bundle
+  # rather than from our own `tr`.
+  developmentLanguage: ja
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
@@ -9,7 +14,7 @@ settings:
   base:
     DEVELOPMENT_TEAM: "4KS6YS23KT"
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "0.1.2"
     CURRENT_PROJECT_VERSION: "1"
     # §2: the sandbox makes AXUIElementCreateSystemWide useless against other
     # processes, so this app can never ship on the Mac App Store.

@@ -11,13 +11,19 @@ public enum DesktopOnboardingStep: Int, CaseIterable, Sendable {
     case replyPractice = 7
     case customPractice = 8
     case source = 9
+    case language = 10
 
     /// Raw values are append-only — a saved step from an unfinished run is read back by
     /// number — while this array owns the order the user actually sees. `source` is
     /// second to last: 完了 stays the page the run ends on, and a question asked after
     /// the closing card would be asked after the app was already handed over.
+    ///
+    /// `language` is first for the opposite reason: it is the only page whose answer
+    /// changes every page after it, so it has to be asked before there is anything to
+    /// re-render. It is also the one page with no Back button — there is nowhere behind
+    /// it — and the only one that does not require a session.
     public static let flow: [DesktopOnboardingStep] = [
-        .welcome, .purpose, .review, .access, .bar, .practice, .customPractice,
+        .language, .welcome, .purpose, .review, .access, .bar, .practice, .customPractice,
         .replyPractice, .source, .complete,
     ]
 }
@@ -37,8 +43,16 @@ public final class OnboardingProgressStore: @unchecked Sendable {
         defaults.integer(forKey: key("completedVersion")) >= Self.currentVersion
     }
 
+    /// **Nothing saved means a first run, so it starts at the head of `flow`, not at
+    /// `.welcome`.** This returned `.welcome` while that was the first page, and the
+    /// two stopped being the same thing when §17 put the language question in front of
+    /// it — leaving a brand-new install, the one user the page exists for, skipping it.
+    /// A corrupt value still falls back to `.welcome`: that is a recovery path, and
+    /// re-asking a language already chosen is the wrong repair.
     public var savedStep: DesktopOnboardingStep {
-        guard defaults.object(forKey: key("step")) != nil else { return .welcome }
+        guard defaults.object(forKey: key("step")) != nil else {
+            return DesktopOnboardingStep.flow.first ?? .welcome
+        }
         return DesktopOnboardingStep(rawValue: defaults.integer(forKey: key("step"))) ?? .welcome
     }
 

@@ -1,3 +1,4 @@
+import DesktopRewriteKit
 import Foundation
 import PostHog
 
@@ -36,7 +37,14 @@ enum PostHogConfiguration {
     /// persisted storage and `reset` clears them, so signing out would otherwise strip
     /// the surface off every event until the next launch — see `MainModel.signOut`.
     static func registerSurface() {
-        PostHogSDK.shared.register(["surface": "macos"])
+        PostHogSDK.shared.register([
+            "surface": "macos",
+            // §17. Read at registration time and re-registered whenever the language
+            // changes, so a series can be split by it without a per-event property —
+            // and so the English and 简体中文 funnels are separable from day one
+            // rather than after the fact.
+            "app_language": AppLanguageState.current.rawValue,
+        ])
     }
 
     private static func configuredValue(for key: String) -> String? {

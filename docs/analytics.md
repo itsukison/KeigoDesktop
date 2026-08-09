@@ -123,6 +123,22 @@ partner: an event without it, in the desktop project, came from somewhere it sho
 Plus `surface: macos` on every one of them, including the two the app never calls
 `capture` for.
 
+**And `app_language`** (`ja` | `en` | `zh-Hans`), registered beside it in
+`PostHogConfiguration.registerSurface()`. A super property rather than a per-event
+one, because the question it answers is always "split this series" and never "what
+happened on this row". Two things to know when reading it:
+
+- It is the **interface** language, not the language the user's buttons write in.
+  A `zh-Hans` user writes Japanese (AGENTS.md §17), so a rewrite-volume comparison
+  between `ja` and `zh-Hans` is comparing two groups doing the same thing.
+- Super properties are stored, not computed, so a language change has to
+  re-register them. `MainModel.languageChanged()` does — the same hazard as the
+  surface being cleared by `reset()` on sign-out.
+
+Events captured before the first build carrying this property have no
+`app_language` at all; they are Japanese by construction, since the language page
+did not exist.
+
 `desktop_source_selected` is the last page of first run (AGENTS.md §15) and is
 **self-reported and skippable**: 「答えない」 sends nothing at all, so the event count is
 not the number of users who finished onboarding and the shares are of answers, not of

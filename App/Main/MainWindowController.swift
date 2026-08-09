@@ -1,4 +1,5 @@
 import AppKit
+import DesktopRewriteKit
 import SwiftUI
 
 /// A plain titled window, not an `NSPanel` — this one is allowed to be key and main.
@@ -16,7 +17,7 @@ final class MainWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "敬語ボタン"
+        window.title = tr("敬語ボタン", "KeigoButton", "敬語ボタン")
         // The sidebar runs to the top edge behind the traffic lights, as in all three
         // references. `MainWindowView` reserves the 36 pt they need.
         window.titlebarAppearsTransparent = true

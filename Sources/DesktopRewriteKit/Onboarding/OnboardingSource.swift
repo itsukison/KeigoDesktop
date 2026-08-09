@@ -22,14 +22,14 @@ public enum OnboardingSource: String, CaseIterable, Sendable {
 
     public var label: String {
         switch self {
-        case .x: return "X（旧Twitter）"
+        case .x: return tr("X（旧Twitter）", "X (formerly Twitter)", "X（原Twitter）")
         case .youtube: return "YouTube"
         case .instagram: return "Instagram"
         case .tiktok: return "TikTok"
-        case .webSearch: return "Web検索"
-        case .friend: return "知人にすすめられて"
-        case .article: return "記事・ブログ"
-        case .other: return "その他"
+        case .webSearch: return tr("Web検索", "Web search", "网络搜索")
+        case .friend: return tr("知人にすすめられて", "Someone recommended it", "朋友推荐")
+        case .article: return tr("記事・ブログ", "An article or blog", "文章・博客")
+        case .other: return tr("その他", "Something else", "其他")
         }
     }
 }

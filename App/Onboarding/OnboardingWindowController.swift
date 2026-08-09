@@ -5,7 +5,10 @@ import SwiftUI
 
 @MainActor
 final class OnboardingCoordinator: ObservableObject {
-    @Published private(set) var step: DesktopOnboardingStep = .welcome
+    @Published private(set) var step: DesktopOnboardingStep = .language
+    /// Published so the whole flow re-renders on the language page itself: `tr`
+    /// reads a global, and a global changing is not something SwiftUI can observe.
+    @Published private(set) var language: AppLanguage
     @Published private(set) var rewritePracticeCompleted = false
     @Published private(set) var customPracticeCompleted = false
     @Published private(set) var replyPracticeCompleted = false
@@ -23,6 +26,7 @@ final class OnboardingCoordinator: ObservableObject {
     let overlay: OverlayController
 
     private let progress: OnboardingProgressStore
+    private let languageStore: AppLanguageStore
     private let onFinish: () -> Void
     private var replaying = false
     var restoreWindowAfterTutorialInsert: (() -> Void)?
@@ -31,11 +35,14 @@ final class OnboardingCoordinator: ObservableObject {
         mainModel: MainModel,
         overlay: OverlayController,
         progress: OnboardingProgressStore,
+        languageStore: AppLanguageStore,
         onFinish: @escaping () -> Void
     ) {
         self.mainModel = mainModel
         self.overlay = overlay
         self.progress = progress
+        self.languageStore = languageStore
+        self.language = languageStore.resolved
         self.onFinish = onFinish
     }
 
@@ -47,7 +54,19 @@ final class OnboardingCoordinator: ObservableObject {
         selectedSource = nil
         selectedPack = progress.savedPack
         buttonDrafts = progress.savedDrafts
-        move(to: replay ? .welcome : progress.savedStep)
+        language = languageStore.resolved
+        move(to: replay ? .language : progress.savedStep)
+    }
+
+    /// Applied immediately rather than on 次へ: the page is the one place the effect
+    /// of the choice is visible, and a picker that does nothing until you leave it
+    /// gives the user no way to check they picked the right one.
+    func select(language next: AppLanguage) {
+        guard next != language else { return }
+        languageStore.save(next)
+        language = next
+        overlay.languageChanged()
+        mainModel.languageChanged()
     }
 
     func move(to next: DesktopOnboardingStep) {
@@ -58,7 +77,7 @@ final class OnboardingCoordinator: ObservableObject {
         if !replaying { progress.save(step: next) }
 
         switch next {
-        case .welcome, .purpose, .review, .access:
+        case .language, .welcome, .purpose, .review, .access:
             overlay.setVisible(false)
         case .bar, .source, .complete:
             overlay.endTutorial()
@@ -89,6 +108,7 @@ final class OnboardingCoordinator: ObservableObject {
 
     func advance() {
         switch step {
+        case .language: move(to: .welcome)
         case .welcome where mainModel.isSignedIn: preparePurpose()
         case .purpose: move(to: .review)
         case .review: confirmButtons()
@@ -170,8 +190,12 @@ final class OnboardingCoordinator: ObservableObject {
     func addDraft() {
         guard buttonDrafts.count < 7 else { return }
         buttonDrafts.append(OnboardingButtonDraft(
-            title: "新しいボタン",
-            prompt: "次の文章を、意図を保ったまま読みやすく書き直してください。",
+            title: tr("新しいボタン", "New", "新按钮"),
+            prompt: tr(
+                "次の文章を、意図を保ったまま読みやすく書き直してください。",
+                "Rewrite the text so it reads clearly, keeping the writer's intent.",
+                "次の文章を、意図を保ったまま読みやすく書き直してください。"
+            ),
             origin: .onboardingBuilder
         ))
         reviewError = nil
@@ -221,7 +245,11 @@ final class OnboardingCoordinator: ObservableObject {
             await mainModel.reloadPrompts()
             isPreparingPurpose = false
             if mainModel.promptsError != nil {
-                purposeError = "ボタンを読み込めませんでした。接続を確認して、もう一度お試しください。"
+                purposeError = tr(
+                    "ボタンを読み込めませんでした。接続を確認して、もう一度お試しください。",
+                    "Couldn't load your buttons. Check your connection and try again.",
+                    "无法加载按钮。请检查网络连接后重试。"
+                )
                 return
             }
             if buttonDrafts.isEmpty {
@@ -246,7 +274,11 @@ final class OnboardingCoordinator: ObservableObject {
                 try await mainModel.applyOnboardingButtons(drafts)
                 move(to: .access)
             } catch {
-                reviewError = "ボタンを保存できませんでした。接続を確認して、もう一度お試しください。"
+                reviewError = tr(
+                    "ボタンを保存できませんでした。接続を確認して、もう一度お試しください。",
+                    "Couldn't save your buttons. Check your connection and try again.",
+                    "无法保存按钮。请检查网络连接后重试。"
+                )
             }
         }
     }
@@ -265,13 +297,22 @@ final class OnboardingCoordinator: ObservableObject {
         return enabled.isEmpty ? [Self.fallbackTutorialPrompt] : enabled
     }
 
-    private static let fallbackTutorialPrompt = UserPrompt(
-        id: UUID(uuidString: "A8D15BB9-5A3F-45A3-B5D7-91B3AC0D8C44")!,
-        slot: .main,
-        title: "敬語",
-        prompt: "次の文章を、日常でそのまま送れる自然でやわらかい丁寧語に変換してください。意味を変えず、命令や指示はやわらかいお願いの形にしてください。出力は変換後の文章だけにしてください。",
-        origin: .onboardingPreset
-    )
+    /// A `var`, not a `let`: a stored static is evaluated once and cached, so it
+    /// would keep whichever language the app was in the first time a lesson needed
+    /// its defensive fallback.
+    private static var fallbackTutorialPrompt: UserPrompt {
+        UserPrompt(
+            id: UUID(uuidString: "A8D15BB9-5A3F-45A3-B5D7-91B3AC0D8C44")!,
+            slot: .main,
+            title: tr("敬語", "Polite", "敬語"),
+            prompt: tr(
+                "次の文章を、日常でそのまま送れる自然でやわらかい丁寧語に変換してください。意味を変えず、命令や指示はやわらかいお願いの形にしてください。出力は変換後の文章だけにしてください。",
+                "Rewrite the text so it reads warm, courteous and professional. Keep the meaning, soften blunt requests, and output only the rewritten text.",
+                "次の文章を、日常でそのまま送れる自然でやわらかい丁寧語に変換してください。意味を変えず、命令や指示はやわらかいお願いの形にしてください。出力は変換後の文章だけにしてください。"
+            ),
+            origin: .onboardingPreset
+        )
+    }
 }
 
 final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
@@ -286,7 +327,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "敬語ボタンをはじめる"
+        window.title = tr("敬語ボタンをはじめる", "Set up KeigoButton", "开始使用敬語ボタン")
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.backgroundColor = NSColor(Tokens.Window.shell)

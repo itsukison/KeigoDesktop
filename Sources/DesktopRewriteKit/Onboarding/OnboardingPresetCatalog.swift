@@ -57,24 +57,78 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
     case international
     case japanese
     case social
+    case outreach
+    case polish
+
+    /// Which packs a language is actually offered.
+    ///
+    /// 简体中文 gets the Japanese list unchanged: that user writes Japanese and only
+    /// reads the explanation in Chinese (§17), so 海外とのやり取り and 日本語を整える
+    /// are as relevant to them as to a Japanese user. English drops both — one is
+    /// 日↔英 translation and the other is Japanese proofreading — and puts Outreach
+    /// and Polish in their place.
+    public static func available(for language: AppLanguage) -> [OnboardingPresetPack] {
+        language.writesJapanese
+            ? [.starter, .work, .international, .japanese, .social]
+            : [.starter, .work, .outreach, .polish, .social]
+    }
 
     public var title: String {
         switch self {
-        case .starter: return "まずは定番"
-        case .work: return "仕事の連絡"
-        case .international: return "海外とのやり取り"
-        case .japanese: return "日本語を整える"
-        case .social: return "友達・SNS"
+        case .starter: return tr("まずは定番", "The everyday four", "先从常用的开始")
+        case .work: return tr("仕事の連絡", "Work messages", "工作联络")
+        case .international: return tr("海外とのやり取り", "Across languages", "与海外沟通")
+        case .japanese: return tr("日本語を整える", "Polish Japanese", "打磨日语")
+        case .social: return tr("友達・SNS", "Friends and social", "朋友・社交")
+        case .outreach: return tr("営業・依頼", "Outreach", "商务外联")
+        case .polish: return tr("英語を整える", "Polish English", "打磨英语")
         }
     }
 
     public var caption: String {
         switch self {
-        case .starter: return "よく使われる4つから始める"
-        case .work: return "社内・上司・取引先への文章を整える"
-        case .international: return "日本語と英語を場面に合わせて訳す"
-        case .japanese: return "誤りを直し、自然で読みやすい日本語に"
-        case .social: return "LINEやSNSで自然に伝わる文章に"
+        case .starter:
+            return tr(
+                "よく使われる4つから始める",
+                "Tone, format, length and correctness",
+                "从最常用的4个开始"
+            )
+        case .work:
+            return tr(
+                "社内・上司・取引先への文章を整える",
+                "Chat, your manager, clients and meeting notes",
+                "整理发给同事、上司和客户的文字"
+            )
+        case .international:
+            return tr(
+                "日本語と英語を場面に合わせて訳す",
+                "Move between Japanese and English",
+                "在日语和英语之间自然转换"
+            )
+        case .japanese:
+            return tr(
+                "誤りを直し、自然で読みやすい日本語に",
+                "Fix mistakes and read naturally in Japanese",
+                "改正错误，写出自然易读的日语"
+            )
+        case .social:
+            return tr(
+                "LINEやSNSで自然に伝わる文章に",
+                "Sound like yourself on chat and social",
+                "在LINE和社交平台上自然地表达"
+            )
+        case .outreach:
+            return tr(
+                "初回連絡・追いかけ・お断りまで",
+                "First contact, follow-ups and saying no",
+                "从初次联系到跟进与婉拒"
+            )
+        case .polish:
+            return tr(
+                "文法を直し、読みやすい英語に",
+                "Fix grammar and read like a native writer",
+                "改正语法，写出易读的英语"
+            )
         }
     }
 
@@ -98,8 +152,23 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
         var builtinKey: String? = nil
     }
 
+    /// Titles are what the overlay bar draws, and the bar has **no overflow
+    /// handling** (§4): the row is intrinsically sized and simply gets wider. The
+    /// English titles are therefore kept to nine characters or fewer, which puts a
+    /// four-button English row within a few points of a four-button Japanese one.
     private var templates: [Template] {
+        AppLanguageState.current.writesJapanese ? japaneseTemplates : englishTemplates
+    }
+
+    /// Shared by 日本語 and 简体中文 — see `available(for:)`. `outreach` and `polish`
+    /// are English-only, so this branch only has to resolve them, never present
+    /// them; each falls back to the nearest pack that does exist here rather than
+    /// inventing four Japanese buttons nobody is offered.
+    private var japaneseTemplates: [Template] {
         switch self {
+        case .outreach: return OnboardingPresetPack.work.japaneseTemplates
+        case .polish: return OnboardingPresetPack.japanese.japaneseTemplates
+
         case .starter:
             return [
                 Template(
@@ -207,11 +276,135 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
             ]
         }
     }
+
+    /// English, and not a translation of the Japanese set.
+    ///
+    /// 敬語 has no English counterpart — the register a Japanese user needs a button
+    /// for is grammatical, and the English equivalent problem is tone, length and
+    /// correctness. So the four axes replace the four honorific levels: how it
+    /// sounds (Polite), what shape it takes (Email), how long it is (Shorten), and
+    /// whether it is right (Proofread). `polite` and `email` keep their
+    /// `builtin_key`s so the rows `handle_new_user()` already seeded are *reused*
+    /// rather than left behind as Japanese buttons (§6, `UserPromptIdentity`).
+    private var englishTemplates: [Template] {
+        switch self {
+        case .starter:
+            return [
+                Template(
+                    title: "Polite",
+                    prompt: "Rewrite the text so it reads warm, courteous and professional. Soften blunt requests into considerate ones, keep it natural rather than stiff or old-fashioned, and do not add flattery. Output only the rewritten text.",
+                    builtinKey: "polite"
+                ),
+                Template(
+                    title: "Email",
+                    prompt: "Rewrite the text as the body of a business email that could be sent as is. Lead with the point, break it into short natural paragraphs, and close politely. Do not add a subject line, signature or placeholder names, and do not invent facts that are not in the original.",
+                    builtinKey: "email"
+                ),
+                Template(
+                    title: "Shorten",
+                    prompt: "Rewrite the text so it says the same thing in noticeably fewer words. Cut filler, hedging and repetition, keep every fact, name, number and date, and keep the tone the writer used."
+                ),
+                Template(
+                    title: "Proofread",
+                    prompt: "Correct only the spelling, grammar, punctuation and word-choice errors in the text. Keep the meaning, tone, structure and paragraph breaks as they are, and output only the corrected text."
+                ),
+            ]
+
+        case .work:
+            return [
+                Template(
+                    title: "Chat",
+                    prompt: "Rewrite the text as a Slack or Teams message that can be sent as is: short, clear and friendly. Lead with the point, drop email greetings and sign-offs, and stay polite without being formal."
+                ),
+                Template(
+                    title: "Manager",
+                    prompt: "Rewrite the text as a message to the writer's manager. Be direct and respectful, put the ask or the status first, keep it brief, and make any request easy to answer. Do not over-apologise."
+                ),
+                Template(
+                    title: "Client",
+                    prompt: "Rewrite the text as a message to an external client. Be clear, professional and warm, make next steps explicit, and never add commitments, dates or names that are not in the original."
+                ),
+                Template(
+                    title: "Recap",
+                    prompt: "Turn the notes into a short recap that shows decisions, open questions, owners and deadlines. Do not invent anything that is missing; keep every number, date and name exactly as written."
+                ),
+            ]
+
+        case .outreach:
+            return [
+                Template(
+                    title: "Follow-up",
+                    prompt: "Rewrite the text as a short follow-up to a message that has not been answered. Be friendly and low-pressure, restate the ask in one line, make it easy to reply, and do not guilt the reader or imply they were rude."
+                ),
+                Template(
+                    title: "Intro",
+                    prompt: "Rewrite the text as a first-contact message to someone the writer has not met. Open with why the writer is reaching out to this person specifically, keep it under a short paragraph, end with one clear and easy ask, and avoid hype and buzzwords."
+                ),
+                Template(
+                    title: "Persuade",
+                    prompt: "Rewrite the text to be more persuasive. Lead with the benefit to the reader, back the ask with the reasons already present in the original, and stay confident without exaggerating or inventing evidence."
+                ),
+                Template(
+                    title: "Decline",
+                    prompt: "Rewrite the text as a polite decline. Say no clearly so it cannot be misread as a maybe, keep the reason the writer gave, thank the reader, and leave the relationship intact. Do not promise future action the original did not offer."
+                ),
+            ]
+
+        case .polish:
+            return [
+                Template(
+                    title: "Grammar",
+                    prompt: "Correct only the grammar, articles, prepositions, tense and spelling in the text. Keep the writer's wording, meaning and tone wherever it is already correct, and output only the corrected text."
+                ),
+                Template(
+                    title: "Natural",
+                    prompt: "Rewrite the text so it reads like a fluent native speaker wrote it. Fix awkward phrasing, word order and translated-sounding expressions, and keep the meaning and the writer's intent."
+                ),
+                Template(
+                    title: "Simplify",
+                    prompt: "Rewrite the text in plain English. Use shorter sentences and everyday words, drop jargon where a common word works, and keep all of the information."
+                ),
+                Template(
+                    title: "Formal",
+                    prompt: "Rewrite the text in formal written English suitable for an official or contractual context. Remove contractions and casual phrasing, stay precise, and do not add legal language or claims that are not in the original."
+                ),
+            ]
+
+        case .social:
+            return [
+                Template(
+                    title: "Friendly",
+                    prompt: "Rewrite the text so it sounds warm and easy to read in a chat. Keep it conversational and keep any emoji the writer used, without becoming over-familiar."
+                ),
+                Template(
+                    title: "Post",
+                    prompt: "Rewrite the text as a social post that is easy to read: the point in the first line, short lines after it. Keep the facts and the writer's voice, and do not add hashtags that are not already there."
+                ),
+                Template(
+                    title: "Comment",
+                    prompt: "Rewrite the text as a friendly public comment to someone the writer does not know. Stay respectful and brief, and avoid both stiffness and over-familiarity."
+                ),
+                Template(
+                    title: "Casual",
+                    prompt: "Rewrite the text in a relaxed tone for a friend. Keep it natural and short, keep the meaning, and do not force slang."
+                ),
+            ]
+
+        // Offered only when the buttons write Japanese (`available(for:)`); present
+        // here so a pack saved before a language change still resolves.
+        case .international: return OnboardingPresetPack.polish.englishTemplates
+        case .japanese: return OnboardingPresetPack.polish.englishTemplates
+        }
+    }
 }
 
 public enum OnboardingPracticeSample {
     public static func text(for prompt: UserPrompt) -> String {
         let clue = "\(prompt.title) \(prompt.prompt)".lowercased()
+
+        if !AppLanguageState.current.writesJapanese {
+            return englishText(clue: clue, builtinKey: prompt.builtinKey)
+        }
 
         if prompt.builtinKey == "translateToEnglish"
             || clue.contains("英訳") || clue.contains("英語")
@@ -253,5 +446,59 @@ public enum OnboardingPracticeSample {
         }
 
         return "来週の打ち合わせについて、火曜か水曜の午後で都合のよい時間を教えてください。"
+    }
+
+    /// The English practice draft has to be *wrong* in the way its button fixes,
+    /// or the lesson ends with a rewrite that looks identical to the input. Each
+    /// sample carries the specific defect: blunt for Polite, padded for Shorten,
+    /// misspelled for Proofread, translated-sounding for Natural.
+    private static func englishText(clue: String, builtinKey: String?) -> String {
+        if clue.contains("recap") || clue.contains("notes") || clue.contains("decisions") {
+            return "standup notes\nnew pricing page ships friday. dana writes the copy, sam checks the images by thursday. we decide the discount next week."
+        }
+        if clue.contains("proofread") || clue.contains("spelling") || clue.contains("grammar") {
+            return "Just wanted to confirm that tommorow meeting is still at 3pm, and if you could sent me the deck before then that would be great."
+        }
+        if clue.contains("shorten") || clue.contains("fewer words") || clue.contains("concise") {
+            return "I just wanted to quickly reach out and check in with you about whether or not it might potentially be possible for us to move the meeting that we have scheduled for tomorrow afternoon to a slightly later time, if that works for you."
+        }
+        if clue.contains("simplify") || clue.contains("plain english") {
+            return "Following alignment with the relevant stakeholders, we will endeavour to disseminate the finalised remediation approach at the earliest available juncture."
+        }
+        if clue.contains("follow-up") || clue.contains("follow up") || clue.contains("not been answered") {
+            return "hi, checking in again on the quote I sent last week. let me know."
+        }
+        if clue.contains("decline") || clue.contains("say no") {
+            return "cant take this on right now, my quarter is full. maybe later"
+        }
+        if clue.contains("intro") || clue.contains("first-contact") || clue.contains("persuade") {
+            return "hi, we built a tool that fixes your writing. it saves time. want a demo this week?"
+        }
+        if clue.contains("chat") || clue.contains("slack") || clue.contains("teams") {
+            return "hey there are still a few things not reviewed for next weeks release, would be great if someone could look today"
+        }
+        if clue.contains("manager") {
+            return "want to move tomorrows meeting to 3. does that work"
+        }
+        if clue.contains("client") || clue.contains("email") || builtinKey == "email" {
+            return "need to move tomorrows meeting to 3pm. checking if thats ok with you"
+        }
+        if clue.contains("post") || clue.contains("comment") || clue.contains("social") {
+            return "we shipped a new thing today you select some text and press a button thats it please try it"
+        }
+        if clue.contains("casual") || clue.contains("friendly") || clue.contains("friend") {
+            return "I am writing to inform you that I will unfortunately be arriving approximately fifteen minutes later than the agreed time."
+        }
+        if clue.contains("formal") {
+            return "so we cant get it done by friday, well push it to monday instead. hope thats fine"
+        }
+        if clue.contains("natural") {
+            return "I think that it is possible to change tomorrow's meeting into 3 o'clock, if your convenience is good."
+        }
+        if builtinKey == "polite" || clue.contains("polite") || clue.contains("courteous") {
+            return "move tomorrows meeting to 3, i cant make the morning"
+        }
+
+        return "let me know what time works for you tuesday or wednesday afternoon for next weeks meeting"
     }
 }

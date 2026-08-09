@@ -15,7 +15,9 @@ struct KeigoButtonMacApp {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpdaterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpdaterDelegate,
+    @preconcurrency SPUStandardUserDriverDelegate
+{
 
     private var overlay: OverlayController?
     private var mainWindow: MainWindowController?
@@ -34,13 +36,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     private var hideOverlayItem: NSMenuItem?
     private var copyTriggerItem: NSMenuItem?
     private let onboardingProgress = OnboardingProgressStore()
+    private let languageStore = AppLanguageStore()
+    private var statusMenu: NSMenu?
     private var updaterStarted = false
     private var deferredUpdateCheckTask: Task<Void, Never>?
 
     private lazy var updaterController = SPUStandardUpdaterController(
         startingUpdater: false,
         updaterDelegate: self,
-        userDriverDelegate: nil
+        userDriverDelegate: self
     )
 
     private lazy var appVersion: String = {
@@ -58,6 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         // reached from the menu bar and does not change the activation policy — a
         // policy flip on open would momentarily steal focus, which §4 forbids.
         NSApp.setActivationPolicy(.accessory)
+        // Before any window, menu or view is built: `tr` reads a global, and anything
+        // constructed ahead of this would be built in the wrong language and never
+        // rebuilt (§17).
+        languageStore.activate()
         PostHogConfiguration.configure()
 
         let rewriteService = DesktopRewriteService(config: config, auth: auth)
@@ -83,6 +91,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             appVersion: appVersion,
             onPromptsChanged: { [weak overlay] in await overlay?.refreshPrompts() }
         )
+        // The menu bar is AppKit, built once, and outside every SwiftUI observation
+        // graph — so it is the one surface a language change cannot reach on its own.
+        mainModel?.onLanguageChanged = { [weak self] in self?.relabelForLanguage() }
+        // A scheduled Sparkle check is intentionally quiet. When the dashboard notice
+        // is pressed, this brings Sparkle's already-validated update into focus and
+        // leaves download, signature verification and installation with Sparkle.
+        mainModel?.onUpdateRequested = { [weak self] in self?.checkForUpdates(nil) }
 
         // §9 row 41. A free user who hits the monthly cap pressed a button and got
         // nothing back, so the plan pane is the answer to what just happened — not a
@@ -164,13 +179,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         let appItem = NSMenuItem()
         let app = NSMenu()
         app.addItem(
-            withTitle: "敬語ボタンを隠す",
+            withTitle: tr("敬語ボタンを隠す", "Hide KeigoButton", "隐藏敬語ボタン"),
             action: #selector(NSApplication.hide(_:)),
             keyEquivalent: "h"
         )
         app.addItem(.separator())
         app.addItem(
-            withTitle: "終了",
+            withTitle: tr("終了", "Quit", "退出"),
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -178,15 +193,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         main.addItem(appItem)
 
         let editItem = NSMenuItem()
-        let edit = NSMenu(title: "編集")
-        edit.addItem(withTitle: "取り消す", action: Selector(("undo:")), keyEquivalent: "z")
-        edit.addItem(withTitle: "やり直す", action: Selector(("redo:")), keyEquivalent: "Z")
-        edit.addItem(.separator())
-        edit.addItem(withTitle: "カット", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "コピー", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "ペースト", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        let edit = NSMenu(title: tr("編集", "Edit", "编辑"))
         edit.addItem(
-            withTitle: "すべてを選択",
+            withTitle: tr("取り消す", "Undo", "撤销"),
+            action: Selector(("undo:")),
+            keyEquivalent: "z"
+        )
+        edit.addItem(
+            withTitle: tr("やり直す", "Redo", "重做"),
+            action: Selector(("redo:")),
+            keyEquivalent: "Z"
+        )
+        edit.addItem(.separator())
+        edit.addItem(
+            withTitle: tr("カット", "Cut", "剪切"),
+            action: #selector(NSText.cut(_:)),
+            keyEquivalent: "x"
+        )
+        edit.addItem(
+            withTitle: tr("コピー", "Copy", "复制"),
+            action: #selector(NSText.copy(_:)),
+            keyEquivalent: "c"
+        )
+        edit.addItem(
+            withTitle: tr("ペースト", "Paste", "粘贴"),
+            action: #selector(NSText.paste(_:)),
+            keyEquivalent: "v"
+        )
+        edit.addItem(
+            withTitle: tr("すべてを選択", "Select All", "全选"),
             action: #selector(NSText.selectAll(_:)),
             keyEquivalent: "a"
         )
@@ -194,14 +229,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         main.addItem(editItem)
 
         let windowItem = NSMenuItem()
-        let window = NSMenu(title: "ウインドウ")
+        let window = NSMenu(title: tr("ウインドウ", "Window", "窗口"))
         window.addItem(
-            withTitle: "閉じる",
+            withTitle: tr("閉じる", "Close", "关闭"),
             action: #selector(NSWindow.performClose(_:)),
             keyEquivalent: "w"
         )
         window.addItem(
-            withTitle: "しまう",
+            withTitle: tr("しまう", "Minimize", "最小化"),
             action: #selector(NSWindow.performMiniaturize(_:)),
             keyEquivalent: "m"
         )
@@ -221,31 +256,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         let markImage = NSImage(named: Icon.Name.mark.rawValue)
         markImage?.isTemplate = true
         markImage?.size = NSSize(width: 18, height: 18)
-        markImage?.accessibilityDescription = "敬語ボタン"
+        markImage?.accessibilityDescription = productName
         item.button?.image = markImage
 
         let menu = NSMenu()
         menu.delegate = self
+        statusMenu = menu
 
         menu.addItem(
-            withTitle: "敬語ボタンを開く",
+            withTitle: tr("敬語ボタンを開く", "Open KeigoButton", "打开敬語ボタン"),
             action: #selector(openMainWindow),
             keyEquivalent: ""
         ).target = self
         let onboardingItem = menu.addItem(
-            withTitle: onboardingProgress.isComplete ? "使い方を見る" : "セットアップを続ける",
+            withTitle: onboardingMenuTitle,
             action: #selector(openOnboarding),
             keyEquivalent: ""
         )
         onboardingItem.target = self
         onboardingMenuItem = onboardingItem
         menu.addItem(
-            withTitle: "環境設定…",
+            withTitle: tr("環境設定…", "Settings…", "偏好设置…"),
             action: #selector(openPreferences),
             keyEquivalent: ","
         ).target = self
         menu.addItem(
-            withTitle: "ボタンを再読み込み",
+            withTitle: tr("ボタンを再読み込み", "Reload buttons", "重新加载按钮"),
             action: #selector(reloadPrompts),
             keyEquivalent: "r"
         ).target = self
@@ -267,7 +303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         copyTriggerItem = copyItem
         menu.addItem(.separator())
         let updateItem = menu.addItem(
-            withTitle: "アップデートを確認…",
+            withTitle: tr("アップデートを確認…", "Check for Updates…", "检查更新…"),
             action: #selector(checkForUpdates),
             keyEquivalent: ""
         )
@@ -275,7 +311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         checkForUpdatesMenuItem = updateItem
         menu.addItem(.separator())
         menu.addItem(
-            withTitle: "終了",
+            withTitle: tr("終了", "Quit", "退出"),
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -284,22 +320,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         statusItem = item
     }
 
+    /// The product name is the same word in Japanese and Chinese — a 简体中文 user is
+    /// writing Japanese and knows the app by its Japanese name (§17). Only English
+    /// spells it out.
+    private var productName: String { tr("敬語ボタン", "KeigoButton", "敬語ボタン") }
+
+    private var onboardingMenuTitle: String {
+        onboardingProgress.isComplete
+            ? tr("使い方を見る", "See how it works", "查看使用方法")
+            : tr("セットアップを続ける", "Continue setup", "继续设置")
+    }
+
+    /// Both menus are AppKit objects built once at launch, so a language chosen on
+    /// §15's first page leaves them in the old one. Rebuilding is cheap and happens
+    /// at most a handful of times in a session.
+    private func relabelForLanguage() {
+        installMainMenu()
+        if let statusItem {
+            NSStatusBar.system.removeStatusItem(statusItem)
+        }
+        installStatusItem()
+    }
+
     /// Runs right before the status menu opens — the same "ask again at click time"
     /// shape `PillRootView`'s right-click menu uses for its own copy-disabled row,
     /// just via AppKit's delegate hook instead of a fresh SwiftUI `ViewBuilder` call.
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard let overlay else { return }
+        let hour = OverlaySnooze.Duration.oneHour.label
         if overlay.isHiddenBySnooze {
             let minutes = overlay.hiddenRemainingMinutes ?? 0
-            hideOverlayItem?.title = "敬語ボタンを今すぐ再表示する（残り\(minutes)分）"
+            hideOverlayItem?.title = tr(
+                "敬語ボタンを今すぐ再表示する（残り\(minutes)分）",
+                "Show the bar now (\(minutes) min left)",
+                "立即重新显示敬語ボタン（剩余\(minutes)分钟）"
+            )
         } else {
-            hideOverlayItem?.title = "敬語ボタンを\(OverlaySnooze.Duration.oneHour.label)非表示にする"
+            hideOverlayItem?.title = tr(
+                "敬語ボタンを\(hour)非表示にする",
+                "Hide the bar for \(hour)",
+                "隐藏敬語ボタン\(hour)"
+            )
         }
         if overlay.isCopyTriggerDisabled {
             let minutes = overlay.copyDisabledRemainingMinutes ?? 0
-            copyTriggerItem?.title = "コピー機能を今すぐ有効にする（残り\(minutes)分）"
+            copyTriggerItem?.title = tr(
+                "コピー機能を今すぐ有効にする（残り\(minutes)分）",
+                "Turn copy detection back on (\(minutes) min left)",
+                "立即启用复制功能（剩余\(minutes)分钟）"
+            )
         } else {
-            copyTriggerItem?.title = "コピー機能を\(OverlaySnooze.Duration.oneHour.label)無効にする"
+            copyTriggerItem?.title = tr(
+                "コピー機能を\(hour)無効にする",
+                "Turn copy detection off for \(hour)",
+                "停用复制功能\(hour)"
+            )
         }
         checkForUpdatesMenuItem?.isEnabled = updaterStarted
             && updaterController.updater.canCheckForUpdates
@@ -374,11 +449,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             let coordinator = OnboardingCoordinator(
                 mainModel: mainModel,
                 overlay: overlay,
-                progress: onboardingProgress
+                progress: onboardingProgress,
+                languageStore: languageStore
             ) { [weak self] in
                 guard let self else { return }
                 self.onboardingWindow?.close()
-                self.onboardingMenuItem?.title = "使い方を見る"
+                self.onboardingMenuItem?.title = self.onboardingMenuTitle
                 self.startUpdaterIfConfigured()
                 self.openMainWindow()
             }
@@ -413,10 +489,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
                 domain: "com.core7.keigobutton.mac.updates",
                 code: 1,
                 userInfo: [
-                    NSLocalizedDescriptionKey: "現在の操作が終わってからアップデートを確認します。"
+                    NSLocalizedDescriptionKey: tr(
+                        "現在の操作が終わってからアップデートを確認します。",
+                        "Updates will be checked once the current rewrite is finished.",
+                        "将在当前操作完成后检查更新。"
+                    )
                 ]
             )
         }
+    }
+
+    // MARK: - Sparkle gentle reminders
+
+    /// This accessory app has no Dock presence and its scheduled Sparkle alert can be
+    /// ordered behind the app the user is working in. Claim gentle-reminder support so
+    /// background discoveries become a durable dashboard notice instead. User-started
+    /// checks still use Sparkle's standard update window.
+    var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem,
+        andInImmediateFocus immediateFocus: Bool
+    ) -> Bool {
+        false
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool,
+        forUpdate update: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        guard !handleShowingUpdate, !state.userInitiated else { return }
+        mainModel?.offerUpdate(version: update.displayVersionString)
+    }
+
+    /// Once the user has brought Sparkle's real update window forward, the dashboard
+    /// has done its job. Sparkle owns the remaining dismiss, skip and install choices.
+    func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+        mainModel?.clearUpdateNotice()
+    }
+
+    func standardUserDriverWillFinishUpdateSession() {
+        mainModel?.clearUpdateNotice()
     }
 
     /// Sparkle's delegate can decline a scheduled check, but declining alone postpones
