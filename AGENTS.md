@@ -49,8 +49,14 @@ Verified (2026-08-07):
   `Developer ID Application` identity for team `4KS6YS23KT`; the App Store Connect Team
   API key authenticated with `notarytool`; the permanent Sparkle Ed25519 key lives in
   Keychain; and the two GitHub environments, Pages, Actions permissions, six production
-  secrets and public-key variable are configured. **No GitHub release workflow or
-  Sparkle update chain has run yet.** See `docs/releasing.md`.
+  secrets and public-key variable are configured. **`v0.1.0` was released successfully
+  on 2026-08-09:** workflow run `31295352067` exported a universal app, verified its
+  Developer ID signature and hardened/no-sandbox entitlements, notarized and stapled
+  the app and DMG, signed the Sparkle archive/appcast, published both release assets and
+  deployed Pages. The public DMG was downloaded again, matched GitHub's SHA-256 digest,
+  passed `stapler validate`, and Gatekeeper reported `Notarized Developer ID`.
+  **Not verified: installing the public DMG and the old-build → new-build Sparkle update
+  chain.** See `docs/releasing.md`.
 - **2026-08-08 — adaptive rewrite practice and a real reply practice.** Onboarding is
   now eight steps: アカウント → 用途 → ボタン → アクセス → the real pill → 書き換え
   → 返信 → 完了. The first practice's live Mail draft is selected from the reviewed
@@ -288,11 +294,12 @@ Known gaps, all deliberate:
 
 - Analytics is `NoopAnalytics`. §7's new PostHog project does not exist yet, so
   there is no token to point at; the event shape is fixed in `App/Analytics.swift`.
-- Sparkle and the distribution credentials are wired, but the GitHub release workflow
-  and an installed old-build → new-build Sparkle update have not run. The local
-  Developer ID identity, Apple notarization API authentication, permanent Sparkle key,
-  GitHub environments, encrypted secrets, Actions permissions and Pages source were all
-  verified on 2026-08-09. See §9 and `docs/releasing.md`.
+- Sparkle and the distribution credentials are wired, and the `v0.1.0` GitHub release
+  workflow passed end to end. What remains unproven is the user-side install and an
+  installed old-build → new-build Sparkle update. The local Developer ID identity,
+  Apple notarization API authentication, permanent Sparkle key, GitHub environments,
+  encrypted secrets, Actions permissions, Pages source, public DMG signature/ticket and
+  live signed appcast were all verified on 2026-08-09. See §9 and `docs/releasing.md`.
 - Inter and Geist Mono are referenced by `DesignTokens` but not yet bundled, so
   type currently falls back to the system font.
 - `desktop_delete_old_usage_buckets` is not scheduled. Add it to the pg_cron
@@ -1188,8 +1195,9 @@ taller than the area it sits in.
   `security find-identity` reported `Developer ID Application: Yihuan Sun
   (4KS6YS23KT)` with its private key available. The password-protected source `.p12`
   stays outside the repository and its encrypted archive/password are separate GitHub
-  production secrets. Distribution still needs one successful workflow artifact and
-  the two-version Sparkle test in `docs/releasing.md`.
+  production secrets. The `v0.1.0` workflow artifact is signed, notarized, stapled and
+  public; distribution now needs only the owner install and two-version Sparkle test in
+  `docs/releasing.md`.
 - **`PRODUCT_NAME` must stay ASCII.** Setting it to `敬語ボタン` makes the
   executable `Contents/MacOS/敬語ボタン`, and Xcode's debug-dylib signing flow then
   signs `*.debug.dylib` and `__preview.dylib` but silently skips the main
