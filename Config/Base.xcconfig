@@ -1,0 +1,8 @@
+// Tracked defaults used by local builds and CI. A developer can override them in the
+// ignored Local.xcconfig; release builds receive production values on the xcodebuild
+// command line, which has higher precedence than either file.
+
+POSTHOG_PROJECT_TOKEN =
+POSTHOG_HOST = https:/$()/us.i.posthog.com
+
+#include? "Local.xcconfig"

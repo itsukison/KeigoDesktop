@@ -33,12 +33,11 @@ targets:
     type: application
     platform: macOS
     # Supplies POSTHOG_PROJECT_TOKEN / POSTHOG_HOST to Info.plist's $() substitutions.
-    # Gitignored and absent on CI — the release workflow passes both to xcodebuild on
-    # the command line, which outranks an xcconfig, so a missing file there is only a
-    # warning. Locally its absence is a launch crash: see Config/Local.example.xcconfig.
+    # The tracked base optionally includes the ignored local override; the release
+    # workflow passes production values on the xcodebuild command line, which wins.
     configFiles:
-      Debug: Config/Local.xcconfig
-      Release: Config/Local.xcconfig
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
     sources:
       - path: App
     dependencies:
