@@ -18,8 +18,11 @@ Verified (2026-08-07):
   title and draws one explicit `textSecondary` hint layer, matching the result
   refinement field. The reply hint is shortened to 「返信の指示（空欄でおまかせ）」 /
   `Reply instructions (optional)` / 「回复要求（可留空）」 and is unconditionally one
-  line, so an empty reply composer stays at its 34 pt floor. Only text the user actually
-  types may wrap to `inputBarMaxLines` and grow the bar. `swift test` passes all 155
+  line, so an empty reply composer stays at its 34 pt floor. The composer also drops its
+  separate 返信 / Reply / 回复 capsule: once the placeholder names the mode, that second
+  label is redundant, and compression reduced it to an unexplained dark lozenge beside
+  the mascot. Only text the user actually types may wrap to `inputBarMaxLines` and grow
+  the bar. `swift test` passes all 155
   tests and unsigned `xcodebuild` succeeds with only the existing warnings. **Not
   verified on screen:** all three languages in both composer modes and a real second-line
   typed instruction remain the owner check.
@@ -1023,7 +1026,10 @@ arrive. Its frame stays valid while hidden, which is what they anchor to.
   native title; `InputBar` draws an explicit one-line `textSecondary` layer instead.
   This is both a colour invariant — the dark overlay does not inherit a black placeholder
   from the system appearance — and a geometry invariant: the shorter optional-reply hint
-  cannot make an untouched composer taller than its 34 pt floor.
+  cannot make an untouched composer taller than its 34 pt floor. The reply composer has
+  no second mode capsule beside the mascot; the placeholder already names the mode, and
+  the duplicate capsule compressed into an unlabeled dark shape. (`ReplyBar` keeps its
+  badge in the armed state, where there is no field or placeholder.)
 - **Only typed guidance wraps, up to `inputBarMaxLines` (3), and the window height
   follows.** §4's 28/34 pt are a floor, not a fixed height — `currentSize()` takes the
   larger of the measurement and the token.

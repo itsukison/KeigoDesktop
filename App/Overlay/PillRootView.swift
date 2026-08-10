@@ -332,19 +332,6 @@ struct InputBar: View {
         HStack(spacing: 8) {
             BrandMark(animation: .engaged)
 
-            if isReply {
-                // The bar arrived here from a state that showed the copied message, and
-                // the message itself is too long to keep on screen while typing. This
-                // is what is left of it: a reminder of which mode Return is about to
-                // submit into.
-                Text(tr("返信", "Reply", "回复"))
-                    .font(Tokens.Font.body(Tokens.Overlay.labelSmall, weight: .medium))
-                    .foregroundStyle(Tokens.Overlay.textPrimary)
-                    .padding(.horizontal, 7)
-                    .frame(height: 18)
-                    .background(Capsule().fill(Tokens.Overlay.hairline))
-            }
-
             ZStack(alignment: .leading) {
                 // One line regardless of mode. Typed guidance may grow to three lines,
                 // but a hint must not make the bar taller before the user writes.
