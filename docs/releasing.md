@@ -4,7 +4,21 @@ The first public build must already contain Sparkle's public EdDSA key. Existing
 installations use that key to authenticate every later update archive; shipping an
 empty or temporary key creates a manual-update break in the chain.
 
-Current release status (2026-08-09):
+Current release status (2026-08-10):
+
+- **`v0.1.3` is published and is `latest`.** Workflow run `31355973591` succeeded in
+  both jobs from commit `7b00774`. The public
+  `/releases/latest/download/KeigoButton.dmg` downloads with SHA-256
+  `677a65cd…f09ad2aff`, matching GitHub's asset digest; `stapler validate` passes and
+  Gatekeeper reports `Notarized Developer ID` for
+  `Developer ID Application: Yihuan Sun (4KS6YS23KT)`. The live Pages appcast carries
+  four items with 0.1.3 newest — `sparkle:version` 6, the real Japanese release notes
+  embedded, and an enclosure length matching the released
+  `KeigoButton-0.1.3.zip` byte for byte (8,334,768).
+- **0.1.2 → 0.1.3 is the first pair of public releases signed by the same identities,
+  so the two-version Sparkle test below can finally be run for real.** It has not been.
+
+Previous release status (2026-08-09):
 
 - The password-protected Developer ID `.p12` remains outside the repository and its
   identity is imported. `security find-identity` confirms `Developer ID Application`

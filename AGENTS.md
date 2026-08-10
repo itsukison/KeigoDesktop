@@ -11,6 +11,17 @@ The first run produced `debug.png` and a round of overlay fixes (§4, §8).
 
 Verified (2026-08-07):
 
+- **2026-08-10 — `v0.1.3` is published, and it is the first release that makes the
+  Sparkle chain testable.** Run `31355973591` succeeded in both jobs from commit
+  `7b00774`, carrying the welcome-offer/USD pricing work and the two new analytics
+  events. Read back rather than assumed: the public
+  `/releases/latest/download/KeigoButton.dmg` matches GitHub's SHA-256 digest,
+  `stapler validate` passes, Gatekeeper reports `Notarized Developer ID` for team
+  `4KS6YS23KT`, and the live Pages appcast has 0.1.3 newest at `sparkle:version` 6
+  with an enclosure length equal to the released ZIP. **Not verified: an installed
+  0.1.2 updating itself to 0.1.3.** That is the one thing `docs/releasing.md` has
+  listed as outstanding since the first release, and it is now the pair to test on —
+  install the 0.1.2 DMG on a clean account, then use 「アップデートを確認…」.
 - **2026-08-10 — English is priced in dollars, and first run now makes one offer.**
   §17 split interface language from writing language and left a third question
   unasked: what an English user is *charged*. They were quoted ¥1,480 in English
