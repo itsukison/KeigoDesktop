@@ -11,6 +11,18 @@ The first run produced `debug.png` and a round of overlay fixes (§4, §8).
 
 Verified (2026-08-07):
 
+- **2026-08-10 — the shared custom/reply composer no longer asks AppKit to colour its
+  placeholder.** In a non-activating panel the native placeholder followed the system
+  appearance, ignored the dark overlay palette and rendered black; both ✎ and reply
+  guidance became nearly invisible. `InputBar` now gives `TextField` an empty native
+  title and draws one explicit `textSecondary` hint layer, matching the result
+  refinement field. The reply hint is shortened to 「返信の指示（空欄でおまかせ）」 /
+  `Reply instructions (optional)` / 「回复要求（可留空）」 and is unconditionally one
+  line, so an empty reply composer stays at its 34 pt floor. Only text the user actually
+  types may wrap to `inputBarMaxLines` and grow the bar. `swift test` passes all 155
+  tests and unsigned `xcodebuild` succeeds with only the existing warnings. **Not
+  verified on screen:** all three languages in both composer modes and a real second-line
+  typed instruction remain the owner check.
 - **2026-08-10 — 保存 was three stacked characters at the shipping window size, and the
   cause was a `Spacer`, not a narrow window.** `SettingsRow` puts `Spacer(minLength: 12)`
   between its title and its trailing content, and the 表示名 row's trailing content was a
@@ -1007,9 +1019,14 @@ arrive. Its frame stays valid while hidden, which is what they anchor to.
   keystroke and twitched on every one after it. And under
   `fixedSize(horizontal:)` its ideal width is unbounded, so a long prompt grew
   the window off the side of the screen rather than wrapping.
-- **Wraps, up to `inputBarMaxLines` (3), and the window height follows.** §4's
-  28/34 pt are a floor, not a fixed height — `currentSize()` takes the larger of
-  the measurement and the token.
+- **The placeholder never wraps and never comes from AppKit.** `TextField` has an empty
+  native title; `InputBar` draws an explicit one-line `textSecondary` layer instead.
+  This is both a colour invariant — the dark overlay does not inherit a black placeholder
+  from the system appearance — and a geometry invariant: the shorter optional-reply hint
+  cannot make an untouched composer taller than its 34 pt floor.
+- **Only typed guidance wraps, up to `inputBarMaxLines` (3), and the window height
+  follows.** §4's 28/34 pt are a floor, not a fixed height — `currentSize()` takes the
+  larger of the measurement and the token.
 - **Cancellable, three ways**: Escape, clicking anywhere outside (the panel
   resigning key), or submitting. An input bar you can only leave by generating
   is a trap. Escape is wired through both `onExitCommand` and

@@ -312,6 +312,19 @@ struct InputBar: View {
         isReply || !text.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// Rendered separately from the field. AppKit's native placeholder ignores the
+    /// overlay foreground in a non-activating panel and follows the system appearance,
+    /// which can put black text on this always-dark bar.
+    private var placeholderText: String {
+        isReply
+            ? tr(
+                "返信の指示（空欄でおまかせ）",
+                "Reply instructions (optional)",
+                "回复要求（可留空）"
+            )
+            : tr("どう書き換えますか？", "How should this be rewritten?", "想怎么改写？")
+    }
+
     var body: some View {
         // Centred, not top-aligned. Top alignment is only right while the field is
         // wrapped, and it is on one line almost always — which left the text sitting
@@ -332,26 +345,30 @@ struct InputBar: View {
                     .background(Capsule().fill(Tokens.Overlay.hairline))
             }
 
-            // `axis: .vertical` + a line-limit range is what makes a long prompt wrap
-            // instead of running off the side. Return still submits; the range only
-            // governs wrapping.
-            TextField(
-                isReply
-                    ? tr(
-                        "どう返信しますか？（空欄でおまかせ）",
-                        "How should this be answered? (leave empty to let it decide)",
-                        "想怎么回复？（留空则自动判断）"
-                    )
-                    : tr("どう書き換えますか？", "How should this be rewritten?", "想怎么改写？"),
-                text: $text,
-                axis: .vertical
-            )
-            .textFieldStyle(.plain)
-            .font(Tokens.Font.body(Tokens.Overlay.labelLarge))
-            .foregroundStyle(Tokens.Overlay.textPrimary)
-            .lineLimit(1...Tokens.Geometry.inputBarMaxLines)
-            .focused($focused)
-            .onSubmit { controller.submitInput(text) }
+            ZStack(alignment: .leading) {
+                // One line regardless of mode. Typed guidance may grow to three lines,
+                // but a hint must not make the bar taller before the user writes.
+                if text.isEmpty {
+                    Text(placeholderText)
+                        .font(Tokens.Font.body(Tokens.Overlay.labelLarge))
+                        .foregroundStyle(Tokens.Overlay.textSecondary)
+                        .lineLimit(1)
+                        .allowsHitTesting(false)
+                }
+
+                // `axis: .vertical` + a line-limit range is what lets the user's own
+                // long guidance wrap. Return still submits; the range governs wrapping.
+                TextField("", text: $text, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(Tokens.Font.body(Tokens.Overlay.labelLarge))
+                    .foregroundStyle(Tokens.Overlay.textPrimary)
+                    .lineLimit(1...Tokens.Geometry.inputBarMaxLines)
+                    .focused($focused)
+                    .accessibilityLabel(placeholderText)
+                    .onSubmit { controller.submitInput(text) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
 
             Button {
                 controller.submitInput(text)
