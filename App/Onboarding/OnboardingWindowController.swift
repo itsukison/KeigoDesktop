@@ -22,6 +22,19 @@ final class OnboardingCoordinator: ObservableObject {
     @Published private(set) var isSavingButtons = false
     @Published private(set) var reviewError: String?
 
+    // MARK: Welcome offer
+
+    /// Preselected annual, per `docs/pricing.md` §4: annual prepay converts cash flow
+    /// forward and removes eleven monthly churn decisions.
+    @Published private(set) var offerInterval: Entitlement.Interval = .year
+    /// When the 72 hours run out, as minted by the server. Nil until the page opens
+    /// the window, and nil forever for an account that is not eligible.
+    @Published private(set) var offerExpiresAt: Date?
+    /// Set once the browser has been handed the Checkout URL. It only changes what the
+    /// secondary action is *called* — 「あとで」 reads as declining, and someone who has
+    /// already gone to pay is not declining.
+    @Published private(set) var offerCheckoutOpened = false
+
     let mainModel: MainModel
     let overlay: OverlayController
 
@@ -52,6 +65,9 @@ final class OnboardingCoordinator: ObservableObject {
         customPracticeCompleted = false
         replyPracticeCompleted = false
         selectedSource = nil
+        offerInterval = .year
+        offerExpiresAt = nil
+        offerCheckoutOpened = false
         selectedPack = progress.savedPack
         buttonDrafts = progress.savedDrafts
         language = languageStore.resolved
@@ -82,6 +98,10 @@ final class OnboardingCoordinator: ObservableObject {
         case .bar, .source, .complete:
             overlay.endTutorial()
             overlay.setVisible(true)
+        case .offer:
+            overlay.endTutorial()
+            overlay.setVisible(true)
+            openWelcomeOfferWindow()
         case .practice:
             overlay.setVisible(true)
             overlay.beginTutorial(prompts: tutorialPrompts) { [weak self] in
@@ -118,9 +138,75 @@ final class OnboardingCoordinator: ObservableObject {
         case .customPractice where customPracticeCompleted: move(to: .replyPractice)
         case .replyPractice where replyPracticeCompleted: move(to: .source)
         case .source where selectedSource != nil: submitSource()
+        case .offer: startOfferCheckout()
         case .complete: finish()
         default: break
         }
+    }
+
+    // MARK: - Welcome offer
+
+    func select(offerInterval next: Entitlement.Interval) {
+        offerInterval = next
+    }
+
+    /// 「あとで」. Declining costs the user nothing they cannot get back: the window
+    /// stays open for its full 72 hours and ホーム carries the same offer with the same
+    /// deadline until it closes. That is what keeps this page from being a trap door.
+    func skipOffer() {
+        move(to: .complete)
+    }
+
+    /// Mints the 72-hour window, and **skips the page entirely when there is nothing
+    /// to offer.**
+    ///
+    /// Two accounts get skipped: one that already pays — Pro users have nothing to buy
+    /// and drawing them a discount card is worse than drawing nothing — and one the
+    /// server refuses, which is any account that has held a subscription before. The
+    /// server is the authority on the second; `startWelcomeOffer` returning nil is it
+    /// saying no, and a network failure returns nil too. Treating "couldn't ask" the
+    /// same as "not eligible" is deliberate: the failure mode is a user who finishes
+    /// setup without seeing an offer, and the alternative is a page that shows a price
+    /// checkout will then refuse to honour.
+    ///
+    /// A replaying user is skipped for the same reason `submitSource` ignores them:
+    /// the run they are repeating is not a first run.
+    private func openWelcomeOfferWindow() {
+        guard !replaying, mainModel.entitlement?.plan != .pro else {
+            move(to: .complete)
+            return
+        }
+        Task {
+            let expiry = await mainModel.startWelcomeOffer()
+            guard step == .offer else { return }
+            guard let expiry else {
+                move(to: .complete)
+                return
+            }
+            offerExpiresAt = expiry
+            PostHogSDK.shared.capture("desktop_welcome_offer_shown", properties: [
+                "currency": mainModel.billingCurrency.rawValue,
+            ])
+        }
+    }
+
+    /// Hands Checkout to the default browser and **stays on this page**.
+    ///
+    /// The payment finishes out of band — Stripe redirects to the site, the webhook
+    /// lands whenever it lands — so there is no result to wait for and nothing honest
+    /// to say about one. The page stays put, the forward action re-reads 「次へ」, and
+    /// `MainModel.reloadEntitlement` picks the purchase up on the next activation.
+    private func startOfferCheckout() {
+        guard offerExpiresAt != nil else {
+            move(to: .complete)
+            return
+        }
+        offerCheckoutOpened = true
+        PostHogSDK.shared.capture("desktop_welcome_offer_accepted", properties: [
+            "billing_interval": offerInterval == .year ? "yearly" : "monthly",
+            "currency": mainModel.billingCurrency.rawValue,
+        ])
+        mainModel.beginCheckout(offerInterval == .year ? .yearly : .monthly)
     }
 
     func select(source: OnboardingSource) {
@@ -130,7 +216,7 @@ final class OnboardingCoordinator: ObservableObject {
     /// The question is optional by construction: 「答えない」 moves on and sends nothing,
     /// so a skipped run is absent from the series rather than a guess inside it.
     func skipSource() {
-        move(to: .complete)
+        move(to: .offer)
     }
 
     private func submitSource() {
@@ -143,7 +229,7 @@ final class OnboardingCoordinator: ObservableObject {
                 userPropertiesSetOnce: ["attribution_source": selectedSource.rawValue]
             )
         }
-        move(to: .complete)
+        move(to: .offer)
     }
 
     var usesCurrentButtons: Bool { selectedPack == nil && !buttonDrafts.isEmpty }

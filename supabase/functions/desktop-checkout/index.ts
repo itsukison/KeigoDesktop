@@ -22,8 +22,25 @@
 // `billing-handlers.js` takes `priceId` straight off the client; §7 says plainly not
 // to copy that. The client sends `pro_monthly_jpy` or `pro_yearly_jpy` and nothing
 // else is sellable.
+//
+// Two things the client may now also say, and one it may not:
+//
+//   - `currency` — `jpy` or `usd`, allow-listed here. Sent rather than left to
+//     Stripe's IP localization because the app has already shown the user a price
+//     and 「表示価格が実際にご請求される金額です」 is a claim about exactly that gap.
+//     Both currencies are `currency_options` on the SAME two prices, so this changes
+//     the presentment, not the product.
+//   - `locale` — which language Checkout renders in. Was hard-coded `ja`.
+//
+// **It may not ask for the welcome discount.** Eligibility is read from
+// `desktop.welcome_offers` here, on every request, and a client that says it has an
+// offer gets nothing for saying so. A discount a client can request is a discount
+// anyone can take.
 
 import {
+  BILLING_CURRENCIES,
+  BillingCurrency,
+  CHECKOUT_LOCALES,
   claimsFromAuthHeader,
   corsHeaders,
   desktopRPC,
@@ -35,6 +52,7 @@ import {
   SITE_URL,
   stripe,
   StripeError,
+  welcomeCouponId,
 } from "../_shared/billing.ts";
 
 /// §3.3c. Stripe's `expires_at` accepts 30 minutes to 24 hours and defaults to 24.
@@ -88,6 +106,16 @@ Deno.serve(async (req) => {
     return jsonError("invalid_request", "プランを選択してください。", 400);
   }
 
+  // Absent means yen. Every installed build older than this field is a Japanese
+  // build, so the default reproduces their behaviour exactly rather than falling
+  // into a neutral branch — the same argument `RewriteRequest.writingLanguage`
+  // already makes for absent meaning Japanese on the rewrite path.
+  const currency: BillingCurrency = BILLING_CURRENCIES.includes(body?.currency)
+    ? body.currency
+    : "jpy";
+  const locale = CHECKOUT_LOCALES.includes(body?.locale) ? body.locale : "ja";
+  const interval: "month" | "year" = priceKey === "pro_yearly_jpy" ? "year" : "month";
+
   try {
     const state = await desktopRPCRow("desktop_billing_state", { p_user_id: userId });
 
@@ -106,28 +134,46 @@ Deno.serve(async (req) => {
 
     const customerId = await resolveCustomer(userId, claims.email, state?.stripe_customer_id);
 
-    // (a) The intent row. `primary key (user_id)` is the lock.
-    let intent = await desktopRPCRow("desktop_open_checkout_intent", {
+    // **Eligibility for the welcome discount, read rather than accepted.** One row,
+    // one predicate, and it is the same one `desktop_get_entitlement` reports to the
+    // app — so a card showing the offer price and a session applying it cannot
+    // disagree except by the window closing between them, which is the correct
+    // outcome and is why the deadline is checked here and not only there.
+    const offer = await desktopRPCRow("desktop_welcome_offer_state", { p_user_id: userId });
+    const couponId = offer?.eligible === true ? welcomeCouponId(interval) : null;
+
+    const intentArgs = {
       p_user_id: userId,
       p_price_lookup_key: priceKey,
       p_ttl_seconds: INTENT_TTL_SECONDS,
-    });
+      p_currency: currency,
+      p_coupon_id: couponId,
+    };
 
-    if (!intent.created && intent.price_lookup_key !== priceKey) {
-      // The user switched monthly ↔ annual inside the 30-minute window. Handing back
-      // the session they abandoned would silently sell them the other plan, so the
-      // old session is expired and a fresh intent opened. §3.3c sanctions calling
-      // `/expire` on an explicit user retry.
+    // (a) The intent row. `primary key (user_id)` is the lock.
+    let intent = await desktopRPCRow("desktop_open_checkout_intent", intentArgs);
+
+    // **Three fields, not one.** §3.3b's idempotency key makes Stripe reject a replay
+    // whose parameters differ, so anything that changes what we are about to send has
+    // to reopen the intent rather than reuse it. The plan was always one of them;
+    // currency joins it (the user switched the interface language mid-window) and so
+    // does the coupon — an offer that expired inside the 35 minutes turns a
+    // discounted intent into a list-price session, and reusing the key there is an
+    // `idempotency_error` the user cannot act on.
+    const intentDiffers = intent.price_lookup_key !== priceKey
+      || (intent.currency ?? "jpy") !== currency
+      || (intent.coupon_id ?? null) !== couponId;
+
+    if (!intent.created && intentDiffers) {
+      // Handing back the session they abandoned would silently sell them the other
+      // plan, the other currency, or the other price. The old session is expired and
+      // a fresh intent opened; §3.3c sanctions calling `/expire` on an explicit retry.
       if (intent.stripe_session_id) {
         await stripe(`/v1/checkout/sessions/${intent.stripe_session_id}/expire`, { method: "POST" })
           .catch(() => {});
       }
       await desktopRPC("desktop_clear_checkout_intent", { p_user_id: userId, p_session_id: null });
-      intent = await desktopRPCRow("desktop_open_checkout_intent", {
-        p_user_id: userId,
-        p_price_lookup_key: priceKey,
-        p_ttl_seconds: INTENT_TTL_SECONDS,
-      });
+      intent = await desktopRPCRow("desktop_open_checkout_intent", intentArgs);
     } else if (!intent.created && intent.session_url) {
       // Double-click, two tabs, or a genuine retry on the same plan. One session.
       return json({ url: intent.session_url, kind: "checkout" });
@@ -147,11 +193,7 @@ Deno.serve(async (req) => {
     // the fresh row it produced was just as unusable as the one it replaced.
     if (secondsUntil(intent.expires_at) < STRIPE_MIN_SESSION_TTL_SECONDS + CLOCK_SKEW_MARGIN_SECONDS) {
       await desktopRPC("desktop_clear_checkout_intent", { p_user_id: userId, p_session_id: null });
-      intent = await desktopRPCRow("desktop_open_checkout_intent", {
-        p_user_id: userId,
-        p_price_lookup_key: priceKey,
-        p_ttl_seconds: INTENT_TTL_SECONDS,
-      });
+      intent = await desktopRPCRow("desktop_open_checkout_intent", intentArgs);
     }
 
     const price = await resolvePrice(priceKey);
@@ -159,6 +201,13 @@ Deno.serve(async (req) => {
       userId,
       customerId,
       priceId: price.id,
+      currency,
+      locale,
+      // From the INTENT, not from the eligibility read above. The two agree on every
+      // path that reaches here — a mismatch reopened the intent — and taking it from
+      // the row is what keeps the session's parameters a pure function of the
+      // idempotency key, which is the same reason `expiresAt` is read from the row.
+      couponId: intent.coupon_id ?? null,
       idempotencyKey: intent.idempotency_key,
       // Derived from the INTENT, never from `Date.now()`. The idempotency key is
       // per-intent, and Stripe rejects a replay of the same key whose parameters
@@ -178,6 +227,11 @@ Deno.serve(async (req) => {
       event: "desktop_checkout",
       userId,
       priceKey,
+      currency,
+      // Whether the discount was actually applied, from the row that decided it. The
+      // client reports what it expected (`offer_expected`); the two disagreeing is
+      // the signal worth having, and neither is inferable from the other.
+      offerApplied: (intent.coupon_id ?? null) !== null,
       sessionId: session.id,
       reusedIntent: !intent.created,
       status: "ok",
@@ -263,6 +317,9 @@ async function createSession(params: {
   userId: string;
   customerId: string;
   priceId: string;
+  currency: string;
+  locale: string;
+  couponId: string | null;
   idempotencyKey: string;
   expiresAt: number;
 }): Promise<{ id: string; url: string }> {
@@ -289,11 +346,25 @@ async function createSession(params: {
       mode: "subscription",
       customer: params.customerId,
       line_items: [{ price: params.priceId, quantity: 1 }],
-      // The 「最初の100名は初年度 ¥9,800」 cohort discount is a promotion code with
-      // `duration: once`, never a third price (§2). This is the field that lets it
-      // be redeemed.
-      allow_promotion_codes: true,
-      locale: "ja",
+      // **The presentment currency, stated rather than detected.** Both currencies
+      // are `currency_options` on this same price; passing it explicitly overrides
+      // Checkout's IP-based localization, which would otherwise quote an English user
+      // in Japan in yen after the app had shown them dollars.
+      currency: params.currency,
+      // **`discounts` and `allow_promotion_codes` are mutually exclusive** — a
+      // Checkout Session supports at most one coupon or promotion code, and sending
+      // both is a hard 400. So this is an either/or rather than two fields:
+      //
+      //   - Offer live → the coupon is applied by us, server-side, from a row the
+      //     client cannot influence. The promotion-code box is gone, which is correct:
+      //     a session already carrying the best price we offer has nothing to stack.
+      //   - Otherwise → the box comes back, which is what makes a cohort code like
+      //     「最初の100名は初年度 ¥9,800」 (§2: a promotion code with `duration: once`,
+      //     never a third price) redeemable at all.
+      ...(params.couponId
+        ? { discounts: [{ coupon: params.couponId }] }
+        : { allow_promotion_codes: true }),
+      locale: params.locale,
       expires_at: params.expiresAt,
       // Two independent ways for the webhook to find the user even if our own
       // customer row is somehow missing.

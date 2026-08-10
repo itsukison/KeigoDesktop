@@ -251,11 +251,64 @@ final class MainModel: NSObject, ObservableObject {
         showsPreferences = true
     }
 
+    /// The currency every plan surface quotes in.
+    ///
+    /// A live subscription's own currency wins over the interface language: a user
+    /// who bought in yen and later switched the app to English is still charged yen,
+    /// and quoting them dollars would misstate their own renewal. With nothing sold
+    /// yet there is nothing to preserve, so the language decides.
+    var billingCurrency: BillingCurrency {
+        entitlement?.currency ?? .forInterface(AppLanguageState.current)
+    }
+
     func beginCheckout(_ price: BillingRemoteStore.PriceKey) {
+        let currency = billingCurrency
         PostHogSDK.shared.capture("desktop_checkout_started", properties: [
             "billing_interval": price == .yearly ? "yearly" : "monthly",
+            "currency": currency.rawValue,
+            // What the client *believes* — the server decides, and the two disagreeing
+            // is the signal worth having. See `desktop-checkout`.
+            "offer_expected": entitlement?.hasWelcomeOffer ?? false,
         ])
-        openBilling { try await self.billingStore.checkoutURL(for: price) }
+        let language = AppLanguageState.current
+        openBilling {
+            try await self.billingStore.checkoutURL(
+                for: price,
+                currency: currency,
+                language: language
+            )
+        }
+    }
+
+    /// Opens the 72-hour welcome-offer window and folds the deadline into the
+    /// entitlement already on screen, so ホーム and the plan pane can draw the
+    /// countdown without waiting for the next full read.
+    ///
+    /// Failure is silent by design. This is called from the onboarding offer page,
+    /// and a network error there must not block a user from finishing setup — the
+    /// worst case is that the offer is not shown, which is the same outcome as being
+    /// ineligible.
+    @discardableResult
+    func startWelcomeOffer() async -> Date? {
+        guard signedInEmail != nil else { return nil }
+        guard let expiry = try? await billingStore.startWelcomeOffer() else { return nil }
+        if let current = entitlement {
+            entitlement = Entitlement(
+                plan: current.plan,
+                status: current.status,
+                interval: current.interval,
+                currency: current.currency,
+                used: current.used,
+                monthLimit: current.monthLimit,
+                resetsAt: current.resetsAt,
+                cancelAtPeriodEnd: current.cancelAtPeriodEnd,
+                cancelsAt: current.cancelsAt,
+                currentPeriodEnd: current.currentPeriodEnd,
+                pastDueSince: current.pastDueSince,
+                welcomeOfferExpiresAt: expiry
+            )
+        }
+        return expiry
     }
 
     /// Opens the Billing Portal, optionally on a specific screen.
@@ -350,10 +403,28 @@ final class MainModel: NSObject, ObservableObject {
         identifiedUserId = session.userId
     }
 
+    /// `desktop_signed_up` / `desktop_signed_in` — the gap `docs/analytics.md` §3 listed
+    /// as "a brand-new desktop user and an existing iOS user installing the Mac app are
+    /// indistinguishable client-side". They are the desktop's own names for the events
+    /// 465060 has had since June; the `desktop_` prefix is what keeps the two series
+    /// separable if a token is ever mistyped.
+    ///
+    /// **Only an authentication the user just performed reaches here.** `refresh()`
+    /// restores a Keychain session on every activation and deliberately does not call
+    /// this: counting that would turn a signup series into a launch count.
+    private func captureAuth(signedUp: Bool, method: String, extra: [String: Any] = [:]) {
+        var properties: [String: Any] = ["method": method]
+        properties.merge(extra) { _, new in new }
+        PostHogSDK.shared.capture(
+            signedUp ? "desktop_signed_up" : "desktop_signed_in",
+            properties: properties
+        )
+    }
+
     // MARK: - Account
 
     func signIn() {
-        submitAuth { [auth, email, password] in
+        submitAuth(.signIn) { [auth, email, password] in
             _ = try await auth.signIn(email: email, password: password)
             return nil
         }
@@ -364,7 +435,7 @@ final class MainModel: NSObject, ObservableObject {
             authError = tr("パスワードが一致しません。", "The passwords don't match.", "两次输入的密码不一致。")
             return
         }
-        submitAuth { [auth, email, password] in
+        submitAuth(.signUp) { [auth, email, password] in
             switch try await auth.signUp(email: email, password: password) {
             case .signedIn:
                 return nil
@@ -418,6 +489,18 @@ final class MainModel: NSObject, ObservableObject {
             signedInEmail = await auth.currentEmail
             await identifyIfNeeded(session)
             await loadProfile()
+            // Google is the only path where the client cannot be told which of the two
+            // happened: Supabase answers a first authorization and a returning one with
+            // the same session shape. `profiles.created_at` is the discriminator —
+            // `handle_new_user()` writes that row inside the signup transaction, so a
+            // returning user's is hours or months old whatever surface they made it on.
+            // The window is deliberately wide: it absorbs clock skew between this Mac
+            // and Postgres, and the only thing it can misread is an account created on
+            // the phone within the last ten minutes.
+            captureAuth(
+                signedUp: joinedAt.map { Date().timeIntervalSince($0) < 600 } ?? false,
+                method: "google"
+            )
             await reloadPrompts()
             await onPromptsChanged()
             page = .home
@@ -426,7 +509,12 @@ final class MainModel: NSObject, ObservableObject {
         }
     }
 
-    private func submitAuth(_ work: @escaping () async throws -> String?) {
+    private enum AuthAttempt {
+        case signIn
+        case signUp
+    }
+
+    private func submitAuth(_ attempt: AuthAttempt, _ work: @escaping () async throws -> String?) {
         authError = nil
         authNotice = nil
         isAuthenticating = true
@@ -441,6 +529,19 @@ final class MainModel: NSObject, ObservableObject {
                 let session = await auth.currentSession
                 signedInEmail = await auth.currentEmail
                 await identifyIfNeeded(session)
+                switch attempt {
+                case .signUp:
+                    // Both endings of `SignUpOutcome` are a signup. The confirmation
+                    // branch has no session yet, so this one rides the anonymous
+                    // distinct_id and follows the person through the later `identify`.
+                    captureAuth(
+                        signedUp: true,
+                        method: "password",
+                        extra: ["confirmation_required": notice != nil]
+                    )
+                case .signIn:
+                    if session != nil { captureAuth(signedUp: false, method: "password") }
+                }
                 guard signedInEmail != nil else { return }
                 await loadProfile()
                 await reloadPrompts()

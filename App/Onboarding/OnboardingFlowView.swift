@@ -33,6 +33,7 @@ struct OnboardingFlowView: View {
                     case .customPractice: CustomPracticeStep(coordinator: coordinator)
                     case .replyPractice: ReplyPracticeStep(coordinator: coordinator)
                     case .source: SourceStep(coordinator: coordinator)
+                    case .offer: OfferStep(coordinator: coordinator)
                     case .complete: CompleteStep(coordinator: coordinator)
                     }
                 }
@@ -146,6 +147,23 @@ private struct OnboardingNavigationBar: View {
                     LinkButton(title: tr("答えない", "Skip", "不回答")) { coordinator.skipSource() }
                     primaryButton(tr("次へ", "Next", "下一步"), enabled: coordinator.selectedSource != nil)
 
+                case .offer:
+                    // 「あとで」 until the browser has been handed a checkout, then
+                    // 「次へ」. Someone who has already gone to pay is not declining,
+                    // and leaving the only forward action labelled as a refusal is the
+                    // kind of small dishonesty that makes a purchase feel like a trap.
+                    LinkButton(
+                        title: coordinator.offerCheckoutOpened
+                            ? tr("次へ", "Next", "下一步")
+                            : tr("あとで", "Maybe later", "以后再说")
+                    ) { coordinator.skipOffer() }
+                    primaryButton(
+                        model.isOpeningBilling
+                            ? tr("開いています…", "Opening…", "正在打开…")
+                            : tr("この価格で始める", "Get this price", "以此价格开始"),
+                        enabled: coordinator.offerExpiresAt != nil && !model.isOpeningBilling
+                    )
+
                 case .complete:
                     primaryButton(tr("敬語ボタンを使う", "Start using KeigoButton", "开始使用敬語ボタン"))
                 }
@@ -172,11 +190,19 @@ private struct OnboardingNavigationBar: View {
 private struct ProgressRail: View {
     let step: DesktopOnboardingStep
 
-    /// The language page is deliberately **not** a segment. It is asked before the run
-    /// starts and its answer is not part of setting the app up, so counting it would
-    /// both add an eleventh segment to a rail sized for ten and tell the user they are
-    /// 9 % done for having said which language they read.
-    private static let steps = DesktopOnboardingStep.flow.filter { $0 != .language }
+    /// Two pages are deliberately **not** segments — `DesktopOnboardingStep.railSteps`
+    /// owns which and why. The short version: the language question is asked before
+    /// setting up begins, and the welcome offer is a purchase rather than a step of
+    /// installation.
+    private static let steps = DesktopOnboardingStep.railSteps
+
+    /// A step with no segment of its own lights the last one at or before it, so the
+    /// offer page reads as "still at the end of setup" rather than resetting the rail
+    /// to segment one — which is what `firstIndex(of:) ?? 0` did.
+    private var currentIndex: Int {
+        guard let anchor = step.railAnchor else { return 0 }
+        return Self.steps.firstIndex(of: anchor) ?? 0
+    }
 
     private var labels: [DesktopOnboardingStep: String] {
         [
@@ -195,7 +221,6 @@ private struct ProgressRail: View {
     var body: some View {
         HStack(spacing: 12) {
             ForEach(Array(Self.steps.enumerated()), id: \.element) { index, item in
-                let currentIndex = Self.steps.firstIndex(of: step) ?? 0
                 let isCurrent = item == step
                 VStack(alignment: .leading, spacing: 7) {
                     Group {
@@ -1481,6 +1506,215 @@ private struct SourceMark: View {
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(Color.black.opacity(0.08))
+            )
+    }
+}
+
+/// The one page in first run that asks for money.
+///
+/// Composition is `SourceStep`'s — question left, stage right — rather than a layout
+/// of its own, because a page that suddenly looks like an advertisement inside a setup
+/// flow reads as an interruption by something other than the app.
+///
+/// **What is deliberately absent.** No countdown ticking by the second, no crossed-out
+/// price animating, no 「今だけ」 without a date behind it. The deadline is real, it is
+/// enforced by `desktop-checkout` against `desktop.welcome_offers.expires_at`, and a
+/// deliberately unenforced one would be a 景表法 有利誤認 claim rather than a design
+/// choice. What each card *must* carry is 特商法第12条の6's ①分量 and ②対価: the amount,
+/// that it covers the first period only, the price it renews at afterwards, and that
+/// it renews automatically.
+private struct OfferStep: View {
+    @ObservedObject var coordinator: OnboardingCoordinator
+    @ObservedObject private var model: MainModel
+
+    init(coordinator: OnboardingCoordinator) {
+        self.coordinator = coordinator
+        self.model = coordinator.mainModel
+    }
+
+    private var currency: BillingCurrency { model.billingCurrency }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 28) {
+            VStack(alignment: .leading, spacing: 22) {
+                StepHeading(
+                    eyebrow: remainingText.map {
+                        tr("はじめての方限定 · \($0)", "New customers · \($0)", "新用户限定 · \($0)")
+                    } ?? tr("はじめての方限定", "New customers", "新用户限定"),
+                    title: tr(
+                        "最初だけ、割引価格で Pro を試せます",
+                        "Try Pro at a lower price, once",
+                        "首次可以优惠价体验 Pro"
+                    ),
+                    subtitle: tr(
+                        "無料のままでも月50回まで書き換えできます。Pro は月1,000回まで。この価格は今回の設定から\(PlanPricing.welcomeOfferWindowHours)時間だけです。",
+                        "The free plan keeps its 50 rewrites a month. Pro raises that to 1,000. This price is available for \(PlanPricing.welcomeOfferWindowHours) hours from now.",
+                        "免费版每月仍可改写50次，Pro 可达1,000次。此价格仅在设置后的\(PlanPricing.welcomeOfferWindowHours)小时内有效。"
+                    )
+                )
+
+                HStack(alignment: .top, spacing: 10) {
+                    Icon(.info, size: 14)
+                        .foregroundStyle(Tokens.Window.accentText)
+                        .opticalCentre()
+                    Text(tr(
+                        "あとで決めても大丈夫です。この価格はホーム画面からも受け取れます。",
+                        "Deciding later is fine — the same price is waiting on the home screen.",
+                        "稍后再决定也可以，主页同样可以使用这个价格。"
+                    ))
+                        .font(Tokens.Font.body(12))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: 300, alignment: .leading)
+            .frame(maxHeight: .infinity, alignment: .leading)
+
+            OnboardingVisualStage {
+                VStack(spacing: 12) {
+                    Spacer(minLength: 0)
+                    OfferCard(
+                        interval: .year,
+                        currency: currency,
+                        selected: coordinator.offerInterval == .year
+                    ) { coordinator.select(offerInterval: .year) }
+                    OfferCard(
+                        interval: .month,
+                        currency: currency,
+                        selected: coordinator.offerInterval == .month
+                    ) { coordinator.select(offerInterval: .month) }
+
+                    // The honest replacement for 「税込」 — the same sentence the plan
+                    // pane carries, and for the same reason (`docs/billing.md` §10).
+                    Text(tr(
+                        "表示価格が実際にご請求される金額です。いつでもワンクリックで解約できます。",
+                        "The price shown is the amount you are charged. Cancel any time, in one click.",
+                        "所示价格即为实际收费金额。可随时一键取消。"
+                    ))
+                        .font(Tokens.Font.body(11))
+                        .foregroundStyle(Tokens.Window.textTertiary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 18)
+            }
+            .padding(.vertical, OnboardingMetrics.visualVerticalInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
+        .padding(.horizontal, OnboardingMetrics.pagePadding)
+        .padding(.top, OnboardingMetrics.contentTopPadding)
+        .padding(.bottom, OnboardingMetrics.bottomPadding)
+    }
+
+    private var remainingText: String? {
+        coordinator.offerExpiresAt.flatMap { PlanPricing.offerRemainingText(until: $0) }
+    }
+}
+
+private struct OfferCard: View {
+    let interval: Entitlement.Interval
+    let currency: BillingCurrency
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    private var offer: PlanPricing.Amount { PlanPricing.welcomeOffer(interval, in: currency) }
+    private var list: PlanPricing.Amount { PlanPricing.list(interval, in: currency) }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(interval == .year
+                         ? tr("年払い", "Yearly", "年付")
+                         : tr("月払い", "Monthly", "月付"))
+                        .font(Tokens.Font.body(13, weight: .medium))
+                        .foregroundStyle(Tokens.Window.textPrimary)
+                    if interval == .year {
+                        let months = PlanPricing.monthsFree(in: currency)
+                        Text(tr("\(months)ヶ月分お得", "\(months) months free", "省\(months)个月"))
+                            .font(Tokens.Font.body(11, weight: .medium))
+                            .foregroundStyle(Tokens.Window.accentText)
+                    }
+                    Spacer(minLength: 6)
+                    ZStack {
+                        Circle()
+                            .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1.5)
+                            .frame(width: 18, height: 18)
+                        if selected {
+                            Circle().fill(Tokens.Window.accent).frame(width: 10, height: 10)
+                        }
+                    }
+                }
+
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(offer.display)
+                        .font(Tokens.Font.display(22))
+                        .foregroundStyle(Tokens.Window.textPrimary)
+                    Text(unit)
+                        .font(Tokens.Font.body(12))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                    // The list price beside it, struck through. 二重価格表示 is only
+                    // defensible when the "before" price is one actually being charged
+                    // — ¥1,480 / ¥14,400 are the live catalog, and they are what this
+                    // same account pays from the second period onward.
+                    Text(list.display)
+                        .font(Tokens.Font.body(12))
+                        .strikethrough()
+                        .foregroundStyle(Tokens.Window.textTertiary)
+                }
+
+                Text(renewal)
+                    .font(Tokens.Font.body(11))
+                    .foregroundStyle(Tokens.Window.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(hovering && !selected ? Tokens.Window.surface : Tokens.Window.canvas)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(
+                        selected ? Tokens.Window.accent : Tokens.Window.hairline,
+                        lineWidth: selected ? 1.5 : 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .cursor(.pointingHand)
+    }
+
+    private var unit: String {
+        let months = PlanPricing.welcomeOfferMonthlyPeriods
+        return interval == .year
+            ? tr("/ 初年度", "for the first year", "首年")
+            : tr("/ 月（最初の\(months)ヶ月）", "/ month for \(months) months", "/ 月（前\(months)个月）")
+    }
+
+    /// 特商法第12条の6 ②対価. A discounted first period is only half the price; the other
+    /// half is what it becomes, and the article is why that sentence is on the card
+    /// rather than at the card.
+    private var renewal: String {
+        let months = PlanPricing.welcomeOfferMonthlyPeriods
+        return interval == .year
+            ? tr(
+                "2年目以降は年 \(list.display) を自動更新",
+                "Then \(list.display) a year, renews automatically",
+                "第二年起每年 \(list.display)，自动续订"
+            )
+            : tr(
+                "\(months)ヶ月後は月 \(list.display) を自動更新",
+                "After \(months) months, \(list.display) a month, renews automatically",
+                "\(months)个月后每月 \(list.display)，自动续订"
             )
     }
 }

@@ -33,6 +33,7 @@ import {
   proProductIds,
   selectSubscription,
   stripe,
+  welcomeCouponId,
 } from "../_shared/billing.ts";
 
 /// Stripe's default tolerance. NEVER 0: that would reject every event whose delivery
@@ -235,7 +236,10 @@ async function handle(event: any): Promise<void> {
       customer: customerId,
       status: "all",
       limit: 100,
-      expand: ["data.items.data.price"],
+      // `discounts` is expandable and comes back as bare ids otherwise, which would
+      // make every subscription look undiscounted and the welcome-offer stamp never
+      // fire. The coupon id is one level below the discount, hence the deeper path.
+      expand: ["data.items.data.price", "data.discounts.coupon"],
     },
   });
 
@@ -296,7 +300,31 @@ async function handle(event: any): Promise<void> {
     p_cancel_at_period_end: selected?.cancelAtPeriodEnd ?? false,
     p_cancel_at: selected?.cancelAt ?? null,
     p_schedule_id: selected?.scheduleId ?? null,
+    p_currency: selected?.currency ?? null,
   });
+
+  // The welcome offer's redemption stamp.
+  //
+  // **Reporting only.** Eligibility was already settled when the session was created,
+  // and it was settled by the row EXISTING rather than by this field — so a failure
+  // here cannot let anyone claim a second discount, and it deliberately does not run
+  // inside `desktop_process_stripe_event`'s transaction. What it buys is the ability
+  // to answer "was this subscriber won by the offer", which nothing else records:
+  // the coupon is on the Stripe subscription, not on ours.
+  //
+  // The RPC itself is first-write-wins, so the repeated `invoice.paid` events over a
+  // discounted subscription's life do not move the date.
+  const welcomeCoupons = new Set(
+    [welcomeCouponId("month"), welcomeCouponId("year")].filter((id): id is string => id !== null),
+  );
+  const redeemed = selected?.discountCouponIds.find((id) => welcomeCoupons.has(id)) ?? null;
+  if (redeemed && userId) {
+    await desktopRPC("desktop_mark_welcome_offer_redeemed", {
+      p_user_id: userId,
+      p_coupon_id: redeemed,
+      p_currency: selected?.currency ?? null,
+    }).catch(() => {});
+  }
 
   console.log(JSON.stringify({
     event: "desktop_webhook",
@@ -305,6 +333,8 @@ async function handle(event: any): Promise<void> {
     userId,
     subscriptionId: selected?.id ?? null,
     stripeStatus: selected?.status ?? null,
+    currency: selected?.currency ?? null,
+    welcomeCoupon: redeemed,
     plan: result?.plan ?? null,
     duplicate: result?.duplicate === true,
     applied: result?.applied === true,

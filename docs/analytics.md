@@ -3,16 +3,18 @@
 Authority for AGENTS.md §7. **The one rule this document exists to enforce: desktop
 numbers and iOS keyboard numbers never touch.**
 
-Status (2026-08-09): **done and live.** Project `KeigoButton Desktop (macOS)` is
-**549465** (`phc_sJZEvNvRET7BEwCwXNnzoRofkbowJ8Ec3TuQTz9hHrG6`, org `Keigo`, timezone
+Status (2026-08-10): **live, and the pipe is proven.** Project
+`KeigoButton Desktop (macOS)` is **549465**
+(`phc_sJZEvNvRET7BEwCwXNnzoRofkbowJ8Ec3TuQTz9hHrG6`, org `Keigo`, timezone
 `Asia/Tokyo`), the token and host are set on the repo's `production` environment, and
-the 15-tile dashboard is built and pinned:
+the dashboard is built and pinned:
 
 - Dashboard — <https://us.posthog.com/project/549465/dashboard/1974822>
 
-**Not verified: a single real event.** `ingested_event` was `false` at creation and the
-tiles have never had data in them. The first desktop build carrying the token is what
-proves the pipe, and §5 is the check to run then.
+**The first real events arrived 2026-08-09 21:21 JST** — §5 has what they proved and
+the one thing they falsified. The dashboard was rebuilt on 2026-08-10 from 15 tiles to
+21: the original set measured the rewrite loop and nothing before it, so there was no
+answer to "how many people arrived today". §4 is the new set.
 
 ---
 
@@ -111,12 +113,16 @@ partner: an event without it, in the desktop project, came from somewhere it sho
 | `desktop_rewrite_completed` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `prompt_origin`, `is_reply`, `latency_ms`, `candidate_count` |
 | `desktop_rewrite_inserted` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `accepted`, `selected_index` |
 | `desktop_rewrite_failed` | `Analytics.swift` | `message` (the app's own Japanese toast — never captured or rewritten text) |
+| `desktop_signed_up` | `MainModel.swift` | `method` (`password` \| `google`), `confirmation_required` (password only) |
+| `desktop_signed_in` | `MainModel.swift` | `method` (`password` \| `google`) |
 | `desktop_onboarding_completed` | `OnboardingWindowController.swift` | — |
 | `desktop_source_selected` | `OnboardingWindowController.swift` | `source`, plus person property `attribution_source` (`$set_once`) |
 | `desktop_prompt_created` | `MainModel.swift` | `slot` |
 | `desktop_prompt_updated` | `MainModel.swift` | `slot`, `is_enabled`, `origin` |
 | `desktop_prompt_deleted` | `MainModel.swift` | `slot`, `origin` |
-| `desktop_checkout_started` | `MainModel.swift` | `billing_interval` |
+| `desktop_checkout_started` | `MainModel.swift` | `billing_interval`, `currency`, `offer_expected` |
+| `desktop_welcome_offer_shown` | `OnboardingWindowController.swift` | `currency` |
+| `desktop_welcome_offer_accepted` | `OnboardingWindowController.swift` | `billing_interval`, `currency` |
 | `$exception` | autocapture (`errorTrackingConfig.autoCapture`) | — |
 | `$identify` | `MainModel.identifyIfNeeded` | person property `email` |
 
@@ -139,12 +145,49 @@ Events captured before the first build carrying this property have no
 `app_language` at all; they are Japanese by construction, since the language page
 did not exist.
 
+**`desktop_signed_up` / `desktop_signed_in` are new on 2026-08-10** and they close the
+gap this document used to list second: a brand-new desktop user and an existing iOS
+user installing the Mac app were indistinguishable client-side. Three things about them:
+
+- **Only an authentication the user just performed is captured.** `MainModel.refresh()`
+  restores a Keychain session on every window activation and deliberately sends
+  nothing — counting that would turn a signup series into a launch count.
+- **Google needs a discriminator and `profiles.created_at` is it.** Supabase answers a
+  first authorization and a returning one with the same session shape, so
+  `completeOAuth` reads the profile row `handle_new_user()` wrote inside the signup
+  transaction and calls it a signup if it is under ten minutes old. The window is wide
+  on purpose — it absorbs clock skew between the Mac and Postgres, and the only thing it
+  can misread is an account created on the phone in the last ten minutes.
+- **Both endings of `SignUpOutcome` are a signup.** The confirmation branch has no
+  session yet, so that event rides the anonymous `distinct_id` and follows the person
+  through the later `identify`; `confirmation_required` separates the two on the wire.
+
 `desktop_source_selected` is the last page of first run (AGENTS.md §15) and is
 **self-reported and skippable**: 「答えない」 sends nothing at all, so the event count is
 not the number of users who finished onboarding and the shares are of answers, not of
 people. `source` is `OnboardingSource.rawValue` — a fixed set pinned by a test, because
 renaming one splits a series after the fact. The person property is `$set_once`, so a
 replayed 使い方を見る cannot overwrite a first answer (a replay sends nothing either way).
+
+**The three billing properties added on 2026-08-10** answer the two questions the
+pricing change created, and one of them is deliberately a client *belief* rather than a
+fact:
+
+- **`currency`** (`jpy` | `usd`) is on both the offer events and the checkout event.
+  It follows the interface language for a new buyer and the existing subscription for
+  everyone else, so it is not derivable from `app_language` and has to be sent.
+- **`offer_expected`** is what the app thought when the button was pressed. The server
+  decides whether a discount is actually applied and logs `offerApplied` on
+  `desktop_checkout` in the function logs. **The two disagreeing is the signal** — it
+  means a window closed between the card being drawn and the session being created —
+  and neither value can be recovered from the other after the fact.
+- `desktop_welcome_offer_shown` is emitted once per eligible first run, so
+  `_accepted` ÷ `_shown` is the offer's conversion rate. Neither fires for a user who
+  is skipped (already Pro, replaying, or refused by the server), which is what keeps the
+  denominator to people who were actually offered something.
+
+**Not verified: one real event of any of the three.** No build carrying them has
+shipped, and the Stripe catalog they describe has not been applied.
 
 `distinct_id` is the Supabase user id, the same as on iOS. In separate projects that is
 a feature rather than a leak: the two platforms can be joined deliberately, in the
@@ -154,109 +197,195 @@ warehouse, when someone actually wants a cross-surface number.
 
 These bound what §4 can show, and each is a small change rather than a design problem:
 
-1. **No `desktop_checkout_completed`.** The revenue funnel ends at intent. The Stripe
+1. **`Application Installed` carries no `surface`, and this was read off the live
+   project rather than reasoned about** — 2 of 2 installs have it null while every other
+   event has it set. It is not a bug in `registerSurface()`: the PostHog Swift SDK
+   captures the install inside `PostHogSDK.shared.setup(config)`, and
+   `PostHogConfiguration.configure()` can only register super properties on the line
+   after. So layer 3 has one hole, and it is exactly the event the acquisition tiles are
+   built on — **tiles 1, 2 and 5 therefore carry no surface filter**, which is recorded
+   in their own descriptions so nobody "fixes" them later. The real fix is to hand the
+   properties to `setup` rather than register them after it.
+2. **No `desktop_checkout_completed`.** The revenue funnel ends at intent. The Stripe
    webhook (`desktop-stripe-webhook`) knows the answer server-side; nothing forwards it.
-2. **No sign-in / sign-up events.** iOS sends `signed_up` / `signed_in`; desktop sends
-   neither, so a brand-new desktop user and an existing iOS user installing the Mac app
-   are indistinguishable client-side. `desktop.activations` (AGENTS.md §6) is the
-   server-side answer and is the one this project should trust for install counts.
-3. **`io_path` is only on the two rewrite events.** A capture that fails before a path
-   is chosen reports no path at all, so tile 8's denominator is successful captures.
+3. **The rewrite events have no `is_tutorial`,** and onboarding practice sends them.
+   `OverlayController` skips history for a tutorial rewrite but calls
+   `analytics.rewriteCompleted` and `analytics.inserted` either way, and all three
+   practice lessons complete *only* on a successful Insert. So every new user donates
+   three guaranteed acceptances to tile 11 and three rewrites to tile 10. At today's
+   volume that is most of the numerator. One property on both events fixes it.
+4. **`io_path` is only on the two rewrite events.** A capture that fails before a path
+   is chosen reports no path at all, so tile 14's denominator is successful captures.
+5. **A DMG download is not an event and never will be.** Distribution is a GitHub
+   release, so PostHog's earliest sighting of anyone is `Application Installed` — the
+   first launch. Downloads that never launch are only visible as the GitHub release
+   asset's `download_count`, which is cumulative and lives outside this project.
 
 ---
 
 ## 4. The dashboard — "Desktop (macOS) Overview"
 
-Dashboard **1974822**, 15 tiles, 4 rows. **Every tile carries `surface = macos`** even
-though the project is desktop-only; see layer 3.
+Dashboard **1974822**, **21 tiles in five bands**, rebuilt 2026-08-10. The first
+fifteen measured the rewrite loop and everything downstream of it; what they could not
+answer was how many people arrived, signed up or finished first run on a given day —
+which is the first question anyone asks of a product that has just started shipping.
+Band 1 is that question and the shape of it is taken from 465060's
+`Product KPIs — code-aligned (v2)`, deliberately: two surfaces of one product should be
+readable side by side even though their numbers must never be added together.
 
-That filter has a second use beyond defence. Because it is redundant, a *gap* between a
-filtered and an unfiltered version of the same tile means events are arriving here
-without the surface stamp — which is either a leak from another surface or a capture
-running before `registerSurface()`. Either way it is worth chasing, and neither is
-visible without the redundancy.
+**Every tile carries `surface = macos` except 1, 2 and 5.** Those three touch
+`Application Installed`, which has no surface stamp (§3 gap 1), and filtering would
+make them read zero forever. Everywhere else the filter is redundant on purpose — a
+*gap* between a filtered and an unfiltered version of the same tile means events are
+arriving here without the stamp, which is either a leak from another surface or a
+capture running before `registerSurface()`. Neither is visible without the redundancy.
 
 **Ratio tiles use a raw `A/B` formula with `aggregationAxisFormat: percentage_scaled`,
 never `A/B*100`.** `percentage_scaled` already multiplies by 100, so a formula that
 multiplies too renders 50 % as 5000 %.
 
-### Row 1 — Adoption
+### Band 1 — Acquisition
 
 | # | Tile | Query |
 |---|---|---|
-| 1 | [Desktop DAU / WAU / MAU](https://us.posthog.com/project/549465/insights/qKSsc7XX) | Trends, `All events` — `dau` / `weekly_active` / `monthly_active` |
-| 2 | [Activation funnel](https://us.posthog.com/project/549465/insights/9cbmwXvI) | Funnel: `desktop_onboarding_completed` → `desktop_rewrite_inserted`, ordered, 7-day window |
-| 3 | [Lifecycle](https://us.posthog.com/project/549465/insights/QLMv4ESa) | Lifecycle on `desktop_rewrite_completed`, weekly — new / returning / resurrecting / dormant |
+| 1 | **[Installs & sign-ups per day](https://us.posthog.com/project/549465/insights/XIZ1sNHS)** | Trends, daily bars — `Application Installed`, `desktop_signed_up`, `desktop_signed_in`. No surface filter |
+| 2 | [Cumulative installs & sign-ups](https://us.posthog.com/project/549465/insights/SwT8ymDK) | Same three series, cumulative line, 90 d. No surface filter |
+| 3 | [New accounts vs existing accounts](https://us.posthog.com/project/549465/insights/U9iz5kZc) | Trends, weekly — `desktop_signed_up` against `desktop_signed_in` |
+| 4 | **[Onboarding completions per day](https://us.posthog.com/project/549465/insights/S7qSDuke)** | Trends, daily — `desktop_onboarding_completed`, count + unique users |
+| 5 | [Activation funnel](https://us.posthog.com/project/549465/insights/9cbmwXvI) | Funnel: `Application Installed` → `desktop_onboarding_completed` → `desktop_rewrite_inserted`, ordered, 14-day window. No surface filter |
+| 6 | [Where users came from](https://us.posthog.com/project/549465/insights/Ep2l1MSd) | Bar, `desktop_source_selected` broken down by `source`, 90 d |
 
-Tile 2 is deliberately `ordered` rather than `strict`: many events fall between finishing
-onboarding and the first accepted rewrite, and `strict` would require them to be adjacent.
+Tile 3 is the one that only exists because the projects are split. Both people on it
+are the same `auth.users` id, so in 465060 the question "is the Mac app acquiring users
+or serving the keyboard's existing ones" has no answer at all.
 
-### Row 2 — The core loop
+Tile 5 is `ordered` rather than `strict`: a great many events fall between installing
+and the first accepted rewrite, and `strict` would require them to be adjacent. Ordering
+is also what keeps step 3 honest while §3 gap 3 stands — onboarding practice sends
+`desktop_rewrite_inserted` too, but it does so *before* completion, so it cannot satisfy
+a step that has to follow one.
 
-| # | Tile | Query |
-|---|---|---|
-| 4 | [Rewrites per day](https://us.posthog.com/project/549465/insights/Rl35xXid) | Trends, `desktop_rewrite_completed`, count + unique users |
-| 5 | **[Acceptance rate](https://us.posthog.com/project/549465/insights/bTQAoCs7)** | Formula `B/A` over `desktop_rewrite_completed` (A) and `desktop_rewrite_inserted` (B) |
-| 6 | [Acceptance rate by `is_reply`](https://us.posthog.com/project/549465/insights/8nPuiflZ) | Tile 5 broken down by `is_reply`, weekly |
-| 7 | [Rewrites per active user](https://us.posthog.com/project/549465/insights/bb5UPyEK) | Formula, `desktop_rewrite_completed` count ÷ unique users |
+Tile 6 counts answers, not people: 「答えない」 sends nothing at all.
 
-Tile 5 is the one number to keep. A rewrite that is generated, metered and never
-inserted is a cost with no product in it. Tile 6 is §16's stated reason for putting
-`is_reply` on both events: reply mode composes from nothing rather than editing what is
-there, so its acceptance rate is the only honest read on whether the composition works.
-
-### Row 3 — Health
+### Band 2 — Adoption
 
 | # | Tile | Query |
 |---|---|---|
-| 8 | **[Clipboard fallback rate](https://us.posthog.com/project/549465/insights/AJBcohZ4)** | Trends, `desktop_rewrite_completed` broken down by `io_path`, percent-stacked area |
-| 9 | **[Fallback rate by host app](https://us.posthog.com/project/549465/insights/GlRwsGfW)** | Table, `desktop_rewrite_completed` broken down by `host_app_bundle_id` × `io_path`, top 20 |
-| 10 | [Failure rate](https://us.posthog.com/project/549465/insights/nWnT70o2) | Formula, `desktop_rewrite_failed` ÷ `desktop_rewrite_completed` |
-| 11 | [Failures by message](https://us.posthog.com/project/549465/insights/lWbz9z9i) | Bar, `desktop_rewrite_failed` broken down by `message`, top 15 |
-| 12 | [Latency median / p95](https://us.posthog.com/project/549465/insights/wMYLjz07) | Trends, `latency_ms` percentiles on `desktop_rewrite_completed` |
-| 13 | [Crashes](https://us.posthog.com/project/549465/insights/uCriz4tu) | Trends, `$exception` volume + users affected |
+| 7 | [Desktop DAU / WAU / MAU](https://us.posthog.com/project/549465/insights/qKSsc7XX) | Trends, `All events` — `dau` / `weekly_active` / `monthly_active` |
+| 8 | [Lifecycle](https://us.posthog.com/project/549465/insights/QLMv4ESa) | Lifecycle on `desktop_rewrite_completed`, weekly — new / returning / resurrecting / dormant |
+| 9 | **[Version adoption](https://us.posthog.com/project/549465/insights/IZ1MTpBy)** | Trends, `Application Opened` unique users broken down by `$app_version`, percent-stacked |
+
+Tile 9 is the only read on whether a Sparkle update actually lands. `release-macos.yml`
+proves an appcast was published and stapled; it says nothing about installation, and
+AGENTS.md §9 still lists the old-build → new-build update chain as unverified. A version
+whose share stops shrinking is a stuck update; one that never appears is an appcast or
+signature problem.
+
+### Band 3 — The core loop
+
+| # | Tile | Query |
+|---|---|---|
+| 10 | [Rewrites per day](https://us.posthog.com/project/549465/insights/Rl35xXid) | Trends, `desktop_rewrite_completed`, count + unique users |
+| 11 | **[Acceptance rate](https://us.posthog.com/project/549465/insights/bTQAoCs7)** | Formula `B/A` over `desktop_rewrite_completed` (A) and `desktop_rewrite_inserted` (B) |
+| 12 | [Acceptance rate by `is_reply`](https://us.posthog.com/project/549465/insights/8nPuiflZ) | Tile 11 broken down by `is_reply`, weekly |
+| 13 | [Rewrites per active user](https://us.posthog.com/project/549465/insights/bb5UPyEK) | Formula, `desktop_rewrite_completed` count ÷ unique users |
+
+Tile 11 is the one number to keep. A rewrite that is generated, metered and never
+inserted is a cost with no product in it. **Read it against §3 gap 3 until that is
+fixed** — three of every new user's acceptances are the onboarding lessons, which only
+complete on a successful Insert. Tile 12 is §16's stated reason for putting `is_reply`
+on both events: reply mode composes from nothing rather than editing what is there, so
+its acceptance rate is the only honest read on whether the composition works.
+
+### Band 4 — Health
+
+| # | Tile | Query |
+|---|---|---|
+| 14 | **[Clipboard fallback rate](https://us.posthog.com/project/549465/insights/AJBcohZ4)** | Trends, `desktop_rewrite_completed` broken down by `io_path`, percent-stacked area |
+| 15 | **[Fallback rate by host app](https://us.posthog.com/project/549465/insights/GlRwsGfW)** | Table, `desktop_rewrite_completed` broken down by `host_app_bundle_id` × `io_path`, top 20 |
+| 16 | [Failure rate](https://us.posthog.com/project/549465/insights/nWnT70o2) | Formula, `desktop_rewrite_failed` ÷ `desktop_rewrite_completed` |
+| 17 | [Failures by message](https://us.posthog.com/project/549465/insights/lWbz9z9i) | Bar, `desktop_rewrite_failed` broken down by `message`, top 15 |
+| 18 | [Latency median / p95](https://us.posthog.com/project/549465/insights/wMYLjz07) | Trends, `latency_ms` percentiles on `desktop_rewrite_completed` |
+| 19 | [Crashes](https://us.posthog.com/project/549465/insights/uCriz4tu) | Trends, `$exception` volume + users affected |
 
 Rate and diagnosis are two tiles rather than one: a formula and a breakdown cannot share
-an insight, and 10 is the number you watch while 11 is the one you act on.
+an insight, and 16 is the number you watch while 17 is the one you act on.
 
-§7 calls `io_path` "the one to watch" and tile 9 is why: a rising clipboard rate *in a
-specific bundle id* is the earliest signal that an app's AX tree changed. Tile 8 alone
+§7 calls `io_path` "the one to watch" and tile 15 is why: a rising clipboard rate *in a
+specific bundle id* is the earliest signal that an app's AX tree changed. Tile 14 alone
 would average that signal away across every app the user types in. Whatever surfaces in
-9 is what `scripts/axdiag.swift` exists for.
+15 is what `scripts/axdiag.swift` exists for.
 
-Tile 12's budget comes from §5's `AXUIElementSetMessagingTimeout(element, 0.5)` — the
+Tile 18's budget comes from §5's `AXUIElementSetMessagingTimeout(element, 0.5)` — the
 capture side is bounded at 500 ms per element by construction, so p95 growth is the
 model or the network, not the AX path.
 
-### Row 4 — Retention & revenue
+### Band 5 — Retention & revenue
 
 | # | Tile | Query |
 |---|---|---|
-| 14 | **[Weekly retention](https://us.posthog.com/project/549465/insights/8QhCncOr)** | Retention: acquisition `desktop_onboarding_completed`, return `desktop_rewrite_inserted`, weekly, 9 periods |
-| 15 | [Checkout intent](https://us.posthog.com/project/549465/insights/rWOWxmDc) | Trends, `desktop_checkout_started` broken down by `billing_interval` |
+| 20 | **[Weekly retention](https://us.posthog.com/project/549465/insights/8QhCncOr)** | Retention: acquisition `desktop_onboarding_completed`, return `desktop_rewrite_inserted`, weekly, 9 periods |
+| 21 | [Checkout intent](https://us.posthog.com/project/549465/insights/rWOWxmDc) | Trends, `desktop_checkout_started` broken down by `billing_interval` |
 
-Tile 14 is the number this whole document exists to protect. In project 465060 it would
+Tile 20 is the number this whole document exists to protect. In project 465060 it would
 count an iOS-only user as a returning desktop user, every week, forever. Return is an
 accepted rewrite rather than a launch, because an app that sits on the screen edge is
 "opened" by doing nothing.
 
 ### Supporting breakdowns
 
-Worth adding to tile 4 rather than as their own tiles: `capture_mode`
+Worth adding to tile 10 rather than as their own tiles: `capture_mode`
 (`selection` vs `wholeInput` — how people actually invoke the bar) and `prompt_origin`
-(which buttons earn their place on the row).
+(which buttons earn their place on the row). Worth adding to tiles 1 and 3: `method`,
+once there is enough volume to tell whether Google is carrying sign-up the way
+onboarding assumes.
+
+### What is deliberately not here
+
+- **A downloads tile.** See §3 gap 5 — the number does not exist inside PostHog.
+- **A permission-granted tile.** 465060 has "Keyboard enabled — first-time
+  activations", and the desktop's equivalent is the Accessibility grant in §5. Nothing
+  captures it, so the funnel steps straight from install to onboarding completion and
+  cannot tell a user who gave up at the permission page from one who never opened it.
+- **Test-account filtering.** Every tile is `filterTestAccounts: false` and the project
+  has no test-account rule configured, so the owner's own machines are in every number.
+  At two people and forty-seven launches that is most of the data; it stops being
+  harmless the moment real users arrive.
 
 ---
 
-## 5. Proving the pipe on the first build
+## 5. The pipe, proven — and the one thing it falsified
 
-None of the tiles have ever had data in them. When the first build carrying
-`POSTHOG_PROJECT_TOKEN` runs:
+The first build carrying `POSTHOG_PROJECT_TOKEN` ran on **2026-08-09 at 21:21 JST**.
+Over the following fifteen hours 549465 received 135 events from 2 people across app
+versions 0.1.0, 0.1.1 and 0.1.2: 47 `Application Opened`, 46 `Application Backgrounded`,
+10 `desktop_rewrite_completed`, 10 `desktop_rewrite_inserted`, 3 `desktop_rewrite_failed`,
+5 `$identify`, 11 `$set`, 2 `Application Installed` and 1 `Application Updated`.
+Capture → JWT → `desktop-rewrite` → response → write-back is therefore proven end to
+end by real events and not only by `debug.png`.
 
-1. Press a button in any app and check `desktop_rewrite_completed` arrives in 549465's
-   live event feed — **and that it carries `surface: macos`**. A missing surface means
-   `registerSurface()` is not running where it should.
-2. Sign out and press again. This is the `reset()` path: the surface must still be there.
-3. Confirm 465060 receives **nothing new** from the desktop over the same window. The
-   `desktop_` prefix means a leak shows up as a new event name there rather than as
-   silent extra volume on an existing one.
+What that run established:
+
+1. **The surface stamp arrives.** Every event carries `surface: macos` — **except
+   `Application Installed`, 0 of 2.** That is §3 gap 1 and it was found here rather than
+   reasoned about; the install is captured inside `setup()`, one line before
+   `registerSurface()` can run.
+2. **`app_language` behaves.** Null on the earliest events, then `en`, then `ja`, then
+   `en` again as the language was switched — so `languageChanged()`'s re-registration
+   works and pre-language-page events are correctly absent rather than wrong.
+3. **`$identify` did not strand anyone.** Anonymous `019fe6…` ids appear at launch and
+   the Supabase UUID takes over from the identify onward, which is the merge working.
+
+Still unobserved, and each blocks a tile rather than the pipe:
+
+- **`desktop_onboarding_completed` has never fired** (tiles 4, 5, 20). Both people had
+  already finished first run, so an empty tile is not yet evidence of a broken step —
+  but it also means the ten-step flow's analytics have not been exercised even once.
+- **`desktop_source_selected`, `desktop_prompt_*` and `desktop_checkout_started` have
+  never fired** (tiles 6, 21).
+- **`desktop_signed_up` / `desktop_signed_in` cannot have fired**: they were added on
+  2026-08-10 and no build carrying them has shipped. Tiles 1, 2 and 3 stay at zero on
+  those series until the next release.
+- **465060 receiving nothing new has not been re-checked since the pipe went live.** The
+  `desktop_` prefix means a leak would show up there as a new event name rather than as
+  silent extra volume on an existing one, so it is a cheap check and still worth running.

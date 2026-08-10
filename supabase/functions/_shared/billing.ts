@@ -28,9 +28,43 @@ export const STRIPE_API_VERSION = "2026-07-29.dahlia";
 
 const STRIPE_API = "https://api.stripe.com";
 
-/** The only two prices we sell. Resolved to a price id SERVER-side (§7). */
+/// The only two prices we sell. Resolved to a price id SERVER-side (§7).
+///
+/// **The `_jpy` suffix now names the price's DEFAULT currency, not the charged one.**
+/// USD is `currency_options[usd]` on these same two Price objects rather than a
+/// second pair — so there are still exactly two sellable keys, and §2's rule holds
+/// that a lookup key finds the price to sell while the product id is what decides
+/// entitlement. Renaming them would mean `transfer_lookup_key: true`, which §2 also
+/// records as the thing that STRIPS the key off the old price and would leave every
+/// grandfathered subscriber's price keyless.
 export const PRICE_LOOKUP_KEYS = ["pro_monthly_jpy", "pro_yearly_jpy"] as const;
 export type PriceLookupKey = typeof PRICE_LOOKUP_KEYS[number];
+
+/// The currencies a session may be created in.
+///
+/// Allow-listed here rather than trusted from the request: the client names its
+/// currency (it follows the interface language — English is USD, 日本語 and 简体中文
+/// are JPY), and an unrecognised value must fail here rather than at Stripe, where
+/// the error is a price-has-no-such-currency-option 400 the user cannot act on.
+export const BILLING_CURRENCIES = ["jpy", "usd"] as const;
+export type BillingCurrency = typeof BILLING_CURRENCIES[number];
+
+/// Stripe Checkout's own locale codes for the three interface languages. It takes
+/// `zh` for Simplified Chinese, so this is a mapping rather than a pass-through.
+export const CHECKOUT_LOCALES = ["ja", "en", "zh"] as const;
+
+/// The two welcome coupons, by interval.
+///
+/// Environment variables rather than constants so a coupon can be rotated — expired,
+/// re-cut at a different depth, replaced for a campaign — without a redeploy of this
+/// function. An unset variable means no discount is applied, which is the correct
+/// failure: the user is charged list price rather than a session failing to open.
+export function welcomeCouponId(interval: "month" | "year"): string | null {
+  const id = interval === "year"
+    ? Deno.env.get("DESKTOP_WELCOME_COUPON_ANNUAL")
+    : Deno.env.get("DESKTOP_WELCOME_COUPON_MONTHLY");
+  return id && id.length > 0 ? id : null;
+}
 
 export const SITE_URL = Deno.env.get("DESKTOP_BILLING_SITE_URL") ?? "https://keigobutton.com";
 
@@ -205,6 +239,12 @@ export type SelectedSubscription = {
   cancelAtPeriodEnd: boolean;
   cancelAt: string | null;
   scheduleId: string | null;
+  /// What the card is actually charged, mirrored from Stripe. Fixed at creation —
+  /// a subscription's currency cannot be changed, only cancelled and resubscribed.
+  currency: string | null;
+  /// The coupon ids attached to this subscription, so the webhook can tell a welcome
+  /// redemption from a list-price purchase without recomputing eligibility.
+  discountCouponIds: string[];
 };
 
 /// Statuses that mean the subscription is still a live object, in the order a tie
@@ -274,8 +314,33 @@ export function selectSubscription(
       cancelAtPeriodEnd: winner.cancel_at_period_end === true,
       cancelAt: toISO(winner.cancel_at),
       scheduleId: typeof winner.schedule === "string" ? winner.schedule : winner.schedule?.id ?? null,
+      // The subscription's own currency, not the price's default. A multi-currency
+      // price has one `currency` field (the default) and a `currency_options` map,
+      // so reading the price would report `jpy` for every USD subscriber.
+      currency: typeof winner.currency === "string" ? winner.currency : null,
+      discountCouponIds: couponIdsOf(winner),
     },
   };
+}
+
+/// Every coupon id attached to the subscription, from either shape Stripe may use.
+///
+/// `discounts` is the current array; `discount` was the single-object field it
+/// replaced. Both are read because the field a given API version returns is not
+/// something this function should have to know, and an empty list is the common case.
+function couponIdsOf(subscription: any): string[] {
+  const discounts = Array.isArray(subscription?.discounts)
+    ? subscription.discounts
+    : subscription?.discount
+    ? [subscription.discount]
+    : [];
+  return discounts
+    .map((discount: any) => {
+      const coupon = typeof discount === "string" ? null : discount?.coupon;
+      const id = typeof coupon === "string" ? coupon : coupon?.id;
+      return typeof id === "string" ? id : null;
+    })
+    .filter((id: string | null): id is string => id !== null);
 }
 
 /// The allowlist, read from the one place that owns it. Cached for the isolate's

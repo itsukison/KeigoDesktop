@@ -102,11 +102,12 @@ final class OnboardingProgressStoreTests: XCTestCase {
         XCTAssertEqual(DesktopOnboardingStep.customPractice.rawValue, 8)
         XCTAssertEqual(DesktopOnboardingStep.source.rawValue, 9)
         XCTAssertEqual(DesktopOnboardingStep.language.rawValue, 10)
+        XCTAssertEqual(DesktopOnboardingStep.offer.rawValue, 11)
         XCTAssertEqual(
             DesktopOnboardingStep.flow,
             [
                 .language, .welcome, .purpose, .review, .access, .bar, .practice,
-                .customPractice, .replyPractice, .source, .complete,
+                .customPractice, .replyPractice, .source, .offer, .complete,
             ]
         )
     }
@@ -115,19 +116,41 @@ final class OnboardingProgressStoreTests: XCTestCase {
         let flow = DesktopOnboardingStep.flow
         XCTAssertEqual(Array(flow.dropFirst()), [
             .welcome, .purpose, .review, .access, .bar, .practice, .customPractice,
-            .replyPractice, .source, .complete,
+            .replyPractice, .source, .offer, .complete,
         ])
         XCTAssertEqual(Array(flow.dropLast().reversed()), [
-            .source, .replyPractice, .customPractice, .practice, .bar, .access,
+            .offer, .source, .replyPractice, .customPractice, .practice, .bar, .access,
             .review, .purpose, .welcome, .language,
         ])
     }
 
-    /// The question is asked before the closing card, not after it — 完了 hands the app
-    /// over, and nothing should be asked once it has.
-    func testTheSourceQuestionIsAskedBeforeCompletion() {
+    /// Both questions are asked before the closing card, not after it — 完了 hands the
+    /// app over, and nothing should be asked once it has. The offer sits last of the
+    /// two because it is the only one that costs money, and it has to come after the
+    /// three practices that are the argument for paying.
+    func testTheSourceQuestionAndTheOfferAreBothAskedBeforeCompletion() {
         XCTAssertEqual(DesktopOnboardingStep.flow.last, .complete)
-        XCTAssertEqual(DesktopOnboardingStep.flow.dropLast().last, .source)
+        XCTAssertEqual(DesktopOnboardingStep.flow.dropLast().last, .offer)
+        XCTAssertEqual(DesktopOnboardingStep.flow.dropLast(2).last, .source)
+    }
+
+    /// The rail counts setting-up steps. Neither the language question nor the offer
+    /// is one, and the offer being counted would frame paying as part of installing.
+    func testTheRailCountsNeitherTheLanguagePageNorTheOffer() {
+        XCTAssertFalse(DesktopOnboardingStep.railSteps.contains(.language))
+        XCTAssertFalse(DesktopOnboardingStep.railSteps.contains(.offer))
+        XCTAssertEqual(DesktopOnboardingStep.railSteps.count, 10)
+    }
+
+    /// A step with no segment lights the last one at or before it. Without this the
+    /// rail resets to segment one for the length of the offer page.
+    func testAStepWithNoRailSegmentAnchorsToTheOneBeforeIt() {
+        XCTAssertEqual(DesktopOnboardingStep.offer.railAnchor, .source)
+        XCTAssertEqual(DesktopOnboardingStep.source.railAnchor, .source)
+        XCTAssertEqual(DesktopOnboardingStep.complete.railAnchor, .complete)
+        // Nothing precedes the language page, so there is nothing to light — and the
+        // rail is hidden there anyway.
+        XCTAssertNil(DesktopOnboardingStep.language.railAnchor)
     }
 
     /// The raw values reach PostHog as `source`. Renaming one splits an attribution

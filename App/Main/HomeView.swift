@@ -21,7 +21,10 @@ struct HomeView: View {
                 updateNotice(version: version)
             }
             statCard
-            if let entitlement = model.entitlement { planRow(entitlement) }
+            if let entitlement = model.entitlement {
+                if entitlement.hasWelcomeOffer { welcomeOffer(entitlement) }
+                planRow(entitlement)
+            }
             if !model.isSignedIn || !model.isTrusted { setupRecovery }
             historySection
         }
@@ -64,6 +67,71 @@ struct HomeView: View {
                     style: .primary,
                     action: model.requestAvailableUpdate
                 )
+            }
+        }
+    }
+
+    // MARK: - Welcome offer
+
+    /// The end-of-onboarding offer, still open.
+    ///
+    /// **This card is what stops the offer page being a trap door.** Someone who
+    /// pressed 「あとで」 during first run made a decision about a price, not about a
+    /// page, and an offer that vanished with the window it was made in would have been
+    /// a deadline of about four seconds. The same price, the same deadline, and the
+    /// same server-side row (`desktop.welcome_offers`) back both surfaces, so there is
+    /// one offer rather than two that happen to agree.
+    ///
+    /// It sits **above** the quota row rather than below it: the quota row is the
+    /// permanent state of the account and this is temporary, and burying a thing with
+    /// an expiry under a thing without one gets the priority backwards.
+    ///
+    /// It disappears the moment `hasWelcomeOffer` goes false — which is the same
+    /// predicate `desktop-checkout` enforces server-side, so the card can never outlive
+    /// the discount it advertises.
+    private func welcomeOffer(_ entitlement: Entitlement) -> some View {
+        let currency = model.billingCurrency
+        let annual = PlanPricing.welcomeOffer(.year, in: currency)
+        let list = PlanPricing.list(.year, in: currency)
+        let remaining = entitlement.welcomeOfferExpiresAt
+            .flatMap { PlanPricing.offerRemainingText(until: $0) }
+
+        return Card(padding: 16) {
+            HStack(spacing: 14) {
+                IconPlate(icon: .mark, diameter: 38)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(tr(
+                            "はじめての方限定の価格が残っています",
+                            "Your introductory price is still open",
+                            "新用户优惠价仍然有效"
+                        ))
+                            .font(Tokens.Font.body(14, weight: .medium))
+                            .foregroundStyle(Tokens.Window.textPrimary)
+                        if let remaining { Badge(remaining) }
+                    }
+                    // 特商法第12条の6 ②対価 again: the discounted period and the price
+                    // after it, on the same line, wherever the offer is shown.
+                    Text(tr(
+                        "Pro の初年度が \(annual.display)（通常 \(list.display)）。以降は自動更新です。",
+                        "Pro's first year is \(annual.display) instead of \(list.display), then it renews automatically.",
+                        "Pro 首年 \(annual.display)（原价 \(list.display)），之后自动续订。"
+                    ))
+                        .font(Tokens.Font.body(12))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 16)
+
+                // Opens the プラン pane, not Stripe. The monthly/annual choice is the
+                // decision being made and `PlanView` is where both prices sit side by
+                // side with the 特商法 items around them — the same reasoning
+                // `MainModel.openPlanSettings` already carries for アップグレード.
+                ActionButton(tr("この価格を見る", "See this price", "查看此价格"), style: .primary) {
+                    model.openPlanSettings()
+                }
             }
         }
     }

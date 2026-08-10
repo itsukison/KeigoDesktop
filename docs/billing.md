@@ -16,14 +16,20 @@ launch-blocking and lives outside this repo.
 | | State as of 2026-08-08 |
 |---|---|
 | Product `prod_V274Ok8sSwkjuZ` 敬語ボタン Pro | **live**, `metadata.plan=pro`, `statement_descriptor=KEIGO BUTTON` |
-| `pro_monthly_jpy` `price_1U22r6CZmA6ItMhqL2dvxwui` | **live**, ¥1,480/month, `tax_behavior: inclusive` — re-read from the API 2026-08-08 |
-| `pro_yearly_jpy` `price_1U22qkCZmA6ItMhqG9BcunGs` | **live**, ¥14,400/year, `tax_behavior: inclusive` — same |
+| `pro_monthly_jpy` `price_1U22r6CZmA6ItMhqL2dvxwui` | **live**, ¥1,480/month · **$12/month**, both `tax_behavior: inclusive`. USD added 2026-08-10 as `currency_options[usd]` and **read back from the API**, not assumed |
+| `pro_yearly_jpy` `price_1U22qkCZmA6ItMhqG9BcunGs` | **live**, ¥14,400/year · **$120/year**, same on both counts |
+| Coupon `welcome_monthly_33` | **live** 2026-08-10 — ¥500 / $4 off, `repeating` × 3 months, `applies_to` the Pro product only, `times_redeemed: 0` |
+| Coupon `welcome_annual_33` | **live** 2026-08-10 — ¥4,800 / $40 off, `once`, same restriction, `times_redeemed: 0` |
+| Promotion code `TEST` / coupon `test` | **STILL LIVE AND STILL ACTIVE.** A 100 %-off code with no expiry and no redemption limit, on an account where every undiscounted session sets `allow_promotion_codes: true` — anyone who types it gets Pro free. Found 2026-08-10. The decision was to deactivate the code and keep the coupon; **the Stripe MCP server exposes no promotion-code update operation**, so it has to be done in the Dashboard: Product catalogue → Coupons → `testcoupon` → the `TEST` code → Archive |
 | API version | **`2026-07-29.dahlia`** — pin this everywhere (§2) |
 | Migration `20260808120000` + `…130000_desktop_billing_cron.sql` | **applied** (`desktop_billing`, `desktop_billing_cron`). The line above used to say otherwise |
 | Migration `20260808140000_desktop_billing_entry_points.sql` | **applied.** 11 new entry points; §3.3a's intent race smoke-tested against a throwaway id and the rows cleaned up |
+| Migration `20260810120000_desktop_usd_pricing_and_welcome_offer.sql` | **applied** 2026-08-10. `subscriptions.currency`, `checkout_intents.currency`/`coupon_id`, `desktop.welcome_offers`, and four drop-and-recreates (`reconcile_subscription`, `process_stripe_event`, `open_checkout_intent`, `get_entitlement`). `pg_proc` read back: one of each, no surviving overload, grants intact — `authenticated` reaches `desktop_get_entitlement()` and `desktop_start_welcome_offer()` and nothing else, `anon` reaches none |
+| Function secrets `DESKTOP_WELCOME_COUPON_MONTHLY` / `_ANNUAL` | **set** 2026-08-10 to `welcome_monthly_33` / `welcome_annual_33` |
+| Empty customer `cus_V2qJQoKQWHhoYB` | Created 2026-08-10 while trying to smoke-test a USD session, tagged `delete_me: true`. **No invoices, no payments.** §0's rule leaves bare customers in place and the Stripe MCP has no delete operation |
 | Webhook endpoint `we_1U23a8CZmA6ItMhq4o5heJGB` | **live**, on **`2026-07-29.dahlia`**, all 13 events, pointed at `desktop-stripe-webhook` |
 | Portal config `bpc_1T2o0tCZmA6ItMhqqxMAc8cY` | **done and correct**: `schedule_at_period_end.conditions` is **`shortening_interval` only** (§11's trap), cancel is `at_period_end` with `proration_behavior: none`, update is `always_invoice`, **no retention offer** |
-| `desktop-checkout` **v2**, `desktop-portal` v1, `desktop-stripe-webhook` v1 | **deployed.** `verify_jwt` is `true`/`true`/**`false`** as intended; both authed functions 401 without a JWT and 200 on OPTIONS. v2's source was read back and carries `automatic_tax[enabled]=false` explicitly (§10) |
+| `desktop-checkout` **v6**, `desktop-portal` v3, `desktop-stripe-webhook` **v3** | **deployed** (checkout and the webhook redeployed 2026-08-10 for currency + the welcome offer). `verify_jwt` is `true`/`true`/**`false`** as intended; checkout 401s without a JWT and 200s on OPTIONS, the webhook 400s on a missing signature and 405s on GET. Earlier: v2's source was read back and carries `automatic_tax[enabled]=false` explicitly (§10) |
 | `desktop-rewrite` **v6** reserve/commit/release (§6) | **deployed**, and the deployed source was read back — it carries `requestId`, the three-phase lifecycle and the attributable 429 |
 | Client: plan pane, ホーム quota row, cap-hit surfaces, `requestId` | **written**; `xcodebuild` succeeds, 87 tests pass |
 | Stripe Tax registration, `jp_trn` | **Deliberately absent.** Core7 is a 免税事業者 — see §10 |
@@ -119,10 +125,57 @@ Product: "敬語ボタン Pro"
   statement_descriptor = "KEIGO BUTTON"      ← ASCII; what JP cards show
 ```
 
-| lookup_key | Amount | Interval | tax_behavior |
+| lookup_key | Default currency | `currency_options[usd]` | Interval | tax_behavior |
+|---|---|---|---|---|
+| `pro_monthly_jpy` | ¥1,480 | $12 | `month` | `inclusive` |
+| `pro_yearly_jpy` | ¥14,400 | $120 | `year` | `inclusive` |
+
+**USD is a currency option on these two prices, not a second pair of prices.** The
+decisive reason is the same one that puts both intervals on one Product: the Customer
+Portal can only move a subscriber between prices it has been configured with, and four
+price objects across two currencies would make E-DOWN's configuration currency-aware.
+One consequence to hold on to — **the `_jpy` suffix now names each price's *default*
+currency, not the currency any given subscriber is charged.** Renaming would require
+`transfer_lookup_key: true`, which strips the key off the old price (below), so it
+stays and this paragraph is the explanation.
+
+Which currency a session presents is **stated by us, never detected.** `desktop-checkout`
+passes `currency` from an allowlist, driven by the app's interface language. Leaving it
+to Checkout's IP localization would quote an English user in Tokyo in yen after the app
+had shown them dollars, and the plan card's 「表示価格が実際にご請求される金額です」 is a
+claim about precisely that gap.
+
+A subscription's currency is **fixed at creation** — there is no currency change, only
+cancel-and-resubscribe. `desktop.subscriptions.currency` mirrors it so the plan card can
+quote a yen subscriber in yen no matter what language they later switch the app to.
+
+### The welcome offer — two coupons, no codes
+
+| coupon | `amount_off` (default, jpy) | `currency_options[usd]` | duration |
 |---|---|---|---|
-| `pro_monthly_jpy` | ¥1,480 | `month` | `inclusive` |
-| `pro_yearly_jpy` | ¥14,400 | `year` | `inclusive` |
+| `welcome_monthly_33` | ¥500 | $4 | `repeating`, `duration_in_months: 3` |
+| `welcome_annual_33` | ¥4,800 | $40 | `once` |
+
+`amount_off` with `currency_options` rather than `percent_off`, because a flat 33 %
+gives ¥888 and $7.20 and all four resulting prices have to be round numbers.
+
+**No promotion codes.** `desktop-checkout` applies the coupon through
+`discounts: [{coupon}]` from `desktop.welcome_offers`, so there is no string to type
+and no string to leak. Eligibility — window open AND never subscribed — is read
+server-side on every request; a client that claims an offer gets nothing for claiming
+it.
+
+**`discounts` and `allow_promotion_codes` cannot both be sent.** A Checkout Session
+supports at most one coupon or promotion code, so the session builds one branch or the
+other: discounted sessions have no promotion-code box (they already carry the best
+price offered), and undiscounted ones keep it, which is what leaves room for a cohort
+code like 「最初の100名は初年度 ¥9,800」.
+
+**`desktop.welcome_offers` rows are never deleted.** Not on expiry, not on redemption,
+and there is deliberately no GC job for them. The primary key on `user_id` plus
+`insert … on conflict do nothing` is the entire enforcement of "72 hours, once per
+account" — a retention job tidying expired rows away would silently convert the offer
+into an unlimited discount claimable by reinstalling.
 
 **Both prices on the same Product.** Not stylistic: the Customer Portal *"can only
 downgrade at the end of the billing period between prices with the same product"*
@@ -1033,6 +1086,32 @@ fixed.
 | 42 | Pro user hits 1,000 | **Not a paywall** — there is no tier above. 「今月の上限に達しました。◯月◯日にリセットされます」 |
 | 43 | Daily/hour/minute brake fires | Distinct message and a distinct `reason` in analytics (§6) |
 | 44 | Counter display near the cap | `committed` only, clamped at the limit. `pending` is never shown |
+
+### Currency
+
+| # | Scenario | Outcome |
+|---|---|---|
+| 45 | English interface, first purchase | Session created with `currency: usd` → $12 / $120. `desktop.subscriptions.currency = 'usd'` |
+| 46 | **Yen subscriber switches the app to English** | Still charged ¥1,480. Every surface quotes yen, because `entitlement.currency` outranks the interface language. **This is the row that makes the column exist** |
+| 47 | USD subscriber switches monthly ↔ annual in the Portal | Stays USD. Both are `currency_options` on the same two prices, so the Portal has one currency to offer |
+| 48 | User wants to change currency | **Not possible.** Stripe fixes a subscription's currency at creation. Cancel and resubscribe, which moves the quota anchor through §4.2's subscription-id branch like any other new subscription |
+| 49 | Currency changed mid-checkout (language switched with a session open) | The intent's stored `currency` differs → the old session is expired and a fresh intent opened. Reusing the idempotency key with different parameters would be an `idempotency_error` (§3.3b) |
+| 50 | Subscription row predates multi-currency | `currency` is null. Read as "not told" rather than as yen: the client falls back to the interface language, which is a defensible quote where a wrong currency is a wrong price |
+| 51 | A `.deleted` reconciliation carries no currency | The stored value is **kept**, not nulled — otherwise a lapsed subscriber's plan card could not say what they used to pay |
+
+### The welcome offer
+
+| # | Scenario | Outcome |
+|---|---|---|
+| 52 | Reaches the offer page twice (relaunch, second Mac) | One window. `insert … on conflict do nothing` on a primary key that is never deleted |
+| 53 | Replays onboarding after the window closed | No offer. The row still exists and reports unavailable |
+| 54 | Has ever held a subscription | Ineligible, and no row is written. `stripe_subscription_id is not null`, **not** `status = 'active'` — someone who subscribed and cancelled has had their introduction |
+| 55 | Window expires between the plan card and the checkout click | List price. The card is presentation; `desktop-checkout` re-reads the row and is what decides |
+| 56 | Offer expires with a discounted intent still open | The intent's stored `coupon_id` differs → expire and reopen, as row 49 |
+| 57 | Takes the monthly offer, then upgrades to annual in month 2 | The ¥500-off repeating coupon rides along to the annual invoice for its remaining months. Bounded and harmless; not worth a schedule to prevent |
+| 58 | Discounted subscription is refunded | §8's policy is unchanged — a full refund cancels immediately. The offer row's `redeemed_at` stays stamped, so a resubscribe is still ineligible by row 54 |
+| 59 | Client claims an offer it does not have | Nothing. Eligibility is never read from the request |
+| 60 | Coupon env var unset or coupon deleted at Stripe | List price, session still opens. The correct failure: a missing discount, not a broken checkout |
 
 ---
 

@@ -9,6 +9,10 @@ Status: **prices are final for launch. Nothing is implemented.** No code in
 `supabase/` or `App/` enforces any of this yet. The cost model below runs on
 GPT-5.6 Terra's list price, so there is no longer an unknown blocking the numbers.
 
+**2026-08-10 — two additions, and §1, §3, §4 and §8 carry them:** the product now
+sells in **USD as well as JPY**, chosen by interface language, and there is a
+**one-time welcome offer** at the end of first run. The yen plan is unchanged.
+
 ---
 
 ## 1. The plan — final
@@ -17,12 +21,35 @@ GPT-5.6 Terra's list price, so there is no longer an unknown blocking the number
 |---|---|---|
 | 書き換え | **50回 / 月** | **1,000回 / 月**（約33回/日） |
 | リセット | 毎月1日（暦月） | 毎月1日（暦月） |
-| 価格 | ¥0 | **¥1,480 / 月** ・ 年払い **¥1,200 / 月相当** |
-| 年払い総額 | — | ¥14,400 / 年（**2ヶ月分以上お得**） |
+| 価格（JPY） | ¥0 | **¥1,480 / 月** ・ 年払い **¥1,200 / 月相当** |
+| 年払い総額（JPY） | — | ¥14,400 / 年（**2ヶ月分以上お得**） |
+| 価格（USD） | $0 | **$12 / month** ・ yearly **$10 / month** |
+| 年払い総額（USD） | — | $120 / year (**exactly 2 months free**) |
 | カード登録 | 不要 | 必要 |
 | 無料トライアル | **なし** — 無料プランがその役割 | — |
 
 **iPhone版 (`AIキーボード`) は無料のまま、上限も現状のまま、課金は一切ない。** See §2.
+
+### Which currency a user is charged in
+
+**The interface language decides, and nothing else does.** English → USD; 日本語 and
+简体中文 → JPY. `BillingCurrency.forInterface` is the only place that rule lives.
+
+- **简体中文 is billed in yen**, because `AGENTS.md` §17's premise is a Chinese
+  speaker working in Japan — their card is a Japanese card. The same fact that keeps
+  their buttons writing Japanese keeps their price in yen.
+- **The app sends the currency to Checkout explicitly** rather than letting Stripe
+  localize by IP. The plan card promises 「表示価格が実際にご請求される金額です」, and IP
+  detection would quote an English user sitting in Tokyo in yen after the app had
+  shown them dollars. That gap is exactly what the sentence rules out.
+- **An existing subscription's currency outranks the language.** Stripe fixes a
+  subscription's currency at creation, so a user who bought in yen and later switched
+  the app to English is still charged yen — and is still quoted yen everywhere in the
+  app. `desktop.subscriptions.currency` is what makes that answerable.
+- The arbitrage is real and accepted: $12 ≈ ¥1,800 against ¥1,480, so a determined
+  user can pay ~18 % less by reading the app in Japanese. It is a self-service choice
+  between two honest prices for one product, and policing it would mean geo-gating a
+  language picker.
 
 ### Not in the plan
 
@@ -31,6 +58,8 @@ GPT-5.6 Terra's list price, so there is no longer an unknown blocking the number
   a tier when Pro contains something worth segmenting on, not before.
 - **No trial.** See §3.
 - **No usage-based billing.** A ¥0.66 unit is more accounting than revenue.
+- **No third currency.** EUR and CNY are one `currency_options` entry each when
+  there is demand to point at; neither has any today.
 
 ### Why these numbers
 
@@ -41,6 +70,38 @@ GPT-5.6 Terra's list price, so there is no longer an unknown blocking the number
 | ¥1,480/月 | The monthly anchor |
 | ¥14,400/年 | Produces a clean **¥1,200/月相当** that compares directly against ¥1,480, at a ~19% discount |
 | ¥1,200 shown first | The annual plan is sold on the monthly-equivalent number; ¥14,400 is secondary |
+| $12/month | ≈ ¥1,800 at ¥150/USD — deliberately above the straight conversion (¥1,480 ≈ $9.87). US prosumer willingness-to-pay carries it, and international card fees eat part of the difference |
+| $120/year | $12 × 12 = $144, so this is **exactly two months free** — the same 「2ヶ月分お得」 badge the yen plan carries, and here it is literally rather than approximately true (yen saves 2.27 months) |
+| $10/month shown first | Same reason as ¥1,200: annual is sold on the monthly-equivalent figure, and $120 was chosen over $96 or $99 **because it divides by twelve into a round number.** $99 gives $8.25 and $96 gives a 33 % discount that makes the monthly plan look mispriced |
+
+### The welcome offer — 33% off the first period
+
+Shown once, at the end of first run, on its own page between きっかけ and 完了.
+
+| | list | first period | after |
+|---|---|---|---|
+| 月払い JPY | ¥1,480 | **¥980 × 3ヶ月** | ¥1,480 |
+| 月払い USD | $12 | **$8 × 3 months** | $12 |
+| 年払い JPY | ¥14,400 | **¥9,600（初年度）** | ¥14,400 |
+| 年払い USD | $120 | **$80 (first year)** | $120 |
+
+- **72 hours**, minted server-side when the user reaches the page and enforced by
+  `desktop-checkout` at the moment a session is created. `desktop.welcome_offers` is
+  primary-keyed on `user_id` and its rows are **never deleted** — that is what makes
+  the deadline real against a reinstall, a replayed onboarding, or a second Mac.
+- **Two Stripe coupons, not a third price and not a promotion code.** `amount_off`
+  with `currency_options` rather than `percent_off`, because a flat 33 % produces ¥888
+  and $7.20 and all four numbers above have to be round. A promotion code would be a
+  string, and a string is redeemable by anyone who reads it.
+- **Annual is preselected**, for §4's reason.
+- Declining costs nothing: the ホーム card carries the same price and the same
+  deadline until the window closes. An offer that disappeared with the page it was
+  made on would be a deadline of about four seconds.
+- 33 % rather than 50 %: the renewal step-up from ¥9,600 to ¥14,400 is survivable,
+  and doubling a price at first renewal is the classic churn cliff. Margin is not the
+  constraint — at 150 rewrites/month a ¥9,600 first year still nets ~88 %.
+
+**This is the second conversion surface, and §3 was written when there was only one.**
 
 ---
 
@@ -87,14 +148,24 @@ auto-converting card trials, 特商法 imposes 自動更新 disclosure obligatio
 it is a standing 解約 complaint source. A no-card trial on top of a no-card free
 tier is redundant by construction.
 
-**So the cap-hit is the paywall, and that moment is the entire conversion event.**
+**The cap-hit is still the paywall.** It stopped being the *only* conversion event on
+2026-08-10, when the welcome offer gave first run one — but the two are different
+moments and neither replaces the other. The offer is made to someone who has just
+watched the product work and has spent nothing; the cap-hit is made to someone who has
+just been stopped. A user who declines the first is not a user who has said no.
 
 | When | What the user sees |
 |---|---|
+| End of first run | The welcome offer page — 33% off the first period, 72 hours, **annual preselected** (§1) |
+| While that window is open | A ホーム card carrying the same price and the remaining time |
 | 40 / 50 used | Quiet 残り10回 note in the ホーム usage row |
 | 48 / 50 used | 残り2回 — 今月分の書き換えがまもなく上限に達します |
-| 50 / 50, on press | Upgrade panel on the overlay, **annual (¥1,200/月相当) preselected** |
+| 50 / 50, on press | Upgrade panel on the overlay, **annual (¥1,200/月相当 · $10/month) preselected** |
 | Always | Persistent 今月 34 / 50 readout in the main window's usage row |
+
+The offer also does not undermine §3's argument against a trial: it asks for a card
+**once, optionally, at a lower price**, and refusing it leaves the free tier exactly as
+it was. A card-required trial removes the free path; this adds a cheaper paid one.
 
 That last row is a **requirement**: a quota the user cannot see is a quota that
 ambushes them, which is the worst conversion outcome available. It makes the
@@ -109,13 +180,23 @@ work — see §8.
 
 | | 表示 | 総額 |
 |---|---|---|
-| Primary | **¥1,200 / 月相当** | — |
-| Secondary | — | ¥14,400 / 年 |
+| Primary (JPY) | **¥1,200 / 月相当** | ¥14,400 / 年 |
+| Primary (USD) | **$10 / month, billed yearly** | $120 / year |
 
 ¥1,480 × 12 = ¥17,760. Annual saves **¥3,360**, which is 2.27 months of the
 monthly price → **「2ヶ月分以上お得」**, a **18.9% discount**. ¥14,400 ÷ 12 is
 exactly ¥1,200, which is the point: the buyer compares ¥1,200 against ¥1,480 in
 one step, with no arithmetic.
+
+$12 × 12 = $144. Annual saves **$24**, which is **exactly two months** — a **16.7%
+discount**, deliberately close to the yen plan's so the two read as one product priced
+twice rather than two different offers. $120 ÷ 12 = $10, and the divisibility is the
+whole reason for the number.
+
+**The badge is computed, never written.** `PlanPricing.monthsFree` derives it from the
+two list prices, so a price change cannot leave a stale 「2ヶ月分お得」 beside a discount
+that is no longer two months. A hard-coded 2 was the failure mode worth engineering
+against here.
 
 Annual prepay is the highest-leverage lever on this product — it converts cash
 flow forward and removes eleven monthly churn decisions. Target **30–40% annual
@@ -328,14 +409,43 @@ products and 16 prices, then create:
 
 | | Amount | lookup_key | tax_behavior |
 |---|---|---|---|
-| 敬語ボタン Pro 月払い | ¥1,480 / month | `pro_monthly_jpy` | `inclusive` |
-| 敬語ボタン Pro 年払い | ¥14,400 / year | `pro_yearly_jpy` | `inclusive` |
+| 敬語ボタン Pro 月払い | ¥1,480 / month · **$12 / month** | `pro_monthly_jpy` | `inclusive` |
+| 敬語ボタン Pro 年払い | ¥14,400 / year · **$120 / year** | `pro_yearly_jpy` | `inclusive` |
 
 One product with `statement_descriptor` set and `metadata.plan = "pro"`, so the
 webhook maps by lookup key and never by price ID. (`billing-handlers.js` takes
 `priceId` **from the client** — do not copy that; validate server-side.) One
 webhook at `eercsucvxnszqletxued` with 6 events: the 4 existing plus
 `checkout.session.completed` and `invoice.payment_failed`.
+
+**USD is `currency_options[usd]` on those same two prices — not a second pair, and
+not a second product.** Three reasons, and the first is the one that decides it:
+
+1. **The Customer Portal.** §2 of `docs/billing.md` already records that both
+   intervals must sit on one Product or E-DOWN is unbuildable. Four prices across two
+   currencies reintroduces the same class of problem one level down — the portal would
+   have to be told which two of the four a given subscriber may switch between.
+2. `pro_monthly_jpy` / `pro_yearly_jpy` stay the only sellable keys, so the checkout
+   function's allowlist does not grow and §2's "the lookup key finds the price to
+   *sell*, the product id is the entitlement check" is untouched.
+3. Nothing has to be migrated. Existing subscriptions keep their price object.
+
+The `_jpy` suffix now names each price's **default** currency rather than the charged
+one. Renaming would need `transfer_lookup_key: true`, which §2 records as the thing
+that strips the key off the old price — so it is documented rather than renamed.
+
+**Two coupons for the welcome offer (§1), and no promotion codes:**
+
+| coupon | amount_off (jpy) | currency_options[usd].amount_off | duration |
+|---|---|---|---|
+| `welcome_monthly_33` | ¥500 | $4 | `repeating`, 3 months |
+| `welcome_annual_33` | ¥4,800 | $40 | `once` |
+
+Applied by `desktop-checkout` via `discounts: [{coupon}]`, from a server-side row the
+client cannot influence. **`discounts` and `allow_promotion_codes` are mutually
+exclusive** — a Checkout Session takes at most one coupon or code — so a discounted
+session deliberately has no promotion-code box, and an undiscounted one keeps it for
+cohort codes like 「最初の100名は初年度 ¥9,800」.
 
 ### Supabase
 
@@ -395,6 +505,9 @@ Fix before implementation; all of these currently assert the opposite:
 | `AGENTS.md` §12 | "Shared billing was decided, but not … whether desktop and keyboard draw from one quota or two" — now: two, and mobile has none |
 | `AGENTS.md` §14 | "`profiles` has no plan column … nothing true to put in that block" — still true of `profiles`, but plan state now exists in `desktop.subscriptions`, so a sidebar plan card becomes possible |
 | `landing/content.md` §10, `landing/src/data/pricing.js` | ¥1,180 / ¥11,800, 1日10回, 「上限なし」, 「iPhone版の上限も解除」, 「iPhone版とMac版で、ひとつの契約」 — **all placeholder, all wrong.** The last two are actively misleading: mobile is free and separate |
+| `AGENTS.md` §17 | "Amounts never change with the language" — reversed for English on 2026-08-10; the sentence now describes 日本語 and 简体中文 only. **Corrected** |
+| `../web` `/en` | Quoted ¥1,480 / ¥14,400 to a visitor the app charges $12 / $120. **Fixed 2026-08-10** — see §10 |
+| `../web/app/legal/page.tsx` | Said 「税込」 and 「価格はすべて消費税を含む総額です」, which a 免税事業者 may not claim, and listed no USD. **Both fixed 2026-08-10.** Its App Store billing claim (rows 58-99) is a separate defect and is **still there** |
 | `../web/app/legal/page.tsx:58-99` | Tells users subscriptions are billed through the App Store and canceled in iOS Settings. User-facing and legally load-bearing — the Mac app bills through Stripe, and the iOS app sells nothing |
 
 ---
@@ -404,7 +517,23 @@ Fix before implementation; all of these currently assert the opposite:
 - **Whether desktop should default to the cheap providers** (§7 lever 1). The only
   question is quality on longer inputs, and the answer changes the cost model by
   16×. Worth testing before launch.
-- **USD pricing**, if the LP goes bilingual. ¥1,480 ≈ $10/月, ¥14,400 ≈ $96/年.
+- ~~The landing page still quotes yen in every language.~~ **Done 2026-08-10.**
+  `../web`'s `/en` renders `$0` / `$12` (and `$10` · `$120` on the yearly toggle) while
+  `/` and `/zh` are unchanged at ¥0 / ¥1,480 — verified against the built pages, not
+  the source. `components/mac/data/pricing.js` now carries a `PRICE.jpy` / `PRICE.usd`
+  table and a `currencyFor(lang)` that is the site's copy of the app's
+  `BillingCurrency.forInterface`; **the two have to agree or the page quotes a price
+  checkout will not honour.** The English 「2ヶ月分以上お得」 also lost its "over":
+  $144 − $120 is exactly two months, and only the yen plan needs the 以上.
+  `app/legal/page.tsx` gained the USD amounts as well — a 特商法 販売価格 disclosure
+  listing only yen understates what an English buyer is charged — and lost its
+  「税込」/「価格はすべて消費税を含む総額です」, which §9's table had flagged and which
+  `docs/billing.md` §10 says is not a claim a 免税事業者 may make. That page was the
+  last place still making it.
+- **Whether the welcome offer's 72 hours and 33% are the right numbers.** Both were
+  chosen rather than measured. `desktop_welcome_offer_shown` / `_accepted` and the
+  `offer_applied` property on the checkout event are what will answer it, and neither
+  has carried an event yet.
 - **Whether the ホーム numbers follow the account** (`AGENTS.md` §12). The §8 usage
   read answers half; local history stays per-Mac.
 - The 15 and 150 rewrites/month assumptions in §6. Both are 【推測】 and both are

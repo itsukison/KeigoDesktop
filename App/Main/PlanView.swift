@@ -14,9 +14,12 @@ import SwiftUI
 ///   Enterprise plates we cannot sell would be the "empty destinations" mistake
 ///   `AGENTS.md` §14 already rejected once.
 /// - **「2ヶ月分お得」 rather than a percentage.** ¥14,400 against ¥1,480 × 12 saves
-///   ¥3,360 — 2.27 months. §4 sells the annual plan on the ¥1,200/月相当 figure so
-///   the buyer compares 1,200 against 1,480 in one step with no arithmetic; a
-///   「Save 20%」 badge asks them to do the multiplication instead.
+///   ¥3,360 — 2.27 months; $120 against $12 × 12 saves exactly two. §4 sells the
+///   annual plan on the ¥1,200 / $10 月相当 figure so the buyer compares it against
+///   ¥1,480 / $12 in one step with no arithmetic; a 「Save 20%」 badge asks them to do
+///   the multiplication instead. The badge is **computed** (`PlanPricing.monthsFree`)
+///   rather than written, because a hard-coded 2 beside a changed price is how this
+///   claim would quietly stop being true.
 /// - **The usage row is this period's, not "this week".** And it carries the computed
 ///   reset date, which §4.5 makes a requirement rather than a nicety: a Pro window
 ///   resets on the subscription anchor and a free one on the 1st, so there is no
@@ -52,11 +55,28 @@ struct PlanView: View {
 
     private var plan: Entitlement.Plan { model.entitlement?.plan ?? .free }
 
+    /// A live subscription's currency outranks the interface language — see
+    /// `MainModel.billingCurrency`. Read once per body so every amount on the page
+    /// is denominated the same way, including the mixed case where a yen subscriber
+    /// is reading the English interface.
+    private var currency: BillingCurrency { model.billingCurrency }
+
+    /// Whether this page should quote the welcome price rather than the list price.
+    /// The server decides whether the discount is actually applied at checkout; this
+    /// only decides what the card says, and the two are kept in step by both reading
+    /// the same `welcome_offer_expires_at`.
+    private var offerIsLive: Bool { model.entitlement?.hasWelcomeOffer ?? false }
+
     // MARK: - Interval
 
     private var intervalToggle: some View {
-        HStack(spacing: 0) {
-            segment(.year, title: tr("年払い", "Yearly", "年付"), badge: tr("2ヶ月分お得", "2 months free", "省2个月"))
+        let months = PlanPricing.monthsFree(in: currency)
+        return HStack(spacing: 0) {
+            segment(
+                .year,
+                title: tr("年払い", "Yearly", "年付"),
+                badge: tr("\(months)ヶ月分お得", "\(months) months free", "省\(months)个月")
+            )
             segment(.month, title: tr("月払い", "Monthly", "月付"), badge: nil)
         }
         .padding(3)
@@ -94,7 +114,7 @@ struct PlanView: View {
         HStack(alignment: .top, spacing: 14) {
             PlanCard(
                 name: tr("無料", "Free", "免费"),
-                price: "¥0",
+                price: PlanPricing.Amount(0, currency).display,
                 unit: tr("/ 月", "/ month", "/ 月"),
                 caption: nil,
                 features: [
@@ -110,25 +130,18 @@ struct PlanView: View {
 
             PlanCard(
                 name: "Pro",
-                price: interval == .year ? "¥1,200" : "¥1,480",
-                unit: interval == .year ? tr("/ 月相当", "/ month, billed yearly", "/ 月（按年计费）") : tr("/ 月", "/ month", "/ 月"),
+                price: proPrice.display,
+                unit: proUnit,
+                flag: offerFlag,
                 // **Not 「税込」.** Core7 is a 免税事業者 and not an 適格請求書発行事業者
                 // (`docs/billing.md` §10), so a 消費税 claim is one we are not in a
                 // position to make. 消費税法第63条's 総額表示義務 explicitly excludes
                 // 免税事業者, so nothing requires the word either — what the buyer
                 // needs is the amount that will actually be charged, which is what
-                // this says. 自動更新 stays because 特商法第12条の6 ①分量 requires it.
-                caption: interval == .year
-                    ? tr(
-                        "年 ¥14,400 を一括・自動更新",
-                        "¥14,400 once a year, renews automatically",
-                        "每年一次性支付 ¥14,400，自动续订"
-                    )
-                    : tr(
-                        "毎月 ¥1,480 を自動更新",
-                        "¥1,480 every month, renews automatically",
-                        "每月 ¥1,480，自动续订"
-                    ),
+                // this says. 自動更新 stays because 特商法第12条の6 ①分量 requires it,
+                // and while an offer is live the same article's ②対価 is why the
+                // caption names the price it renews at rather than only the discount.
+                caption: proCaption,
                 features: [
                     tr("月1,000回まで書き換え", "1,000 rewrites a month", "每月1,000次改写"),
                     tr("通常のご利用では到達しません", "More than normal use reaches", "正常使用不会达到上限"),
@@ -139,6 +152,85 @@ struct PlanView: View {
             )
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: - What the Pro card says
+
+    /// The headline figure.
+    ///
+    /// Annual is quoted **per month** at list price so the buyer compares ¥1,200
+    /// against ¥1,480 (or $10 against $12) in one step — §4's whole argument for the
+    /// annual amount being divisible by twelve. While the welcome offer is live the
+    /// annual card switches to the **total**: ¥9,600 ÷ 12 is ¥800, but $80 ÷ 12 is
+    /// $6.66…, and `monthlyEquivalent` returns nil rather than inventing that
+    /// precision. Quoting one currency per month and the other per year would make
+    /// the same card mean two different things.
+    private var proPrice: PlanPricing.Amount {
+        if offerIsLive { return PlanPricing.welcomeOffer(interval, in: currency) }
+        if interval == .year, let monthly = PlanPricing.monthlyEquivalent(ofYearly: currency) {
+            return monthly
+        }
+        return PlanPricing.list(interval, in: currency)
+    }
+
+    private var proUnit: String {
+        switch (interval, offerIsLive) {
+        case (.year, true):
+            return tr("/ 初年度", "for the first year", "首年")
+        case (.year, false):
+            return tr("/ 月相当", "/ month, billed yearly", "/ 月（按年计费）")
+        case (.month, true):
+            return tr(
+                "/ 月（最初の\(PlanPricing.welcomeOfferMonthlyPeriods)ヶ月）",
+                "/ month for \(PlanPricing.welcomeOfferMonthlyPeriods) months",
+                "/ 月（前\(PlanPricing.welcomeOfferMonthlyPeriods)个月）"
+            )
+        case (.month, false):
+            return tr("/ 月", "/ month", "/ 月")
+        }
+    }
+
+    /// 特商法第12条の6 ①分量・②対価. Without an offer this states the amount and that it
+    /// renews; with one it must *also* state what it renews **at**, because a price
+    /// that changes after the first period is the disclosure the article exists for.
+    private var proCaption: String {
+        let list = PlanPricing.list(interval, in: currency).display
+        guard offerIsLive else {
+            return interval == .year
+                ? tr(
+                    "年 \(list) を一括・自動更新",
+                    "\(list) once a year, renews automatically",
+                    "每年一次性支付 \(list)，自动续订"
+                )
+                : tr(
+                    "毎月 \(list) を自動更新",
+                    "\(list) every month, renews automatically",
+                    "每月 \(list)，自动续订"
+                )
+        }
+
+        let offer = PlanPricing.welcomeOffer(interval, in: currency).display
+        let months = PlanPricing.welcomeOfferMonthlyPeriods
+        return interval == .year
+            ? tr(
+                "初年度 \(offer)、2年目以降は年 \(list) を自動更新",
+                "\(offer) for the first year, then \(list) a year, renews automatically",
+                "首年 \(offer)，第二年起每年 \(list)，自动续订"
+            )
+            : tr(
+                "最初の\(months)ヶ月は月 \(offer)、以降は月 \(list) を自動更新",
+                "\(offer) a month for \(months) months, then \(list) a month, renews automatically",
+                "前\(months)个月每月 \(offer)，之后每月 \(list)，自动续订"
+            )
+    }
+
+    /// The deadline, stated on the card rather than only on the onboarding page the
+    /// offer was made on. An offer whose expiry is invisible is one the user can only
+    /// discover by losing it.
+    private var offerFlag: String? {
+        guard offerIsLive, let expiry = model.entitlement?.welcomeOfferExpiresAt else { return nil }
+        guard let remaining = PlanPricing.offerRemainingText(until: expiry) else { return nil }
+        return tr("はじめての方限定 · \(remaining)", "New customers · \(remaining)", "新用户限定 · \(remaining)")
     }
 
     private var proAction: PlanCard.Action {
@@ -346,6 +438,10 @@ private struct PlanCard: View {
     let name: String
     let price: String
     let unit: String
+    /// An accent line above the price — today, the welcome offer's deadline. Nil on
+    /// every card that has nothing time-bound to say, which is all of them most of
+    /// the time.
+    var flag: String? = nil
     let caption: String?
     let features: [String]
     let highlighted: Bool
@@ -356,6 +452,11 @@ private struct PlanCard: View {
             header
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
+                    if let flag {
+                        Text(flag)
+                            .font(Tokens.Font.body(11, weight: .medium))
+                            .foregroundStyle(Tokens.Window.accentText)
+                    }
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text(price)
                             .font(Tokens.Font.display(24))

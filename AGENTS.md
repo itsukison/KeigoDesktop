@@ -11,6 +11,93 @@ The first run produced `debug.png` and a round of overlay fixes (§4, §8).
 
 Verified (2026-08-07):
 
+- **2026-08-10 — English is priced in dollars, and first run now makes one offer.**
+  §17 split interface language from writing language and left a third question
+  unasked: what an English user is *charged*. They were quoted ¥1,480 in English
+  sentences. English now means **USD — $12/month, $120/year** — while 日本語 and
+  简体中文 stay on ¥1,480 / ¥14,400, because §17's premise is that a 简体中文 user is a
+  Chinese speaker working in Japan and their card is a Japanese card.
+  `BillingCurrency.forInterface` is the only place that rule lives, beside
+  `writesJapanese`. $120 was chosen over $96 or $99 for one property: it divides by
+  twelve into $10, and $144 − $120 is **exactly two months**, so the existing
+  「2ヶ月分お得」 badge is literally rather than approximately true — and it is now
+  *computed* from the two list prices rather than written down. **No new Stripe
+  product and no new prices**: USD is `currency_options[usd]` on the two prices that
+  already exist, which keeps `pro_monthly_jpy` / `pro_yearly_jpy` the only sellable
+  keys and keeps the Customer Portal able to move a subscriber between intervals
+  without knowing about currency. The `_jpy` suffix now names each price's *default*
+  currency; renaming would need `transfer_lookup_key: true`, which strips the key off
+  the old price. A **new `.offer` step** (raw value 11) sits between きっかけ and 完了
+  — after the three practices that are the argument for paying, before the page that
+  hands the app over — offering **33% off the first period** (¥9,600 / $80 a first
+  year, ¥980 / $8 a month for three) for **72 hours**. It is two Stripe coupons
+  applied server-side, never a third price and never a promotion code; eligibility
+  lives entirely in `desktop.welcome_offers`, whose rows are **never deleted**,
+  because a primary key that is never removed is the whole enforcement of "once per
+  account". Declining is safe — a ホーム card carries the same price and deadline
+  until the window closes. `currentVersion` stays **2**, so users who already
+  finished first run are never replayed into it. `swift test` passes **137 tests**
+  (14 new), `xcodebuild` succeeds with no new warnings, and `deno check` +
+  `deno lint` are clean on all four functions.
+  **The live Stripe catalog is done and was read back rather than assumed:** both
+  prices carry `currency_options[usd]` at 1200 / 12000 with `tax_behavior: inclusive`,
+  and `welcome_monthly_33` (¥500 / $4, `repeating` ×3) and `welcome_annual_33`
+  (¥4,800 / $40, `once`) exist, restricted by `applies_to` to the Pro product, at
+  `times_redeemed: 0`. No product was created, no price was created, nothing was
+  archived, and no existing subscription was touched.
+  **The backend is deployed and was exercised against the live project.** The
+  migration `20260810120000_desktop_usd_pricing_and_welcome_offer.sql` **is applied**,
+  and its four drop-and-recreates left exactly one of each function with the grants
+  intact — read back from `pg_proc`, not assumed, because a dropped-and-recreated
+  function is precisely where a grant goes missing and the failure is silent.
+  `desktop_get_entitlement()` and `desktop_start_welcome_offer()` are the only two
+  `desktop_*` entry points `authenticated` can reach; `anon` reaches none.
+  `desktop-checkout` is **v6** (`verify_jwt` true, 401 without a JWT, 200 on OPTIONS)
+  and `desktop-stripe-webhook` is **v3** (`verify_jwt` false, 400 on a missing
+  signature, 405 on GET). `DESKTOP_WELCOME_COUPON_MONTHLY` / `_ANNUAL` are set.
+  **Six assertions were run against the live database on a throwaway `auth.users` id
+  and every row was removed afterwards** (0 left in `welcome_offers`, `subscriptions`
+  and `auth.users`): calling `desktop_start_welcome_offer()` twice yields one row and
+  the same deadline, the window is 72 hours to within a minute, a never-subscribed
+  account reports a **null** currency rather than a guessed yen, `usd` round-trips
+  through `desktop.subscriptions.currency` into `billing_currency`, an account that
+  has ever held a subscription is refused **while its offer row survives**, and an
+  expired deadline reads back as null.
+  **Not verified: one payment in either currency, one redeemed coupon, and none of
+  the UI on screen.** The Stripe MCP exposes no Checkout Session operation, so no
+  session has been created in USD by hand — the deployed function is the only thing
+  that creates them, and proving it needs a real signed-in user. One artifact of
+  trying: **empty live customer `cus_V2qJQoKQWHhoYB`** (`delete_me: true`, no
+  invoices, no payments). §0's rule is that bare customers are left in place, and
+  the MCP has no delete operation either way.
+  **One thing found while auditing the account, and it is not part of this work:**
+  promotion code **`TEST` is live, active, unlimited and 100% off**, on an account
+  where every undiscounted session sets `allow_promotion_codes: true`. Anyone who
+  types it gets Pro free. **It is still there** — the Stripe MCP exposes no
+  promotion-code update operation, so archiving it is a Dashboard action.
+- **2026-08-10 — the dashboard measured the loop and not the funnel into it, and
+  the two events it needed did not exist.** 549465 has been ingesting since
+  2026-08-09 21:21 JST, so the 15 tiles could finally be read against real data
+  rather than imagined — and what they could not answer was how many people
+  arrived, signed up or finished first run on any given day. `MainModel` now sends
+  `desktop_signed_up` and `desktop_signed_in` (§7), closing the gap
+  `docs/analytics.md` §3 listed second; `refresh()`'s restored Keychain session
+  deliberately sends neither, and Google is separated by the age of the
+  `profiles` row rather than by anything in the session, which carries no such
+  signal. `Desktop (macOS) Overview` went from 15 tiles to **21 in five bands**,
+  the six-tile acquisition band modelled on 465060's own
+  `Product KPIs — code-aligned (v2)` — read for structure only; nothing was
+  written there and the MCP was switched back to 549465 before any change.
+  Two things were **measured on the live project rather than assumed**:
+  `Application Installed` carries no `surface` on 0 of 2 rows, because the SDK
+  captures it inside `setup()` before `registerSurface()` can run — so tiles 1, 2
+  and 5 run unfiltered by necessity, not by omission — and onboarding practice
+  emits both rewrite events, so the acceptance rate counts three scripted Inserts
+  per new user until an `is_tutorial` property exists. `xcodebuild` succeeds with
+  only the two existing concurrency/AppIntents warnings and all 135 tests pass.
+  **Not verified: one real `desktop_signed_up`.** No build carrying the two events
+  has shipped, and the Google branch's ten-minute window has not met a real new
+  account — the release after this is what proves both.
 - **2026-08-09 — Sparkle updates now announce themselves on ホーム.** This is
   Sparkle's gentle-reminder path, not a second updater: a scheduled background check
   that selects a valid compatible appcast item no longer opens the standard alert
@@ -454,20 +541,27 @@ panel, not an insertion — as are the clipboard fallback and the
 
 Known gaps, all deliberate:
 
-- **Analytics is wired end to end and has never carried a single event.** Project
+- **Analytics is live and the pipe is proven.** Project
   `KeigoButton Desktop (macOS)` is **549465** in org `Keigo`, its token and host
   are set on the repo's `production` environment (so `release-macos.yml`'s
-  `test -n` preflight passes — it did not before), and the 15-tile
+  `test -n` preflight passes — it did not before), and the 21-tile
   `Desktop (macOS) Overview` dashboard is built and pinned. `docs/analytics.md`
-  is the authority. **Not verified: one real event.** `ingested_event` was false
-  at creation; the first build carrying the token is what proves the pipe, and
-  `docs/analytics.md` §5 is the three-step check to run then — the surface stamp
-  arriving, surviving a sign-out, and 465060 receiving nothing new.
-- Three analytics gaps, each small and each bounding a dashboard tile: no
-  `desktop_checkout_completed` (the revenue funnel ends at intent), no desktop
-  sign-in/sign-up events (a new desktop user is indistinguishable from an iOS
-  user installing the Mac app — `desktop.activations` is the server-side answer),
-  and `io_path` exists only on the two rewrite events. `docs/analytics.md` §3.
+  is the authority. The first real events arrived **2026-08-09 21:21 JST**: 135 of
+  them from 2 people across 0.1.0/0.1.1/0.1.2, every one carrying `surface: macos`
+  **except `Application Installed`**, which is captured inside `PostHogSDK.setup()`
+  one line before `registerSurface()` can run. **Still never fired:
+  `desktop_onboarding_completed`, `desktop_source_selected`, `desktop_prompt_*` and
+  `desktop_checkout_started`** — both testers had already finished first run, so
+  four tiles have no data and no proof either way. 465060 receiving nothing new has
+  not been re-checked since the token went live.
+- Five analytics gaps, each small and each bounding a dashboard tile:
+  `Application Installed` carries no surface stamp (so tiles 1, 2 and 5 cannot use
+  layer 3's filter), no `desktop_checkout_completed` (the revenue funnel ends at
+  intent), **no `is_tutorial` on the rewrite events** — onboarding practice sends
+  both and its three lessons complete only on a successful Insert, so every new
+  user donates three guaranteed acceptances to the acceptance-rate tile — `io_path`
+  exists only on the two rewrite events, and a DMG download is not an event at all:
+  `Application Installed` is a first launch. `docs/analytics.md` §3.
 - Sparkle and the distribution credentials are wired, and the `v0.1.0` GitHub release
   workflow passed end to end. What remains unproven is the user-side install and an
   installed old-build → new-build Sparkle update. The local Developer ID identity,
@@ -1110,18 +1204,19 @@ deferred.
 
 ## 7. Analytics
 
-`docs/analytics.md` is the authority — the dashboard's 14 tiles, the three
+`docs/analytics.md` is the authority — the dashboard's 21 tiles, the three
 isolation layers and the manual project-creation step live there. This is the
 short version.
 
-- **New PostHog project** in org `Keigo`. Do not report into `Default project`
-  (465060) — MAU, retention and funnels are computed per project, and person
-  merging across surfaces would silently deflate both platforms' counts.
-  **Read back on 2026-08-09: org `Keigo` contains exactly one project, 465060,
-  and it is the iOS keyboard's *and* the landing page's.** `../Japanese/Config/
-  Local.xcconfig` points at its token; 465060 already ingests `keyboard_enabled`,
-  `$screen` and `app_store_click`. The desktop project does not exist yet, so no
-  token is set anywhere and nothing has ever been sent.
+- **The desktop has its own PostHog project: 549465, `KeigoButton Desktop
+  (macOS)`.** Do not report into `Default project` (465060) — MAU, retention and
+  funnels are computed per project, and person merging across surfaces would
+  silently deflate both platforms' counts. 465060 is the iOS keyboard's *and* the
+  landing page's; `../Japanese/Config/Local.xcconfig` points at its token, and it
+  already ingests `keyboard_enabled`, `$screen` and `app_store_click`. **Reading
+  465060 for reference is fine and was done on 2026-08-10** — its
+  `Product KPIs — code-aligned (v2)` dashboard is what the desktop's acquisition
+  band is modelled on. Writing anything into it from here is not.
 - PostHog Swift SDK, `distinct_id` = Supabase user id. **That is the same id iOS
   identifies with**, which is why a shared project could not be salvaged by
   filtering: the merge would be to the person store, not the event stream.
@@ -1130,7 +1225,17 @@ short version.
   `$identify` carry it too, not just the ones we call `capture` for. It is
   re-registered in `MainModel.signOut()`, because `PostHogSDK.shared.reset()`
   clears super properties along with the identity and every event after a
-  sign-out would otherwise lose its surface until the next launch.
+  sign-out would otherwise lose its surface until the next launch. **One event
+  escapes it: `Application Installed`.** The SDK captures that inside
+  `PostHogSDK.shared.setup(config)`, and `configure()` can only register on the
+  line after — measured on the live project, 0 of 2 installs carry a surface.
+  Three dashboard tiles therefore run unfiltered; see `docs/analytics.md` §3.
+- **`desktop_signed_up` / `desktop_signed_in` (2026-08-10)** are captured in
+  `MainModel` for an authentication the user just performed, never for the
+  Keychain session `refresh()` restores. Google cannot tell the two apart from the
+  session alone, so `completeOAuth` treats a `profiles.created_at` under ten
+  minutes old as a signup — the row `handle_new_user()` writes inside the signup
+  transaction, and a wide window because the client's clock is not Postgres's.
 - **Desktop event names are `desktop_`-prefixed, all of them.** Four of them were
   not until 2026-08-09 — `prompt_created`, `prompt_updated`, `prompt_deleted` and
   `onboarding_completed` are byte-identical to events the iOS container has been
@@ -1838,8 +1943,10 @@ width went with the 460 pt column that justified it.
 ## 15. First-run onboarding
 
 `App/Onboarding/` is a dedicated, non-resizable **1080×700** window with no settings
-sidebar. Its ten steps are アカウント → 用途 → ボタン → アクセス → the pill →
-書き換え → カスタム → 返信 → きっかけ → 完了. The frame does not follow the intrinsic size of whichever step happens to be
+sidebar. Its eleven steps are アカウント → 用途 → ボタン → アクセス → the pill →
+書き換え → カスタム → 返信 → きっかけ → **オファー** → 完了 — ten of which the progress
+rail counts. The rail deliberately does not count the offer: it counts setting the app
+up, and paying for it is not a step of installation. The frame does not follow the intrinsic size of whichever step happens to be
 visible: `.resizable` is absent from the style mask, the `NSHostingView` has
 `sizingOptions = []`, and both `contentMinSize` and `contentMaxSize` are applied at
 1080×700 after the host is installed. The order matters: the hosting view's default
@@ -1977,8 +2084,8 @@ raw value 7, `complete` remains 6, and `customPractice` is appended at 8;
 invalidating unfinished saved steps. `currentVersion` remains 2, so completed users reach
 the expanded lesson through 「使い方を見る」 rather than being forced through first run.
 
-きっかけ is the only page that asks for something instead of teaching something, and it
-sits **second to last**: 完了 hands the app over, and nothing should be asked after that.
+きっかけ was the only page that asks for something instead of teaching something, and it
+sits **third from last**: 完了 hands the app over, and nothing should be asked after that.
 It reuses 用途's composition exactly — question left, choice grid on the lavender stage,
 the same card metrics and selection dot — because a survey that invents its own layout
 reads as a different product's page. Eight options: X, YouTube, Instagram and TikTok
@@ -1991,14 +2098,51 @@ applied in `SourceMark` rather than baked into an asset that would then be wrong
 another size. **These are third-party trademarks, shown to identify the channel and for
 nothing else.**
 
-It is a question, not a gate: 「答えない」 sits beside 「次へ」, moves straight to 完了 and
-sends nothing, so a skipped run is absent from the series rather than a guess inside it.
+It is a question, not a gate: 「答えない」 sits beside 「次へ」, moves on without sending
+anything, so a skipped run is absent from the series rather than a guess inside it.
 `OnboardingSource.rawValue` is the wire key and is pinned by a test — a rename splits an
 attribution series with nothing in the data to show it happened — while `label` is free
 to be reworded. `desktop_source_selected` carries `source` plus a `$set_once`
 `attribution_source` person property (`docs/analytics.md` §3), and a replay sends nothing
 at all. `source` is appended at raw value 9, so an unfinished saved step still resolves,
 and `currentVersion` stays 2: users who finished before this page existed are not asked.
+
+### オファー — the one page that asks for money
+
+Between きっかけ and 完了, at raw value **11**. The position is the whole design: it comes
+**after** the three practices, because the argument for paying is that the user has just
+watched their own text rewritten in their own apps, and **before** 完了, because 完了
+hands the app over and an ask bolted onto the end of a finished flow is an interruption.
+
+**33 % off the first period, for 72 hours** — ¥9,600 / $80 a first year, ¥980 / $8 a
+month for three, then list. `docs/pricing.md` §1 owns the numbers and `docs/billing.md`
+§2 owns the mechanics; three things about the page belong here:
+
+- **The deadline is real, and that is what licenses saying it.** It is minted by
+  `desktop_start_welcome_offer()` and enforced by `desktop-checkout` against the same
+  row, so there is no countdown the client could keep alive. `desktop.welcome_offers` is
+  primary-keyed on `user_id` and its rows are **never deleted** — not on expiry, not on
+  redemption, and there is deliberately no GC job — because that is the only thing
+  making "once per account" survive a reinstall or a second Mac. A deliberately
+  unenforced deadline would be a 景表法 有利誤認 claim rather than a design choice, and
+  the struck-through list price beside the offer is defensible for the same reason: it
+  is the price this same account pays from the second period on.
+- **Each card states what it renews at.** 特商法第12条の6 ①分量 and ②対価 — the amount,
+  that it covers the first period only, the price afterwards, and that it renews
+  automatically. A discounted first period without the second number is half a price.
+- **Declining costs nothing.** 「あとで」 moves to 完了 and a ホーム card carries the same
+  price and the same remaining time until the window closes. An offer that vanished
+  with the page it was made on would be a deadline of about four seconds. Once Checkout
+  has been opened the secondary action re-reads 「次へ」 rather than 「あとで」: someone who
+  has already gone to pay is not declining, and the payment finishes out of band so
+  there is no result to wait for.
+
+The page is skipped entirely — straight to 完了, nothing written — for a user who is
+already Pro, for a replaying user, and for any account the server refuses. A network
+failure is treated as a refusal for the same reason: the failure mode is a user who
+finishes setup without seeing an offer, and the alternative is a page showing a price
+checkout will not honour. `currentVersion` stays **2**, so nobody who has already
+finished first run is replayed into it.
 
 ---
 
@@ -2285,11 +2429,20 @@ in Japan**, so the interface is Chinese and the buttons still write Japanese.
 `AppLanguage.writesJapanese` is that fact and it is the only place it is decided;
 nothing else in the app branches on the raw language.
 
-| | interface | buttons write | packs offered |
-|---|---|---|---|
-| 日本語 | Japanese | Japanese | 定番 / 仕事 / 海外 / 日本語 / SNS |
-| English | English | English | Starter / Work / Outreach / Polish / Social |
-| 简体中文 | Chinese | **Japanese** | the Japanese five, unchanged |
+| | interface | buttons write | billed in | packs offered |
+|---|---|---|---|---|
+| 日本語 | Japanese | Japanese | ¥1,480 / ¥14,400 | 定番 / 仕事 / 海外 / 日本語 / SNS |
+| English | English | English | **$12 / $120** | Starter / Work / Outreach / Polish / Social |
+| 简体中文 | Chinese | **Japanese** | **¥1,480 / ¥14,400** | the Japanese five, unchanged |
+
+The third column was added on 2026-08-10 and it splits the same way the second does,
+for the same reason: 简体中文 is a Chinese speaker working in Japan, so their card is
+a Japanese card. `BillingCurrency.forInterface` is that fact, and it sits beside
+`writesJapanese` as the second — and, so far, last — thing the raw language decides.
+**One asymmetry worth knowing:** the writing language is a request field, so it can be
+wrong and be corrected on the next rewrite. The currency is fixed at subscription
+creation and cannot be changed at all, which is why an existing subscription's
+currency outranks the interface language everywhere it is quoted.
 
 ### `tr(ja, en, zh)`, and why it is not a String Catalog
 
@@ -2420,16 +2573,44 @@ a matter of care. The reply branch is language-neutral and is deliberately left
 alone; four Deno tests pin the default, both English branches and the reply branch's
 independence.
 
-### The landing page
+### The landing page — and it is **not** in this repository
 
-Three static builds, one per language: `dist/`, `dist/en/`, `dist/zh/`, driven by
-`VITE_LOCALE` through `landing/vite.config.js`. Subdirectories on one origin is
-what Google documents, and it is the only arrangement where a shared URL opens in
-the language it was written in.
+**The production site is `../web`**: a Next.js 16 app on Vercel at
+`keigobutton.com`. `landing/` here was its *prototype*, and `web/components/mac/`
+is a fork of it — `Problem.jsx` and `useReveal.jsx` were byte-identical. A round of
+localization was done against the prototype before that was noticed, which is the
+whole argument against keeping two copies of one page; the prototype's code is now
+deleted and its copy deck lives at `web/components/mac/docs/content.md`, beside the
+five files that cite it. Only `landing/landing_reference/` (10 MB of design
+screenshots, nothing citing it) is left here.
+
+What follows describes the port, which lives in `../web`.
+
+Three routes rather than three builds. `/` stays Japanese and **unprefixed** — every
+indexed URL on that site is unprefixed Japanese, and `/keigo-henkan` and `/reibun/*`
+are the pages that rank — so `/en` and `/zh` were added beside it rather than moving
+anything. Next's own i18n guide nests every locale including the default, which
+would have renamed every ranking URL; that is the one place this deliberately
+departs from the framework's documented pattern.
 
 - `hreflang` is emitted **self-referencing and symmetric** on all three, plus
   `x-default` → the Japanese root. Those three properties are what make the set
-  valid; drop one and Google ignores the whole thing.
+  valid; drop one and Google ignores the whole thing. `lib/alternates.ts` is the only
+  place it is built, so a page cannot be annotated in one direction and forgotten in
+  the other — and `SPINE_PATHS`, which feeds the sitemap, holds only paths that exist
+  in **all three** languages. A path added there before its routes exist puts a 404
+  in the sitemap, which is worse than the page being missing because it is a claim.
+- **The scope is the product spine, not the site.** `/keigo-henkan`, `/keigo-check`,
+  `/keigo-test`, `/reibun/*` and `/blog/*` exist to rank for Japanese queries —
+  「敬語 例文」 has no English search behind it — so they stay Japanese-only, carry no
+  `hreflang`, and are dropped from the English and Chinese navigation rather than
+  linked with a translated label to a Japanese page.
+- **`<html lang>` is the one compromise.** Setting it per route needs multiple root
+  layouts, and the docs are explicit that those require *no* top-level `layout.tsx`
+  — moving all thirteen route folders in the live repo to change one attribute. The
+  localized subtree is wrapped in a server-rendered `<div lang>` instead, which is
+  what assistive technology actually reads, with a client effect correcting the root
+  element. The route-group move is the upgrade path and nothing blocks it.
 - **No automatic redirect by `Accept-Language`.** Google advises against it, and it
   is wrong for real people often enough — a VPN, a work laptop set to English.
   `LocaleBanner` offers the match once, links rather than redirects, and remembers
@@ -2439,23 +2620,44 @@ the language it was written in.
   different regional glyph forms, and a Japanese font draws the Japanese ones —
   legible to a Chinese reader, but visibly the wrong shapes. JP stays behind it
   because the Chinese page still shows Japanese text inside the product mockups.
-- Amounts never change with the language. The product is billed in yen on every
-  surface, and a converted figure on the page would not be the figure at the card.
-- `FeatureGrid`, `Continuity`, `Privacy` and `FinalCta` are unmounted (see
-  `App.jsx`) and were **not** translated. Mounting one is now also a translation
-  job.
+- **Amounts change with the language, for English only — and the original reasoning
+  is why, not an exception to it.** The rule used to read "amounts never change with
+  the language", because a converted figure on the page would not have been the figure
+  at the card. Since 2026-08-10 the app charges **$12 / $120** to anyone reading it in
+  English, so on `/en` the yen figure is the one that would not match the card. `/` and
+  `/zh` are unchanged: 简体中文 is billed in yen for §17's own reason.
+  `components/mac/data/pricing.js` holds a `PRICE.jpy` / `PRICE.usd` table and a
+  `currencyFor(lang)` that mirrors the app's `BillingCurrency.forInterface` — **the two
+  are one rule kept in two repositories, and they have to agree or the page quotes a
+  price checkout will not honour.** `app/legal/page.tsx` carries the USD amounts too:
+  a 特商法 販売価格 disclosure listing only yen understates what an English buyer pays.
+- **The English route is set one weight step lighter than the other two**, and it is
+  a typographic fact rather than a preference: latin letterforms at a given numeric
+  weight read heavier than the CJK glyphs beside them. `[lang='en'] .mac-landing`
+  shifts the whole scale to 300/400/500/600 against 400/500/600/700, with the 48px
+  display line and the 40px section headings taking a second step to 300 and their
+  negative tracking eased — tight letter-spacing exists to close the gaps a bold face
+  opens, and left alone under a light face it reads as cramped. **Inter's 300 has to
+  stay in `app/layout.tsx`'s weight list**: an unloaded weight is not rounded down to
+  the nearest loaded one, it is synthesised from 400 and looks exactly like 400.
+  Japanese and Chinese are deliberately excluded — their glyphs pack far more strokes
+  into the same em box, and at 300 a 16px kanji starts losing the strokes that
+  distinguish it, which is the same asymmetry `opticalNudge` below records.
+- `FeatureGrid`, `Continuity`, `Privacy` and `FinalCta` were cut from the page
+  before the port and do not exist in `web/components/mac/`. Their source is in
+  `content.md`; bringing one back is now also a translation job.
+- **One correction was made that is not localization.** `Pricing.jsx` said
+  「価格はすべて税込みです」. `docs/billing.md` §10 records that Core7 is a 免税事業者
+  and not an 適格請求書発行事業者, so a 消費税 claim is not ours to make — and
+  消費税法第63条's 総額表示義務 excludes 免税事業者 by the text of the article, so
+  nothing required the word either. The app's own plan card and this file have said
+  so since 2026-08-08; the site was the last place still making the claim, and it now
+  carries the same sentence the app does.
 
-**Looking at it locally — the two modes behave differently, and the difference has
-already cost one round of confusion.** `npm run dev` serves **one** language; which
-one is `VITE_LOCALE`, and it is mounted at that locale's own base, so `dev:en` is at
-`http://localhost:5180/en/` and `/` merely redirects there. **All three languages
-only coexist in the built output**, so the way to check them side by side —
-and the closest thing to production — is `npm run preview`, which builds all three
-and serves `dist/` at `http://localhost:4173/`, `/en/` and `/zh/`. (`preview` builds
-first on purpose: previewing a stale `dist/` shows yesterday's copy with no hint
-that it is doing so.) The port is **5180 / 4173, never 3000.** A `trailingSlash`
-plugin redirects `/en` → `/en/` in dev, because without it that URL 404s and reads
-exactly like "the English build does not exist".
+**Looking at it locally:** `cd ../web && npm run dev`, then
+`http://localhost:3000/`, `/en` and `/zh` — **port 3000, and all three languages
+from one server**, because they are routes rather than builds. No trailing slash:
+`trailingSlash` is at its Next default, so `/en` is canonical and `/en/` 308s to it.
 
 ### `opticalNudge` was checked and deliberately left alone
 
