@@ -137,16 +137,73 @@ final class MainModel: NSObject, ObservableObject {
     /// the sole owner of update downloading, verification, skipping and installation.
     @Published private(set) var availableUpdateVersion: String?
     var onUpdateRequested: (() -> Void)?
+    /// Raised whenever `availableUpdateVersion` changes, so `AppDelegate` can move the
+    /// two surfaces it owns — the panel above the bar and the status-menu row — without
+    /// the model knowing either exists.
+    var onUpdateNoticeChanged: ((String?) -> Void)?
 
-    func offerUpdate(version: String) {
+    private let updateStore = PendingUpdateStore()
+
+    /// A find that outlived the app that made it. Called once at launch, before the bar
+    /// is shown: an update discovered yesterday is still an update, and the next
+    /// scheduled check is `SUScheduledCheckInterval` — a whole day — away, so a notice
+    /// that died with the process would be invisible for most of its life.
+    func restorePendingUpdate() {
+        guard let version = updateStore.pending(for: appVersion) else {
+            // `pending(for:)` clears a record the running build has caught up with, so
+            // this is also the post-install cleanup.
+            availableUpdateVersion = nil
+            onUpdateNoticeChanged?(nil)
+            return
+        }
         availableUpdateVersion = version
+        onUpdateNoticeChanged?(version)
     }
 
+    /// Whether the panel above the bar should stand down for this version because the
+    /// user already waved it away. The ホーム card and the status-menu row ignore it.
+    func isUpdateNoticeDismissed(_ version: String) -> Bool {
+        updateStore.isNoticeDismissed(version)
+    }
+
+    func offerUpdate(version: String) {
+        let isNewFind = availableUpdateVersion != version
+        updateStore.record(version)
+        availableUpdateVersion = version
+        onUpdateNoticeChanged?(version)
+        guard isNewFind else { return }
+        // The one event that can tell us this whole path works in the wild. Everything
+        // about a background update is invisible from here otherwise: the check, the
+        // find and the announcement all happen with nobody watching, which is how a
+        // reminder that reached no surface at all shipped in 0.1.2.
+        PostHogSDK.shared.capture("desktop_update_offered", properties: [
+            "from_version": appVersion,
+            "to_version": version
+        ])
+    }
+
+    /// The user dismissed the panel above the bar. Persisted per version so a re-find on
+    /// tomorrow's scheduled check does not put it straight back.
+    func dismissUpdateNotice(for version: String) {
+        updateStore.dismissNotice(for: version)
+    }
+
+    /// Sparkle's own window is now in front of the user, or its session ended. Either
+    /// way this app has nothing left to announce **in this run** — but the record
+    /// survives, because closing Sparkle's window without acting is not installing the
+    /// update, and the next launch should say so again.
     func clearUpdateNotice() {
         availableUpdateVersion = nil
+        onUpdateNoticeChanged?(nil)
     }
 
     func requestAvailableUpdate() {
+        if let version = availableUpdateVersion {
+            PostHogSDK.shared.capture("desktop_update_accepted", properties: [
+                "from_version": appVersion,
+                "to_version": version
+            ])
+        }
         onUpdateRequested?()
     }
 

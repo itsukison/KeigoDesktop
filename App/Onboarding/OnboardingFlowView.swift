@@ -409,40 +409,6 @@ private struct WelcomeStep: View {
     }
 }
 
-private struct GoogleSignInButton: View {
-    let isLoading: Bool
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image("GoogleG")
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: 18, height: 18)
-                Text(isLoading ? tr("接続中…", "Connecting…", "连接中…") : tr("Google で続ける", "Continue with Google", "使用 Google 继续"))
-                    .font(Tokens.Font.body(14, weight: .medium))
-                    .foregroundStyle(Color(hex: 0x1f1f1f))
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 42)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(hovering ? Tokens.Window.surface : .white)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color(hex: 0x747775), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(isLoading)
-        .onHover { hovering = $0 }
-        .cursor(isLoading ? .arrow : .pointingHand)
-    }
-}
-
 /// The first page, and the only one asked before setup begins.
 ///
 /// It reuses 用途's composition — question left, choices on the lavender stage — rather

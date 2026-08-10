@@ -118,6 +118,10 @@ struct CapturedTarget: Equatable {
 
 struct PendingRewrite: Equatable {
     let captured: CapturedTarget
+    /// The text sent to the model. This normally matches the captured target, but a
+    /// guided regeneration uses the visible candidate while `captured` keeps pointing
+    /// at the original field where Insert must write the final result.
+    let requestText: String
     /// The prompt text sent to the backend. Echoed in the result panel's top field
     /// per `result.png`, which is why it is held rather than discarded after the call.
     let promptText: String
@@ -134,22 +138,72 @@ struct PendingRewrite: Equatable {
     let startedAt: Date
 }
 
-struct ResultContext: Equatable {
+/// One selectable page in the result panel. Each backend response owns its event id
+/// and candidate index, and each history row owns its own id; keeping those beside the
+/// text prevents navigating backward from sending feedback or acceptance to the newest
+/// response by mistake.
+struct ResultPage: Equatable {
     let pending: PendingRewrite
-    let result: RewriteResult
+    let candidate: RewriteCandidate
+    let eventId: String?
+    let responseCandidateIndex: Int
+    let historyEntryId: UUID?
+}
+
+struct ResultContext: Equatable {
+    private(set) var pages: [ResultPage]
     var selectedIndex: Int
 
-    var candidate: RewriteCandidate? {
-        result.candidates.indices.contains(selectedIndex)
-            ? result.candidates[selectedIndex]
-            : result.candidates.first
+    init(pending: PendingRewrite, result: RewriteResult, historyEntryId: UUID?) {
+        pages = Self.makePages(
+            pending: pending,
+            result: result,
+            historyEntryId: historyEntryId
+        )
+        selectedIndex = 0
     }
 
-    /// The desktop requests one candidate (§6), so this normally reads `1 / 1` — and
-    /// it is still shown, because `result.png` shows it that way. The readout is the
-    /// candidate *count*, not just a control: it is what distinguishes a regenerate
-    /// that replaced the result from one that added to it.
+    var selectedPage: ResultPage? {
+        pages.indices.contains(selectedIndex) ? pages[selectedIndex] : pages.first
+    }
+
+    var candidate: RewriteCandidate? { selectedPage?.candidate }
+    var count: Int { pages.count }
+
+    /// Adds every candidate from a newly completed request and selects the first new
+    /// page. Desktop currently requests one, while preserving all candidates keeps the
+    /// pager correct if that request policy changes later.
+    mutating func append(pending: PendingRewrite, result: RewriteResult, historyEntryId: UUID?) {
+        let next = Self.makePages(
+            pending: pending,
+            result: result,
+            historyEntryId: historyEntryId
+        )
+        guard !next.isEmpty else { return }
+        selectedIndex = pages.count
+        pages.append(contentsOf: next)
+    }
+
     var pagerLabel: String {
-        "\(min(selectedIndex + 1, result.candidates.count)) / \(result.candidates.count)"
+        guard !pages.isEmpty else { return "0 / 0" }
+        return "\(min(selectedIndex + 1, pages.count)) / \(pages.count)"
+    }
+
+    private static func makePages(
+        pending: PendingRewrite,
+        result: RewriteResult,
+        historyEntryId: UUID?
+    ) -> [ResultPage] {
+        result.candidates.enumerated().map { index, candidate in
+            ResultPage(
+                pending: pending,
+                candidate: candidate,
+                eventId: result.eventId,
+                responseCandidateIndex: index,
+                // History currently records the first candidate from each response;
+                // desktop asks for exactly one, so this is the normal path.
+                historyEntryId: index == 0 ? historyEntryId : nil
+            )
+        }
     }
 }

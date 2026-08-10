@@ -43,4 +43,22 @@ final class MainWindowController: NSWindowController {
         // without this the window opens behind whatever the user was working in.
         NSApp.activate(ignoringOtherApps: true)
     }
+
+    /// On screen, in front, and **without taking the keyboard**.
+    ///
+    /// For every other caller `present()` is right: the user asked for this window, so
+    /// they want to be in it. The update notice is the one caller that nobody asked for
+    /// — the app decided on its own that now was the moment — and `NSApp.activate` there
+    /// takes focus out of whatever the user is typing in. That is precisely what §4
+    /// exists to prevent everywhere else in this app, and Sparkle's own scheduled alert
+    /// was declined for the same reason.
+    ///
+    /// `orderFrontRegardless` is what makes this work for an `.accessory` process:
+    /// `orderFront` is ignored while the app is inactive, and `makeKeyAndOrderFront`
+    /// would take the focus this method exists to leave alone. The window arrives above
+    /// the user's other windows, keeps their insertion point where it was, and becomes
+    /// key the moment they click it.
+    func presentWithoutActivating() {
+        window?.orderFrontRegardless()
+    }
 }

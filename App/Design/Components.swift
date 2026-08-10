@@ -1,4 +1,9 @@
 import AppKit
+// `tr` for the one component here whose text is its own rather than the caller's:
+// Google's button owns its wording as much as its logo, and splitting the two would
+// put the same three strings back in two feature folders — which is how アカウント and
+// onboarding drifted apart in the first place.
+import DesktopRewriteKit
 import SwiftUI
 
 /// The one thing that changes the cursor over a window that can never be key.
@@ -395,6 +400,74 @@ struct LinkButton: View {
 
 // MARK: - Buttons
 
+/// Google's own button, not one of ours.
+///
+/// It is deliberately outside `ActionButton`'s two axes: the white plate, the
+/// `#747775` border, the `#1f1f1f` label and the full-colour G are Google's identity
+/// guidelines, and a `.secondary` `ActionButton` reading 「Google で続ける」 with no mark
+/// on it — which is what アカウント shipped — is both off-brand and the one button on
+/// the page a user scans for by its logo.
+///
+/// Two sizes because it appears in two shapes of layout: `wide` fills the column in
+/// first run, where it is the primary way in; `inline` matches `ActionButton`'s 32 pt
+/// row metrics for アカウント, where it stands beside サインイン. Everything else about
+/// the two is identical, which is the point of having one type.
+struct GoogleSignInButton: View {
+    enum Size {
+        case wide
+        case inline
+
+        var height: CGFloat { self == .wide ? 42 : 32 }
+        var glyph: CGFloat { self == .wide ? 18 : 16 }
+        var spacing: CGFloat { self == .wide ? 12 : 8 }
+        var font: CGFloat { self == .wide ? 14 : 13 }
+    }
+
+    var size: Size = .wide
+    var isLoading: Bool = false
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: size.spacing) {
+                Image("GoogleG")
+                    .resizable()
+                    .interpolation(.high)
+                    // The artwork is 200×204, so a square frame alone squashes the G by
+                    // 2%. Fitting inside the square is what keeps it Google's mark.
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: size.glyph, height: size.glyph)
+                Text(
+                    isLoading
+                        ? tr("接続中…", "Connecting…", "连接中…")
+                        : tr("Google で続ける", "Continue with Google", "使用 Google 继续")
+                )
+                .font(Tokens.Font.body(size.font, weight: .medium))
+                .foregroundStyle(Color(hex: 0x1f1f1f))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, size == .wide ? 0 : 14)
+            .frame(maxWidth: size == .wide ? .infinity : nil)
+            .frame(height: size.height)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(hovering ? Tokens.Window.surface : .white)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color(hex: 0x747775), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+        .onHover { hovering = $0 }
+        .cursor(isLoading ? .arrow : .pointingHand)
+    }
+}
+
 /// One button with two axes: how loud it is, and what shape it takes.
 ///
 /// `design.md` uses an 8 pt rounded rectangle for actions that live in a row and a
@@ -446,6 +519,13 @@ struct ActionButton: View {
                 }
                 Text(title)
                     .font(Tokens.Font.body(13, weight: .medium))
+                    // A 32 pt button has room for exactly one line, so wrapping is never
+                    // an outcome it can render — it can only clip. 保存 in a row that ran
+                    // out of width broke between its two characters and lost both halves'
+                    // descenders. Refusing to compress is the honest behaviour: the label
+                    // keeps its intrinsic width and the row's flexible parts give way.
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundStyle(foreground)
             .padding(.horizontal, shape == .pill ? 18 : 14)

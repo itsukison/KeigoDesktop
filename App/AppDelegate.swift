@@ -35,6 +35,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     /// that expires while the menu is open still does the right thing.
     private var hideOverlayItem: NSMenuItem?
     private var copyTriggerItem: NSMenuItem?
+    /// 「アップデート v0.1.3 をインストール」 — hidden until Sparkle has actually found
+    /// something. The status item is the one part of this app that is always on screen
+    /// and always reachable, so it carries the find whether or not the user ever
+    /// dismissed the panel above the bar or opened the window.
+    private var updateAvailableItem: NSMenuItem?
+    private var updateSeparatorItem: NSMenuItem?
+    /// Mirrors `MainModel.availableUpdateVersion`, so the menu and the status-item badge
+    /// can be rebuilt from a language change without asking the model again.
+    private var pendingUpdateVersion: String?
     private let onboardingProgress = OnboardingProgressStore()
     private let languageStore = AppLanguageStore()
     private var statusMenu: NSMenu?
@@ -94,10 +103,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         // The menu bar is AppKit, built once, and outside every SwiftUI observation
         // graph — so it is the one surface a language change cannot reach on its own.
         mainModel?.onLanguageChanged = { [weak self] in self?.relabelForLanguage() }
-        // A scheduled Sparkle check is intentionally quiet. When the dashboard notice
-        // is pressed, this brings Sparkle's already-validated update into focus and
-        // leaves download, signature verification and installation with Sparkle.
+        // A scheduled Sparkle check is intentionally quiet. When one of the three
+        // notices is pressed, this brings Sparkle's already-validated update into focus
+        // and leaves download, signature verification and installation with Sparkle.
         mainModel?.onUpdateRequested = { [weak self] in self?.checkForUpdates(nil) }
+        // Sparkle's find reaches the bar and the menu bar through here. The model owns
+        // the record; the two AppKit surfaces are this file's, and neither is something
+        // a SwiftUI card can reach.
+        mainModel?.onUpdateNoticeChanged = { [weak self] version in
+            self?.updateNoticeChanged(to: version)
+        }
+        overlay.onUpdateRequested = { [weak self] in self?.mainModel?.requestAvailableUpdate() }
+        overlay.onUpdateNoticeDismissed = { [weak self] version in
+            self?.mainModel?.dismissUpdateNotice(for: version)
+        }
 
         // §9 row 41. A free user who hits the monthly cap pressed a button and got
         // nothing back, so the plan pane is the answer to what just happened — not a
@@ -118,6 +137,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             openOnboarding()
             return
         }
+        // Before the updater, and deliberately after the onboarding return above: an
+        // update found in an earlier run is announced again now rather than waiting a
+        // day for the next scheduled check to rediscover it.
+        mainModel?.restorePendingUpdate()
         startUpdaterIfConfigured()
         Task { [auth] in
             let signedIn = await auth.isSignedIn
@@ -253,15 +276,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         // The outline cut, as a template: the menu bar inverts its own contents for a
         // dark menu bar and for a selected item, which only works on alpha. The colour
         // mark would sit there as a white tile that never inverts.
-        let markImage = NSImage(named: Icon.Name.mark.rawValue)
-        markImage?.isTemplate = true
-        markImage?.size = NSSize(width: 18, height: 18)
-        markImage?.accessibilityDescription = productName
-        item.button?.image = markImage
+        item.button?.image = Self.statusImage(
+            badged: pendingUpdateVersion != nil,
+            description: productName
+        )
 
         let menu = NSMenu()
         menu.delegate = self
         statusMenu = menu
+
+        // First row, above 開く: it is the only thing in this menu that is time-sensitive
+        // and the only one that is not always true. Hidden — not disabled — when there is
+        // no update, so the menu reads exactly as it did before whenever nothing is
+        // pending.
+        let pendingItem = menu.addItem(
+            withTitle: "",
+            action: #selector(installAvailableUpdate),
+            keyEquivalent: ""
+        )
+        pendingItem.target = self
+        updateAvailableItem = pendingItem
+        let pendingSeparator = NSMenuItem.separator()
+        menu.addItem(pendingSeparator)
+        updateSeparatorItem = pendingSeparator
 
         menu.addItem(
             withTitle: tr("敬語ボタンを開く", "Open KeigoButton", "打开敬語ボタン"),
@@ -318,6 +355,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
 
         item.menu = menu
         statusItem = item
+        // The pending row is built with no title and no hidden flag, so it has to be put
+        // into whichever of its two states is current — including after a language
+        // change, which throws the whole status item away and builds it again.
+        updateNoticeChanged(to: pendingUpdateVersion)
+    }
+
+    /// The menu-bar glyph, optionally carrying the one-dot "there is something here"
+    /// mark that every other menu-bar app uses for the same purpose.
+    ///
+    /// **Drawn rather than a second asset**, and drawn as a template: the menu bar
+    /// inverts its own contents for a dark bar and for a selected item, and it does that
+    /// from alpha. A badge composited as colour would sit there as a coloured tile that
+    /// never inverts — which is the same mistake the colour mark would have been.
+    ///
+    /// The dot is knocked out of the mark with `.clear` before it is filled, so it stays
+    /// legible where it overlaps the glyph's own strokes instead of merging into them.
+    private static func statusImage(badged: Bool, description: String) -> NSImage? {
+        guard let mark = NSImage(named: Icon.Name.mark.rawValue) else { return nil }
+        mark.size = NSSize(width: 18, height: 18)
+
+        guard badged else {
+            mark.isTemplate = true
+            mark.accessibilityDescription = description
+            return mark
+        }
+
+        let size = NSSize(width: 18, height: 18)
+        let badged = NSImage(size: size, flipped: false) { _ in
+            mark.draw(in: NSRect(origin: .zero, size: size))
+
+            let dot = NSRect(x: 12, y: 12, width: 5, height: 5)
+            let gap = dot.insetBy(dx: -1.5, dy: -1.5)
+            NSGraphicsContext.current?.compositingOperation = .clear
+            NSBezierPath(ovalIn: gap).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
+        badged.isTemplate = true
+        badged.accessibilityDescription = description
+        return badged
     }
 
     /// The product name is the same word in Japanese and Chinese — a 简体中文 user is
@@ -381,6 +460,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             && overlay.allowsUpdateCheck
     }
 
+    // MARK: - The update notice
+
+    /// The one place the three surfaces are kept in step.
+    ///
+    /// **All three, because no single one of them is enough.** The panel above the bar is
+    /// the only surface a user who never opens a window will see, and it is dismissible,
+    /// so it cannot be the only record. The status-menu row is permanent but only found
+    /// by someone already opening the menu. The ホーム card is the fullest description
+    /// and the least likely to be looked at. 0.1.2 shipped the third one alone.
+    private func updateNoticeChanged(to version: String?) {
+        pendingUpdateVersion = version
+
+        // Dismissing the panel silences *it* and nothing else, so this is the one
+        // surface that asks. The row and the badge below deliberately do not.
+        let showsPanel = version.map { mainModel?.isUpdateNoticeDismissed($0) == false } ?? false
+        overlay?.setPendingUpdate(showsPanel ? version : nil)
+
+        updateAvailableItem?.isHidden = version == nil
+        updateSeparatorItem?.isHidden = version == nil
+        if let version {
+            updateAvailableItem?.title = tr(
+                "アップデート v\(version) をインストール",
+                "Install update v\(version)",
+                "安装更新 v\(version)"
+            )
+        }
+        statusItem?.button?.image = Self.statusImage(
+            badged: version != nil,
+            description: productName
+        )
+    }
+
+    @objc private func installAvailableUpdate() {
+        mainModel?.requestAvailableUpdate()
+    }
+
     /// The state is read here rather than baked into the item when the menu was built:
     /// a window can expire while the menu sits open, and the row would then do the
     /// opposite of what it says.
@@ -403,6 +518,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     }
 
     @objc private func openMainWindow() {
+        showMainWindow(activating: true)
+    }
+
+    /// `activating: false` is for the one caller the user did not ask anything of — the
+    /// update notice opening the dashboard by itself. See
+    /// `MainWindowController.presentWithoutActivating`.
+    private func showMainWindow(activating: Bool) {
         guard onboardingProgress.isComplete else {
             openOnboarding()
             return
@@ -412,7 +534,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             mainWindow = MainWindowController(model: mainModel)
         }
         mainModel.refresh()
-        mainWindow?.present()
+        if activating {
+            mainWindow?.present()
+        } else {
+            mainWindow?.presentWithoutActivating()
+        }
     }
 
     @objc private func openPreferences() {
@@ -520,7 +646,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         state: SPUUserUpdateState
     ) {
         guard !handleShowingUpdate, !state.userInitiated else { return }
-        mainModel?.offerUpdate(version: update.displayVersionString)
+        let version = update.displayVersionString
+        let isFirstSighting = pendingUpdateVersion != version
+        mainModel?.offerUpdate(version: version)
+
+        // The dashboard opens **once per version**, on the run that discovers it. Not on
+        // every relaunch afterwards: the bar and the menu bar carry the notice from then
+        // on, and a window that reopened itself every morning would be the nag this is
+        // trying not to be. Nothing opens it if the user already dismissed this version.
+        //
+        // **Without activating**, which is the whole difference between this and the
+        // Sparkle alert two methods up that we declined. Sparkle's find can land within
+        // three seconds of the updater starting, and for an app registered with
+        // `SMAppService` that means during login — so the one moment this is most likely
+        // to fire is the worst possible moment to take someone's keyboard. The window
+        // arrives in front and waits to be clicked.
+        guard isFirstSighting,
+              mainModel?.isUpdateNoticeDismissed(version) == false,
+              onboardingProgress.isComplete,
+              overlay?.allowsUpdateCheck == true
+        else { return }
+        mainModel?.page = .home
+        mainModel?.showsPreferences = false
+        showMainWindow(activating: false)
     }
 
     /// Once the user has brought Sparkle's real update window forward, the dashboard

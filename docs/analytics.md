@@ -123,6 +123,8 @@ partner: an event without it, in the desktop project, came from somewhere it sho
 | `desktop_checkout_started` | `MainModel.swift` | `billing_interval`, `currency`, `offer_expected` |
 | `desktop_welcome_offer_shown` | `OnboardingWindowController.swift` | `currency` |
 | `desktop_welcome_offer_accepted` | `OnboardingWindowController.swift` | `billing_interval`, `currency` |
+| `desktop_update_offered` | `MainModel.swift` | `from_version`, `to_version` |
+| `desktop_update_accepted` | `MainModel.swift` | `from_version`, `to_version` |
 | `$exception` | autocapture (`errorTrackingConfig.autoCapture`) | — |
 | `$identify` | `MainModel.identifyIfNeeded` | person property `email` |
 
@@ -144,6 +146,17 @@ happened on this row". Two things to know when reading it:
 Events captured before the first build carrying this property have no
 `app_language` at all; they are Japanese by construction, since the language page
 did not exist.
+
+**`desktop_update_offered` / `desktop_update_accepted` are new on 2026-08-10**, and they
+exist because the update path is otherwise entirely unobservable. A scheduled Sparkle
+check, the find, and the announcement all happen with nobody watching — which is exactly
+how 0.1.2 shipped a "gentle reminder" that reached no surface a user could see and nobody
+could tell. `offered` fires once per newly-discovered version (not on the daily re-find of
+a version already known, and not on the relaunch replay); `accepted` fires when the user
+presses one of the three notices and hands the update back to Sparkle. The ratio between
+them is the only measurement of whether the announcement works. Neither says the update
+**installed** — that is `Application Installed` at the new `$app_version`, which is the
+join to make when reading them.
 
 **`desktop_signed_up` / `desktop_signed_in` are new on 2026-08-10** and they close the
 gap this document used to list second: a brand-new desktop user and an existing iOS

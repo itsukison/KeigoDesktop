@@ -59,6 +59,23 @@ final class OverlayController: ObservableObject {
 
     private var snoozeMenuPanel: SnoozeMenuPanel?
 
+    // MARK: Update notice
+
+    /// The version Sparkle has quietly found, while it is still worth announcing.
+    /// `AppDelegate` sets it; `syncUpdateNoticePanel` decides whether a window for it is
+    /// on screen right now. Held here rather than read from `PendingUpdateStore` on
+    /// every sync because the bar is asked to re-anchor twice a second.
+    private var pendingUpdateVersion: String?
+    private var updateNoticePanel: UpdateNoticePanel?
+
+    /// Pressed 「アップデート」 on the notice above the bar. Same destination as the
+    /// dashboard card's own action — `AppDelegate` hands the already-selected update
+    /// back to Sparkle, which keeps release notes, skip, verification and installation.
+    var onUpdateRequested: (() -> Void)?
+
+    /// Pressed ✕. Only this panel goes away, and only for this version.
+    var onUpdateNoticeDismissed: ((String) -> Void)?
+
     // MARK: Reply mode (§16)
 
     private var clipboardWatcher: ClipboardWatcher?
@@ -82,10 +99,10 @@ final class OverlayController: ObservableObject {
         )
     }
 
-    /// The row to flip to `accepted` if the user goes on to insert. Only one rewrite
-    /// is ever in flight, and a regenerate deliberately replaces it — the entry that
-    /// gets inserted is the last one produced.
-    private var lastHistoryEntryId: UUID?
+    /// Held while a regeneration replaces the result panel with the generating
+    /// capsule. Success appends to it; cancel or failure restores it so trying another
+    /// version never destroys the pages the user was comparing.
+    private var resultContextBeforeRewrite: ResultContext?
     private var tutorialInserted: (() -> Void)?
     private var tutorialMode: OnboardingTutorialMode?
 
@@ -202,6 +219,7 @@ final class OverlayController: ObservableObject {
             Self.hiddenUntil = nil // clears a deadline that had already passed
             panel.orderFrontRegardless()
             startClipboardWatching()
+            syncUpdateNoticePanel(for: state)
         }
         Task { await refreshPrompts() }
     }
@@ -350,6 +368,10 @@ final class OverlayController: ObservableObject {
             Self.hiddenUntil = nil
             panel.orderFrontRegardless()
             startClipboardWatching()
+            // The notice is anchored to the bar, so a hidden bar takes it down with it
+            // and a returning bar brings it back — including across a relaunch, since
+            // `AppDelegate` restores the pending version before `show()`.
+            syncUpdateNoticePanel(for: state)
         } else {
             rewriteTask?.cancel()
             dismissGeneratingPanel()
@@ -372,6 +394,8 @@ final class OverlayController: ObservableObject {
             state = .pill
             panel.acceptsKey = false
             panel.orderOut(nil)
+            // After `orderOut`, which is what `syncUpdateNoticePanel` reads.
+            syncUpdateNoticePanel(for: state)
         }
     }
 
@@ -758,15 +782,19 @@ final class OverlayController: ObservableObject {
     private func startRewrite(
         captured: CapturedTarget,
         promptText: String,
+        requestText: String? = nil,
         replyTo: String?,
         buttonTitle: String?,
         commandKey: String?,
         promptOrigin: String?,
-        isTutorial: Bool
+        isTutorial: Bool,
+        previousResults: ResultContext? = nil
     ) {
-        if isTutorial { lastHistoryEntryId = nil }
+        resultContextBeforeRewrite = previousResults
+        let requestText = requestText ?? captured.target.text
         let pending = PendingRewrite(
             captured: captured,
+            requestText: requestText,
             promptText: promptText,
             replyTo: replyTo,
             buttonTitle: buttonTitle,
@@ -782,7 +810,7 @@ final class OverlayController: ObservableObject {
         // handles explicitly — and `prompt` is the instruction they typed.
         let request = RewriteRequest(
             prompt: promptText,
-            text: captured.target.text,
+            text: requestText,
             replyTo: replyTo,
             commandKey: commandKey,
             title: buttonTitle,
@@ -822,14 +850,35 @@ final class OverlayController: ObservableObject {
                     candidateCount: result.candidates.count,
                     latencyMs: latencyMs
                 )
-                if !pending.isTutorial {
-                    await self.record(pending: pending, result: result)
+                let historyEntryId: UUID?
+                if pending.isTutorial {
+                    historyEntryId = nil
+                } else {
+                    historyEntryId = await self.record(pending: pending, result: result)
                 }
-                self.transition(to: .result(
-                    ResultContext(pending: pending, result: result, selectedIndex: 0)
-                ))
+                guard !Task.isCancelled else { return }
+
+                var context = previousResults
+                    ?? ResultContext(
+                        pending: pending,
+                        result: result,
+                        historyEntryId: historyEntryId
+                    )
+                if previousResults != nil {
+                    context.append(
+                        pending: pending,
+                        result: result,
+                        historyEntryId: historyEntryId
+                    )
+                }
+                self.resultContextBeforeRewrite = nil
+                self.transition(to: .result(context))
             } catch {
                 guard !Task.isCancelled else { return }
+                if let previousResults {
+                    self.resultContextBeforeRewrite = nil
+                    self.transition(to: .result(previousResults))
+                }
                 self.present(error)
             }
         }
@@ -838,7 +887,12 @@ final class OverlayController: ObservableObject {
     func cancelRewrite() {
         rewriteTask?.cancel()
         rewriteTask = nil
-        transition(to: .pill)
+        if let previous = resultContextBeforeRewrite {
+            resultContextBeforeRewrite = nil
+            transition(to: .result(previous))
+        } else {
+            transition(to: .pill)
+        }
     }
 
     /// Awaited before the result panel appears rather than fired and forgotten: the
@@ -847,9 +901,9 @@ final class OverlayController: ObservableObject {
     ///
     /// A nil return means history is switched off, which is also why `insert()` guards
     /// on the id rather than assuming one exists.
-    private func record(pending: PendingRewrite, result: RewriteResult) async {
-        guard let candidate = result.candidates.first else { return }
-        lastHistoryEntryId = await history.record(
+    private func record(pending: PendingRewrite, result: RewriteResult) async -> UUID? {
+        guard let candidate = result.candidates.first else { return nil }
+        return await history.record(
             RewriteHistoryEntry(
                 buttonTitle: pending.buttonTitle,
                 promptText: pending.promptText,
@@ -865,18 +919,20 @@ final class OverlayController: ObservableObject {
 
     // MARK: - Result actions
 
-    func selectCandidate(offsetBy delta: Int) {
+    func selectResult(offsetBy delta: Int) {
         guard case .result(var context) = state else { return }
         let next = context.selectedIndex + delta
-        guard context.result.candidates.indices.contains(next) else { return }
+        guard context.pages.indices.contains(next) else { return }
         context.selectedIndex = next
         transition(to: .result(context))
     }
 
     /// Writes the accepted candidate back, then dismisses.
     func insert() {
-        guard case .result(let context) = state, let candidate = context.candidate else { return }
-        let captured = context.pending.captured
+        guard case .result(let context) = state, let page = context.selectedPage else { return }
+        let candidate = page.candidate
+        let pending = page.pending
+        let captured = pending.captured
 
         // Get our windows out of the way BEFORE touching the target app. The write may
         // escalate to a synthesized ⌘V, and ⌘V goes to whatever window is key — which
@@ -899,23 +955,23 @@ final class OverlayController: ObservableObject {
                 ClipboardWatcher.resume()
                 self.analytics.inserted(
                     target: captured.target,
-                    isReply: context.pending.replyTo != nil,
-                    selectedIndex: context.selectedIndex
+                    isReply: pending.replyTo != nil,
+                    selectedIndex: page.responseCandidateIndex
                 )
                 // Only marked once the write actually landed — the catch below is a
                 // real path, and a history row claiming 挿入済み over text that never
                 // arrived would be the list's one unreliable field.
-                if !context.pending.isTutorial, let entryId = self.lastHistoryEntryId {
+                if !pending.isTutorial, let entryId = page.historyEntryId {
                     await self.history.markAccepted(id: entryId)
                 }
-                if let eventId = context.result.eventId {
+                if let eventId = page.eventId {
                     try? await self.rewriteService.submitSelection(
                         eventId: eventId,
-                        selectedIndex: context.selectedIndex
+                        selectedIndex: page.responseCandidateIndex
                     )
                 }
-                let tutorialCompletion = context.pending.isTutorial ? self.tutorialInserted : nil
-                if context.pending.isTutorial {
+                let tutorialCompletion = pending.isTutorial ? self.tutorialInserted : nil
+                if pending.isTutorial {
                     self.tutorialPrompts = []
                     self.tutorialInserted = nil
                     self.tutorialMode = nil
@@ -962,12 +1018,13 @@ final class OverlayController: ObservableObject {
     ///   field. Nil re-runs the original — that is the ↻ button. Passing the edited
     ///   text is what makes the field actually editable rather than decorative.
     func regenerate(promptText: String? = nil) {
-        guard case .result(let context) = state else { return }
+        guard case .result(let context) = state, let page = context.selectedPage else { return }
         sendAction("regenerate", context: context)
-        let pending = context.pending
+        let pending = page.pending
         startRewrite(
             captured: pending.captured,
             promptText: promptText ?? pending.promptText,
+            requestText: pending.requestText,
             // Carried forward. Dropping it would turn ↻ on a reply into a rewrite of
             // the user's draft, which for the usual empty compose box is a rewrite of
             // nothing at all.
@@ -975,7 +1032,32 @@ final class OverlayController: ObservableObject {
             buttonTitle: pending.buttonTitle,
             commandKey: nil,
             promptOrigin: nil,
-            isTutorial: pending.isTutorial
+            isTutorial: pending.isTutorial,
+            previousResults: context
+        )
+    }
+
+    /// Applies a one-off instruction to the candidate currently on screen. The
+    /// candidate becomes the model's source text, while `pending.captured` remains the
+    /// destination for Insert. In reply mode the same value becomes the existing draft,
+    /// which is exactly the backend's refinement path for a composed reply.
+    func refine(instruction: String) {
+        guard case .result(let context) = state, let page = context.selectedPage else { return }
+        let instruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !instruction.isEmpty else { return }
+
+        sendAction("regenerate", context: context)
+        let pending = page.pending
+        startRewrite(
+            captured: pending.captured,
+            promptText: instruction,
+            requestText: page.candidate.replacement,
+            replyTo: pending.replyTo,
+            buttonTitle: pending.buttonTitle,
+            commandKey: nil,
+            promptOrigin: nil,
+            isTutorial: pending.isTutorial,
+            previousResults: context
         )
     }
 
@@ -985,12 +1067,12 @@ final class OverlayController: ObservableObject {
     }
 
     private func sendAction(_ action: String, context: ResultContext) {
-        guard let eventId = context.result.eventId else { return }
+        guard let page = context.selectedPage, let eventId = page.eventId else { return }
         Task { [rewriteService] in
             try? await rewriteService.submitAction(
                 eventId: eventId,
                 action: action,
-                selectedIndex: context.selectedIndex,
+                selectedIndex: page.responseCandidateIndex,
                 latencyMs: nil
             )
         }
@@ -998,6 +1080,7 @@ final class OverlayController: ObservableObject {
 
     func dismiss() {
         rewriteTask?.cancel()
+        resultContextBeforeRewrite = nil
         transition(to: .pill)
     }
 
@@ -1060,6 +1143,9 @@ final class OverlayController: ObservableObject {
         // has a valid frame to anchor to, and before `applyMeasuredSize`, which calls
         // `resize` and therefore re-anchors it against the bar's final height.
         syncReplyContextPanel(for: next)
+        // After `syncReplyContextPanel`, which owns the same 8 pt above the bar in the
+        // reply states — the notice stands down rather than stacking on it.
+        syncUpdateNoticePanel(for: next)
 
         // Do not resize from the outgoing subtree's measurement. `PillRootView` tags
         // its preference with `contentLayout`, so even a height-only state change
@@ -1120,6 +1206,7 @@ final class OverlayController: ObservableObject {
         // the bar yet, and a card that waited for the animation to finish would be
         // overlapped by the input bar's second line for the length of it.
         replyContextPanel?.reanchor(to: target)
+        updateNoticePanel?.reanchor(to: target)
 
         guard animated else {
             panel.setFrame(target, display: true)
@@ -1142,6 +1229,7 @@ final class OverlayController: ObservableObject {
         // The bar is draggable while the composer is open, and dragging moves the
         // window without going through `resize`.
         replyContextPanel?.reanchor(to: panel.frame)
+        updateNoticePanel?.reanchor(to: panel.frame)
     }
 
     private func setPillVisible(_ visible: Bool) {
@@ -1159,6 +1247,56 @@ final class OverlayController: ObservableObject {
     }
 
     // MARK: - Auxiliary windows
+
+    /// Sparkle found `version` in the background. Shows the notice above the bar if the
+    /// bar is in a state that can carry it, and remembers it either way — the bar spends
+    /// most of its life resting, but a find can land while a result card is up.
+    ///
+    /// Passing `nil` withdraws the notice: the update was installed, skipped, or the
+    /// user brought Sparkle's own window forward and it now owns the conversation.
+    func setPendingUpdate(_ version: String?) {
+        guard pendingUpdateVersion != version else { return }
+        pendingUpdateVersion = version
+        syncUpdateNoticePanel(for: state)
+    }
+
+    /// On screen only while the bar itself is, and only in the states that leave the
+    /// space above it free. `.generating` and `.result` **replace** the bar rather than
+    /// stacking on it (§4), so there is nothing to anchor to; the reply states already
+    /// own that space with `ReplyContextPanel`, and two panels 8 pt above the same bar
+    /// would be one on top of the other.
+    private func syncUpdateNoticePanel(for next: OverlayState) {
+        let wanted = next.showsPill && next.replySource == nil && panel.isVisible
+            ? pendingUpdateVersion
+            : nil
+
+        guard let wanted else {
+            updateNoticePanel?.orderOut(nil)
+            updateNoticePanel = nil
+            return
+        }
+
+        // Rebuilt only when the version changes — re-anchoring on every hover keeps the
+        // panel from blinking as the row expands beneath it.
+        if let existing = updateNoticePanel, existing.version == wanted {
+            existing.reanchor(to: panel.frame)
+            return
+        }
+
+        updateNoticePanel?.orderOut(nil)
+        let notice = UpdateNoticePanel(
+            anchor: panel.frame,
+            version: wanted,
+            onUpdate: { [weak self] in self?.onUpdateRequested?() },
+            onDismiss: { [weak self] in
+                guard let self, let version = self.pendingUpdateVersion else { return }
+                self.onUpdateNoticeDismissed?(version)
+                self.setPendingUpdate(nil)
+            }
+        )
+        notice.orderFrontRegardless()
+        updateNoticePanel = notice
+    }
 
     /// The card is up for **both** reply states, from the moment a copy arms.
     ///

@@ -281,7 +281,7 @@ struct PlanView: View {
                     Spacer()
                     Text({
                         let date = Self.resetFormatter.string(from: entitlement.resetsAt)
-                        return tr("\(date)にリセット", "Resets \(date)", "\(date)重置")
+                        return tr("\(date)にリセット", "Resets on \(date)", "\(date)重置")
                     }())
                         .font(Tokens.Font.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
@@ -414,13 +414,16 @@ struct PlanView: View {
 
     /// 「10月20日」 — the date only, because the hour is never the interesting part
     /// and a timestamp reads as a system log rather than an answer.
-    private static let resetFormatter: DateFormatter = {
+    /// A `var`, and the locale follows the interface language — §17. A stored static
+    /// caches whichever language the app launched in, and `ja_JP` renders `MMMM` as
+    /// 「9月」, so English read 「Resets 9月 1」 — both halves of the bug at once (measured).
+    private static var resetFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.locale = AppLanguageState.current.locale
         formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
         formatter.dateFormat = tr("M月d日", "MMMM d", "M月d日")
         return formatter
-    }()
+    }
 }
 
 // MARK: - Card

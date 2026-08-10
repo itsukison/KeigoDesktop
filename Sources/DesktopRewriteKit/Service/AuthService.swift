@@ -207,6 +207,11 @@ public actor AuthService {
     }
 
     /// The URL to open in `ASWebAuthenticationSession`.
+    ///
+    /// Its host is what macOS quotes back at the user in the consent alert, which is
+    /// why it comes from `config.authEndpoint` (the custom domain) rather than from
+    /// `config.supabaseURL`. `redirect_to` is unaffected — the browser still comes back
+    /// to this app's own scheme.
     public func authorizeURL(provider: String) -> URL {
         var components = URLComponents(
             url: config.authEndpoint.appendingPathComponent("authorize"),

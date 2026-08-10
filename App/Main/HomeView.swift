@@ -161,7 +161,7 @@ struct HomeView: View {
                     .foregroundStyle(Tokens.Window.textPrimary)
                 Text({
                     let date = Self.resetFormatter.string(from: entitlement.resetsAt)
-                    return tr("\(date)にリセット", "Resets \(date)", "\(date)重置")
+                    return tr("\(date)にリセット", "Resets on \(date)", "\(date)重置")
                 }())
                     .font(Tokens.Font.body(12))
                     .foregroundStyle(Tokens.Window.textSecondary)
@@ -218,13 +218,13 @@ struct HomeView: View {
         }
     }
 
-    private static let resetFormatter: DateFormatter = {
+    private static var resetFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.locale = AppLanguageState.current.locale
         formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
         formatter.dateFormat = tr("M月d日", "MMMM d", "M月d日")
         return formatter
-    }()
+    }
 
     // MARK: - How to use it
 
@@ -500,12 +500,12 @@ struct HomeView: View {
         return dayFormatter.string(from: day)
     }
 
-    private static let dayFormatter: DateFormatter = {
+    private static var dayFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.locale = AppLanguageState.current.locale
         formatter.setLocalizedDateFormatFromTemplate("Md")
         return formatter
-    }()
+    }
 }
 
 /// Label above, number below. The number is semibold — the reference's stat row reads

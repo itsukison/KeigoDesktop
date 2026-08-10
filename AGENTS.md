@@ -11,6 +11,162 @@ The first run produced `debug.png` and a round of overlay fixes (§4, §8).
 
 Verified (2026-08-07):
 
+- **2026-08-10 — 保存 was three stacked characters at the shipping window size, and the
+  cause was a `Spacer`, not a narrow window.** `SettingsRow` puts `Spacer(minLength: 12)`
+  between its title and its trailing content, and the 表示名 row's trailing content was a
+  fixed 280 pt field beside an `ActionButton` whose label had no line limit. Two flexible
+  children — the greedy `Spacer` and the `Text` — split the leftover, so the Spacer took
+  it and 保存 was compressed to its minimum: **measured at the real 714 pt pane, the
+  legacy label renders as 3 runs of ink in the button's strip, and at every pane width
+  below 680 it renders as 0** — the button vanishes rather than shrinks. A 32 pt plate has
+  room for one line, so wrapping there can only ever be clipping. `ActionButton`'s label
+  is now `lineLimit(1)` + `fixedSize(horizontal: true)`: measured 1 line at every pane
+  from 714 down to 520, and the fix is in the shared component, so all 25 call sites get
+  it. The one call site that stretches a button (`PlanView.swift:545`'s
+  `.frame(maxWidth: .infinity)`) is unaffected — that frame is outside the label.
+  Both states were rendered by a throwaway `ImageRenderer` harness over the real
+  `App/Design/` sources and the ink was measured, not eyeballed, because §14 item 1's
+  history is that paper gets this wrong.
+  **The same pass gave アカウント Google's actual button.** Its 「Google で続ける」 was a
+  `.secondary` `ActionButton` with no mark on it while onboarding had a correct one in a
+  `private struct` — so the two had already drifted. `GoogleSignInButton` now lives in
+  `App/Design/Components.swift` with two sizes: `wide` (42 pt, fills the column, first
+  run) and `inline` (32 pt, hugs its content, beside サインイン on アカウント), sharing one
+  white plate, one `#747775` border, one `#1f1f1f` label and one G. The artwork is
+  200×204, so it is fitted inside its square rather than forced into it — a bare
+  `frame(width:height:)` squashed the G by 2%. `assetutil` confirms `GoogleG` is in the
+  built `Assets.car`. Components.swift now imports `DesktopRewriteKit` for `tr`, which is
+  the first time the design layer needed the kit; the alternative was the same three
+  strings in two feature folders again.
+  `swift test` passes **155 tests** and `xcodebuild` succeeds with only the two
+  pre-existing concurrency/AppIntents warnings. **Not verified: either surface on
+  screen.** The row and both button sizes were rendered offline; the G itself cannot draw
+  outside the app bundle, so its placement in the inline button is geometry that has been
+  measured and artwork that has not been looked at in place.
+- **2026-08-10 — sign-in happens on `auth.keigobutton.com`, and only sign-in.**
+  The Google flow used to open with macOS quoting `eercsucvxnszqletxued.supabase.co`
+  back at the user, because macOS builds that consent alert from the host of the URL
+  handed to `ASWebAuthenticationSession` and reads nothing Google is configured with —
+  so branding the Google consent screen (done the same day, in the Cloud console) fixes
+  the second surface and provably cannot touch the first. `SupabaseConfig` now carries
+  `authURL` beside `supabaseURL`; `authEndpoint` derives from the former and
+  `restEndpoint` / `rewriteEndpoint` from the latter, so the two hosts are independent
+  inputs rather than one derived from the other. REST and Functions stay on
+  `<ref>.supabase.co` on purpose: nothing about them is shown to a human, and the auth
+  host is the milder of the two to lose — `ensureFreshAccessToken` already falls back to
+  the stored token. **The live custom domain was read back rather than assumed:** the
+  certificate is `CN=auth.keigobutton.com` from Google Trust Services (valid to
+  2026-11-08), `/auth/v1/health` answers GoTrue's own "No API key found" 401, and
+  `/auth/v1/authorize?provider=google` 302s to `accounts.google.com` carrying
+  `redirect_uri=https://auth.keigobutton.com/auth/v1/callback` — which is the URI that
+  must stay on the Google client's allow-list beside the old `.supabase.co` one, and
+  **Google accepts it**: following that 302 lands on `accounts.google.com/v3/signin`
+  rather than the 400 a `redirect_uri_mismatch` would produce.
+  `swift test` passes **155 tests** (5 new, pinning both hosts, the authorize URL's host
+  and its unchanged `keigobutton://auth-callback`, and that the two hosts stay distinct),
+  and `xcodebuild` succeeds with only the two pre-existing concurrency/AppIntents
+  warnings. **Not verified: one real Google sign-in through the new host.** No build
+  carrying it has run, so the alert's new wording is reasoned from where macOS gets the
+  string, not looked at. iOS was not touched and needs no change.
+- **2026-08-10 — regeneration now adds a page instead of erasing the answer it
+  replaced.** The first result is `1 / 1`; each completed plain or guided regeneration
+  appends its candidates, selects the first new one and advances to `2 / 2`, `3 / 3`,
+  and so on. The header arrows traverse that in-memory session, and the echoed prompt
+  travels with the selected body because guided pages can have different instructions.
+  `ResultPage` keeps the candidate beside the `PendingRewrite`, backend event id,
+  response-local candidate index and local history-row id that produced it. That is
+  load-bearing: Insert, copy, feedback, another plain reroll and another guided refinement
+  all act on the page visibly selected, without reporting an old answer against the
+  newest event or marking the wrong history row accepted. Cancel or request failure
+  restores the full pre-regeneration result context rather than dropping the comparison.
+  No backend or wire change was needed. `swift test` passes all 155 tests and unsigned
+  `xcodebuild` succeeds with only the existing warnings. **Not verified on screen:** one
+  real three-page sequence, back/forward prompt echo, refining page 1 while page 3 exists,
+  and inserting an older page remain the owner check.
+- **2026-08-10 — regeneration refinement now morphs in place instead of changing the
+  result panel's height.** Hovering ↻ expands that 28 pt control across the same fixed
+  footer row, covering copy, feedback and Insert rather than moving them or growing the
+  panel. The input reveals left-to-right while ↻ rides its right edge and crossfades
+  into an upward Send control at the far right. Its hit target stays 28 pt but the dark
+  Send disc is inset to 20 pt so the input mask cannot clip it. The native placeholder
+  stays empty; a SwiftUI `textSecondary` layer supplies the hint because AppKit ignored
+  the prompt foreground and rendered it black in this non-activating panel. Fill and
+  contents are clipped first and the constant hairline is drawn afterward, so the
+  animated mask cannot shave the border. Leaving the combined bar restores the untouched
+  row after a 140 ms settle; clicking into the field pins it for typing, and
+  Escape clears and collapses it. Sending an empty field is the old plain regeneration,
+  while a guided run is semantically different:
+  the candidate on screen becomes the model's source text and the typed instruction
+  becomes its prompt, while `CapturedTarget` remains the original field where Insert
+  writes. In reply mode the candidate becomes `<existing_draft>`, so the same UI refines
+  a composed reply instead of restarting it from an empty draft. `PendingRewrite` now
+  keeps `requestText` separately from the write target so a subsequent plain ↻ rerolls
+  the same guided request rather than silently falling back to the first original. The
+  result body keeps its full viewport in both states; hover now changes no measured
+  dimension at all. No backend or wire-contract change was needed. `swift test` passes
+  all 150 tests and unsigned `xcodebuild` succeeds with only the existing warnings.
+  **Not verified on screen:** the expansion curve, hover-to-field handoff, focus/Escape
+  behavior and one real guided rewrite/Insert still need the owner check.
+- **2026-08-10 — the gentle reminder reached no surface, and that is why nobody ever
+  saw a toast.** The 2026-08-09 entry below is accurate about everything it built and
+  wrong about the one thing that mattered: it declined Sparkle's own scheduled alert
+  (`standardUserDriverShouldHandleShowingScheduledUpdate` returns `false`
+  unconditionally, `immediateFocus` included) and routed the announcement into a card
+  rendered **only** by `HomeView.body` — inside a window an `LSUIElement` app with no
+  Dock icon gives nobody a reason to open. `grep` over `App/` and `Sources/` finds zero
+  `UNUserNotificationCenter`, `NSUserNotification`, `requestUserAttention` and
+  `dockTile`, and nothing called `openMainWindow()` on discovery. Turning Sparkle's UI
+  off and replacing it with something invisible is strictly worse than leaving it on,
+  which is what 0.1.2 shipped. The plumbing was never the problem and was verified
+  against Sparkle 2.9.5's own source (`SPUStandardUserDriver.m:290-311`): returning
+  `false` does keep the session alive and does call
+  `standardUserDriverWillHandleShowingUpdate` a runloop later, so `offerUpdate` really
+  did fire into a `@Published` string nobody could see. It was also in-memory only, so
+  quitting erased even the possibility, and `SUScheduledCheckInterval` is a day.
+  **Three surfaces now, because no one of them is sufficient**: a constant-height
+  `UpdateNoticePanel` stacked 8 pt above the bar (`ReplyContextPanel`'s pattern in every
+  respect — never key, never measured-height, stands down in `.generating` / `.result`
+  where the bar is *replaced* rather than stacked on, and in the reply states where the
+  context pill already owns that space), a hidden-until-pending status-menu row with a
+  knocked-out template dot on the menu-bar glyph, and the existing ホーム card. The
+  dashboard opens itself **once per version**, on the run that discovers it — not on the
+  relaunch replay, and never for a version the user dismissed — and it opens through the
+  new `MainWindowController.presentWithoutActivating()`, which is `orderFrontRegardless`
+  with no `NSApp.activate`. That last part is not a detail: Sparkle's own launch-time
+  alert was declined because `immediateFocus` means the find landed within three seconds
+  of the updater starting (`SPUStandardUserDriver.m:198`), and for an app registered with
+  `SMAppService` that is *during login* — so a dashboard that activated would have
+  committed the same offence, at the same moment, that declining Sparkle avoided. Every
+  other caller keeps `present()`: the user asked for that window. Dismissing the panel
+  silences that panel for that version only; the row and the card stay, and Sparkle
+  keeps ownership of the real skip. `PendingUpdateStore` persists the find so it
+  survives a quit, and `pending(for:)` self-clears once the running build has caught up,
+  which is also the post-install cleanup. `desktop_update_offered` /
+  `desktop_update_accepted` exist because the whole path is otherwise unobservable —
+  the ratio is the only evidence the announcement works. `swift test` passes **150
+  tests** (13 new, all on `PendingUpdate`: numeric comparison so `0.1.10` beats `0.1.9`,
+  the install-clears-the-record case, and dismissal not surviving into the next
+  version), and `xcodebuild` succeeds with only the two pre-existing
+  concurrency/AppIntents warnings. The row arithmetic was **measured, not eyeballed** —
+  a throwaway `ImageRenderer` harness rendered the card at its 300 pt width in all three
+  languages and confirmed the sentence, the action pill and the ✕ fit with 145–190 pt to
+  spare, so `lineLimit(1)` never eats the version number. **Not verified: any of it in
+  the running app, and not one real Sparkle discovery.** A stale instance from 13:08 held
+  the bundle id and this environment cannot signal it (the same limitation this file
+  records twice already), so the panel, the menu row and the badge have been rendered and
+  reasoned, not looked at. Quit from the menu-bar 終了, relaunch, and note that a Debug
+  build's `SUPublicEDKey` is empty by design (`startUpdaterIfConfigured` returns early),
+  so a real end-to-end discovery needs a signed release — seed
+  `defaults write com.core7.keigobutton.mac updates.pendingVersion -string 0.1.3` to
+  exercise everything downstream of Sparkle. Delete `SULastCheckTime` before testing the
+  real chain or the 86400 s interval, not the UI, is what is under test.
+  **One thing this cannot fix, and it bounds the next release.** The announcing code has
+  to be in the *installed* build, so 0.1.4 is the first version that can show any of it.
+  Everyone on 0.1.0–0.1.3 is unreachable — they will not be prompted for 0.1.4 and will
+  not be prompted for anything after it; manual 「アップデートを確認…」 or a fresh DMG is
+  their only path, and that is a distribution problem rather than a code one. 0.1.4 →
+  0.1.5 is the pair that finally exercises both this and the install chain
+  `docs/releasing.md` has listed as outstanding since the first release.
 - **2026-08-10 — `v0.1.3` is published, and it is the first release that makes the
   Sparkle chain testable.** Run `31355973591` succeeded in both jobs from commit
   `7b00774`, carrying the welcome-offer/USD pricing work and the two new analytics
@@ -621,6 +777,7 @@ The interaction model is Willow Voice's. Their Mac binary was inspected directly
 | Synthesizes keystrokes as fallback | `CGEventCreateKeyboardEvent` / `CGEventPost` / `CGEventTapCreate` | fallback only (§5) |
 | Ships outside the Mac App Store | no `com.apple.security.app-sandbox` entitlement; Sparkle 2.9.2 with a GitHub Pages appcast | same, and we have no choice (§2) |
 | Movable bottom bar taught in onboarding | `Resources/onboarding_move_bar.mp4` | same (§4) |
+| Signs in through `ASWebAuthenticationSession`, so sign-in gets its own browser window and the system consent alert rather than a tab | links `AuthenticationServices.framework`; `_OBJC_CLASS_$_ASWebAuthenticationSession` is in its symbol table | same (§6) — the new window and the one alert are the price of the browser handing the callback straight back to the app |
 | macOS 14.0 minimum | `LSMinimumSystemVersion = 14.0` | same |
 | One account across Mac/Windows/iOS, settings sync, one subscription | [help center](https://help.willowvoice.com/en/articles/13208038-why-isn-t-my-account-or-subscription-syncing-between-devices) | same account, separate data (§6) |
 
@@ -1102,6 +1259,15 @@ Shared Supabase project with the iOS app:
 `https://eercsucvxnszqletxued.supabase.co`. Shared login, shared buttons, shared
 billing. **Separate function, separate schema, separate analytics.**
 
+**Two hosts, deliberately.** Auth alone is reached through the project's Supabase
+custom domain `https://auth.keigobutton.com`; REST and Functions stay on
+`<ref>.supabase.co`. The split exists because the auth host is the only one a user
+ever reads — macOS composes the `ASWebAuthenticationSession` consent alert from the
+host of the URL the app hands the session, so it used to quote
+`eercsucvxnszqletxued.supabase.co` at people about to type a Google password.
+`SupabaseConfig.authURL` is the only place that host lives, and the default
+`<ref>.supabase.co/auth/v1` still works, which is what keeps iOS unchanged.
+
 ### Shared, read as-is
 
 | Table | Use |
@@ -1449,14 +1615,41 @@ at top; scrollable body with a bottom fade; footer with regenerate / copy / 👍
 👎 and a primary `Insert ⏎`. (`result.png` also puts a chevron button in the fade;
 ours is deliberately gone — see below.)
 
-**The pager is always shown, `1 / 1` included — hiding it below 2 candidates was
-tried and reverted.** The desktop asks for one candidate (§6), so the arrows are
-normally both dead, and the argument for hiding it was that a control which cannot
-page is dead chrome. That reads the header wrong. `result.png` shows `‹ 1/1 ›` on a
-single candidate, and the readout is the *count* before it is a control: regenerate
-replaces the candidate rather than appending one, and `1 / 1` staying `1 / 1` is
-what tells the user that. It also has to survive a request that asks for more —
-the function still accepts up to `MAX_CANDIDATES` (5).
+**Regenerate keeps two meanings inside one morphing control.** At rest the footer is
+unchanged. Hovering ↻ expands that control left-to-right across the footer's existing
+28 pt slot, visually covering copy, feedback and Insert while their untouched row fades
+under it. The panel and result viewport do not change height. The ↻ stays attached to
+the growing right edge and becomes an upward Send control at the far right; sending an
+empty field performs the same plain regeneration as before. The Send disc is 20 pt
+inside a 28 pt hit target. The field has no native placeholder: a separate
+`textSecondary` layer supplies it, so AppKit cannot replace its colour with black. The
+surface and content are clipped before a constant `hairline` is overlaid; never clip the
+stroke itself, and never promote it to a bright focus ring. Pointer departure restores
+the normal actions after 140 ms, while field focus pins the bar so moving the pointer
+away cannot destroy typed guidance. Escape clears and collapses it. The field is one
+line and scrolls horizontally because this is a short correction to an answer already
+on screen, not the general-purpose ✎ path.
+
+The model source and the write destination must remain separate for a guided run.
+`PendingRewrite.requestText` is the candidate being refined, while
+`PendingRewrite.captured` remains the original AX/clipboard target. Conflating them would
+make generation look right and Insert write to nowhere useful. Reply mode uses the same
+split naturally: the candidate becomes `<existing_draft>` and the typed text remains
+`<reply_guidance>`, while `replyTo` is carried unchanged. A plain ↻ after that reruns
+the same candidate + guidance pair rather than going back to the first draft.
+
+**The pager is always shown, `1 / 1` included, and regeneration grows it.** Hiding it
+below two pages was tried and reverted: `result.png` shows `‹ 1/1 ›`, and the readout is
+the promise that another attempt will not destroy this one. Every completed plain or
+guided regeneration appends to the current panel session and selects the first new page,
+so the sequence becomes `2 / 2`, `3 / 3`, and the arrows revisit every earlier answer.
+The echoed prompt changes with the page. Regenerating or refining after navigating back
+branches from the answer currently on screen but still appends at the end; it never
+truncates the later pages. Cancel and failure restore the session that existed before
+the request. `ResultPage` owns its request, event id, response-local candidate index and
+history id so Insert and feedback follow the selected answer rather than the latest one.
+The desktop still requests one candidate per call (§6), though the pager also accepts
+all candidates if the server policy changes later (up to `MAX_CANDIDATES`, 5).
 
 **The panel's height follows its content, the same way the pill's width does.**
 SwiftUI measures the assembled card, `ResultPanel.applyContentHeight` resizes the
@@ -1557,7 +1750,8 @@ Tracked so they don't creep in:
   changes nothing structural — the capture ordering in §4 already works for it.
 - Windows. Willow ships one; ours would be a separate codebase against UI
   Automation. Nothing here should be abstracted in anticipation of it.
-- Multi-candidate UI (pager works, only one candidate shown).
+- Requesting multiple candidates in one desktop call. The pager can display them, but
+  desktop deliberately requests one candidate per generation and accumulates attempts.
 - Streaming (`stream: true` exists in the contract; v1 waits for the full
   response).
 - **Server-backed usage stats.** §14's four stat numbers still come from a local

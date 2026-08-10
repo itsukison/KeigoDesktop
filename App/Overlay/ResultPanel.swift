@@ -112,6 +112,11 @@ struct ResultView: View {
     let onHeightChange: (CGFloat) -> Void
 
     @State private var promptEcho: String = ""
+    @State private var refinementText: String = ""
+    @State private var showsRefinement = false
+    @State private var refinementHovered = false
+    @State private var refinementCloseTask: Task<Void, Never>?
+    @FocusState private var refinementFocused: Bool
     /// The result text's own height, before any clamping. Only meaningful next to
     /// `bodyHeight`: the two differing is exactly what "the body overflows" means.
     @State private var bodyIntrinsic: CGFloat = 0
@@ -125,7 +130,9 @@ struct ResultView: View {
         )
     }
 
-    private var overflows: Bool { bodyIntrinsic > Tokens.Geometry.resultBodyMaxHeight + 0.5 }
+    private var overflows: Bool {
+        bodyIntrinsic > Tokens.Geometry.resultBodyMaxHeight + 0.5
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -164,8 +171,20 @@ struct ResultView: View {
         .onPreferenceChange(PanelHeightKey.self) { height in
             onHeightChange(height)
         }
-        .onAppear { promptEcho = context.pending.promptText }
-        .onExitCommand { controller.dismiss() }
+        .onAppear { promptEcho = context.selectedPage?.pending.promptText ?? "" }
+        .onChange(of: context.selectedIndex) { _, _ in
+            // Each regenerated page can carry a different refinement instruction.
+            // The echoed prompt must travel with the body when the pager moves.
+            promptEcho = context.selectedPage?.pending.promptText ?? ""
+        }
+        .onDisappear { refinementCloseTask?.cancel() }
+        .onExitCommand {
+            if showsRefinement {
+                hideRefinement()
+            } else {
+                controller.dismiss()
+            }
+        }
     }
 
     // MARK: Header
@@ -173,12 +192,12 @@ struct ResultView: View {
     private var header: some View {
         HStack(spacing: 10) {
             // Always shown, `1 / 1` included — `result.png` shows the readout with a
-            // single candidate. It is not only a pager: it is the count, and the count
-            // is what tells the user a regenerate replaced the result rather than
-            // adding to it. Hiding it below 2 candidates was tried and reverted.
+            // single candidate. It is not only a pager: every regeneration appends a
+            // page, so the count is also the user's assurance that an earlier answer
+            // remains reachable after asking for another one.
             HStack(spacing: 6) {
                 pagerButton("chevron.left", enabled: context.selectedIndex > 0) {
-                    controller.selectCandidate(offsetBy: -1)
+                    controller.selectResult(offsetBy: -1)
                 }
                 Text(context.pagerLabel)
                     .font(Tokens.Font.body(Tokens.Overlay.labelMedium, weight: .medium))
@@ -186,9 +205,9 @@ struct ResultView: View {
                     .monospacedDigit()
                 pagerButton(
                     "chevron.right",
-                    enabled: context.selectedIndex < context.result.candidates.count - 1
+                    enabled: context.selectedIndex < context.count - 1
                 ) {
-                    controller.selectCandidate(offsetBy: 1)
+                    controller.selectResult(offsetBy: 1)
                 }
             }
             .padding(.horizontal, 8)
@@ -227,8 +246,8 @@ struct ResultView: View {
         .buttonStyle(.plain)
         .disabled(!enabled)
         // §14's rule, and it applies to the overlay too: a disabled control keeps the
-        // arrow. With one candidate both pager arrows are dead, and a hand over them
-        // would be promising a page that is not there.
+        // arrow. With one page both pager arrows are dead, and a hand over them would
+        // be promising a page that is not there.
         .cursor(enabled ? .pointingHand : .arrow)
     }
 
@@ -323,8 +342,32 @@ struct ResultView: View {
     // MARK: Footer
 
     private var footer: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                standardFooterRow
+                    .opacity(showsRefinement ? 0 : 1)
+                    .allowsHitTesting(!showsRefinement)
+
+                refinementBar(availableWidth: proxy.size.width)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(height: 28)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Tokens.Overlay.canvas)
+        .animation(.easeOut(duration: 0.18), value: showsRefinement)
+        // No divider. `result.png` separates the footer from the body with nothing at
+        // all — the text simply dissolves into it (see `body_`'s fade). A hairline
+        // there read as a table rule across a card that has no other rules on it.
+    }
+
+    private var standardFooterRow: some View {
         HStack(spacing: 6) {
-            footerButton("arrow.clockwise") { controller.regenerate() }
+            // `refinementBar` supplies ↻ in its collapsed state. This spacer keeps the
+            // remaining actions in their original positions without leaving a second,
+            // invisible regenerate button in keyboard or accessibility navigation.
+            Color.clear.frame(width: 28, height: 28)
             footerButton("doc.on.doc") { controller.copyToClipboard() }
             footerButton("hand.thumbsup") { controller.vote(up: true) }
             footerButton("hand.thumbsdown") { controller.vote(up: false) }
@@ -347,15 +390,127 @@ struct ResultView: View {
             .keyboardShortcut(.defaultAction)
             .cursor(.pointingHand)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Tokens.Overlay.canvas)
-        // No divider. `result.png` separates the footer from the body with nothing at
-        // all — the text simply dissolves into it (see `body_`'s fade). A hairline
-        // there read as a table rule across a card that has no other rules on it.
     }
 
-    private func footerButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+    /// The regenerate control is also the collapsed state of the refinement field.
+    /// It owns the same fixed-height footer slot in both states: expansion covers the
+    /// other actions instead of asking the result panel (or the text viewport) to move.
+    private func refinementBar(availableWidth: CGFloat) -> some View {
+        HStack(spacing: 8) {
+            if showsRefinement {
+                ZStack(alignment: .leading) {
+                    // AppKit can ignore a SwiftUI `prompt` foreground when a field is
+                    // hosted in a non-activating panel and draw it in black. Keep the
+                    // field's native placeholder empty and render the hint ourselves,
+                    // using the same overlay ramp as the production custom-input bar.
+                    if refinementText.isEmpty {
+                        Text(refinementPlaceholder)
+                            .font(Tokens.Font.body(Tokens.Overlay.labelLarge))
+                            .foregroundStyle(Tokens.Overlay.textSecondary)
+                            .lineLimit(1)
+                            .allowsHitTesting(false)
+                    }
+
+                    TextField("", text: $refinementText)
+                        .textFieldStyle(.plain)
+                        .font(Tokens.Font.body(Tokens.Overlay.labelLarge))
+                        .foregroundStyle(Tokens.Overlay.textPrimary)
+                        .focused($refinementFocused)
+                        .accessibilityLabel(refinementPlaceholder)
+                        .onSubmit { submitRefinement() }
+                }
+                .transition(.opacity)
+            }
+
+            Button {
+                if showsRefinement {
+                    submitRefinement()
+                } else {
+                    controller.regenerate()
+                }
+            } label: {
+                ZStack {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Tokens.Overlay.textSecondary)
+                        .opacity(showsRefinement ? 0 : 1)
+
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Tokens.Overlay.canvas)
+                        .opacity(showsRefinement ? 1 : 0)
+                }
+                .frame(width: 28, height: 28)
+                .background(
+                    Circle()
+                        .fill(showsRefinement
+                            ? Tokens.Overlay.textPrimary
+                            : Tokens.Overlay.surface)
+                        .frame(width: showsRefinement ? 20 : 28,
+                               height: showsRefinement ? 20 : 28)
+                )
+            }
+            .buttonStyle(.plain)
+            .cursor(.pointingHand)
+            .help(showsRefinement
+                ? tr("送信", "Send", "发送")
+                : tr(
+                    "クリックでそのまま再生成。カーソルを合わせると指示を追加できます。",
+                    "Click to regenerate. Hover to add a specific instruction.",
+                    "点击直接重新生成，悬停可添加具体要求。"
+                ))
+        }
+        .padding(.leading, showsRefinement ? 10 : 0)
+        .frame(
+            width: showsRefinement ? availableWidth : 28,
+            height: 28,
+            alignment: .trailing
+        )
+        .background(
+            RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
+                .fill(Tokens.Overlay.surface)
+        )
+        // Clip only the fill and the contents. Drawing the stroke before this clip
+        // shaved its anti-aliased outer pixels during the width animation, which made
+        // different corners appear broken from frame to frame.
+        .clipShape(
+            RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
+                .strokeBorder(
+                    Tokens.Overlay.hairline.opacity(showsRefinement ? 1 : 0),
+                    lineWidth: 1
+                )
+        )
+        .contentShape(
+            RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
+        )
+        .onHover { hovering in
+            refinementHovered = hovering
+            hovering ? revealRefinement() : scheduleRefinementClose()
+        }
+        .onChange(of: refinementFocused) { _, focused in
+            focused ? revealRefinement() : scheduleRefinementClose()
+        }
+        .onKeyPress(.escape) {
+            hideRefinement()
+            return .handled
+        }
+    }
+
+    private var refinementPlaceholder: String {
+        tr(
+            "指示を追加（空欄でそのまま再生成）",
+            "Add an instruction (leave blank to regenerate)",
+            "添加要求（留空则直接重新生成）"
+        )
+    }
+
+    private func footerButton(
+        _ symbol: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .medium))
@@ -368,6 +523,40 @@ struct ResultView: View {
         }
         .buttonStyle(.plain)
         .cursor(.pointingHand)
+    }
+
+    private func revealRefinement() {
+        refinementCloseTask?.cancel()
+        refinementCloseTask = nil
+        guard !showsRefinement else { return }
+        withAnimation(.easeOut(duration: 0.16)) { showsRefinement = true }
+    }
+
+    private func scheduleRefinementClose() {
+        refinementCloseTask?.cancel()
+        guard !refinementFocused, !refinementHovered else { return }
+        refinementCloseTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 140_000_000)
+            guard !Task.isCancelled, !refinementFocused, !refinementHovered else { return }
+            hideRefinement()
+        }
+    }
+
+    private func hideRefinement() {
+        refinementCloseTask?.cancel()
+        refinementCloseTask = nil
+        refinementFocused = false
+        refinementText = ""
+        withAnimation(.easeOut(duration: 0.12)) { showsRefinement = false }
+    }
+
+    private func submitRefinement() {
+        let instruction = refinementText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if instruction.isEmpty {
+            controller.regenerate()
+        } else {
+            controller.refine(instruction: instruction)
+        }
     }
 
     /// Editing the echoed prompt and pressing Enter re-runs against the same captured

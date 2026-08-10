@@ -161,12 +161,12 @@ struct AccountView: View {
     /// second (240) because it lived in a 460 pt column of its own.
     private static let fieldWidth: CGFloat = 280
 
-    private static let joinedFormatter: DateFormatter = {
+    private static var joinedFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.locale = AppLanguageState.current.locale
         formatter.setLocalizedDateFormatFromTemplate("yMMM")
         return formatter
-    }()
+    }
 
     // MARK: - Signed out
 
@@ -240,7 +240,7 @@ struct AccountView: View {
                     enabled: canSubmit,
                     action: submit
                 )
-                ActionButton(tr("Google で続ける", "Continue with Google", "使用 Google 继续"), style: .secondary, enabled: !model.isAuthenticating) {
+                GoogleSignInButton(size: .inline, isLoading: model.isAuthenticating) {
                     model.signInWithGoogle()
                 }
                 Spacer(minLength: 0)

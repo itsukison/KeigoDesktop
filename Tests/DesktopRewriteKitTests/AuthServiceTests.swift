@@ -73,6 +73,77 @@ final class AuthServiceTests: XCTestCase {
         )
     }
 
+    // MARK: - Hosts
+
+    /// The sign-in host is the one string macOS shows the user before the browser
+    /// opens, so it is pinned rather than left to whatever `supabaseURL` happens to be.
+    func testAuthEndpointIsOnTheCustomDomain() {
+        let config = SupabaseConfig(appVersion: "1.0")
+
+        XCTAssertEqual(
+            config.authEndpoint.absoluteString,
+            "https://auth.keigobutton.com/auth/v1"
+        )
+    }
+
+    /// The other half of the same decision: nothing a user reads goes through REST or
+    /// Functions, so both stay on Supabase's own domain rather than behind our DNS.
+    func testRestAndFunctionsStayOnTheProjectDomain() {
+        let config = SupabaseConfig(appVersion: "1.0")
+
+        XCTAssertEqual(config.restEndpoint.host, "eercsucvxnszqletxued.supabase.co")
+        XCTAssertEqual(config.rewriteEndpoint.host, "eercsucvxnszqletxued.supabase.co")
+        XCTAssertEqual(
+            config.rewriteEndpoint.absoluteString,
+            "https://eercsucvxnszqletxued.supabase.co/functions/v1/desktop-rewrite"
+        )
+    }
+
+    /// Collapsing the two back into one field would silently undo the custom domain —
+    /// every call would still work, and the alert would go back to reading
+    /// `eercsucvxnszqletxued.supabase.co`. This is the test that fails when that happens.
+    func testTheAuthHostIsNotTheProjectHost() {
+        let config = SupabaseConfig(appVersion: "1.0")
+
+        XCTAssertNotEqual(config.authURL.host, config.supabaseURL.host)
+    }
+
+    /// `authorizeURL` is the URL handed to `ASWebAuthenticationSession`, so its host is
+    /// literally what the consent alert quotes. The callback is unchanged: the custom
+    /// domain moves where the browser goes, not where it comes back to.
+    func testAuthorizeURLIsBuiltOnTheAuthHostAndKeepsTheAppCallback() async {
+        let service = AuthService(
+            config: SupabaseConfig(appVersion: "1.0"),
+            store: InMemorySessionStore()
+        )
+
+        let url = await service.authorizeURL(provider: "google")
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+
+        XCTAssertEqual(components?.host, "auth.keigobutton.com")
+        XCTAssertEqual(components?.path, "/auth/v1/authorize")
+        XCTAssertEqual(
+            components?.queryItems?.first { $0.name == "provider" }?.value,
+            "google"
+        )
+        XCTAssertEqual(
+            components?.queryItems?.first { $0.name == "redirect_to" }?.value,
+            "keigobutton://auth-callback"
+        )
+    }
+
+    /// The two hosts are independent inputs, not one derived from the other — a staging
+    /// or local auth host must not drag REST and Functions along with it.
+    func testTheTwoHostsAreConfiguredIndependently() {
+        let config = SupabaseConfig(
+            authURL: URL(string: "http://127.0.0.1:54321")!,
+            appVersion: "1.0"
+        )
+
+        XCTAssertEqual(config.authEndpoint.absoluteString, "http://127.0.0.1:54321/auth/v1")
+        XCTAssertEqual(config.restEndpoint.host, "eercsucvxnszqletxued.supabase.co")
+    }
+
     // MARK: -
 
     private static func jwt(_ claims: [String: String]) -> String {

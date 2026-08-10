@@ -231,6 +231,15 @@ enum Tokens {
         /// Between the context pill and the bar. `ErrorPanel` uses the same 8.
         static let replyContextGap: CGFloat = 8
 
+        /// The update notice that stacks above the bar when Sparkle has quietly found a
+        /// newer release. Same constant-height discipline as `replyContextHeight`, and
+        /// for the same reason: this panel is long-lived and anchored near the bottom of
+        /// the screen, which is exactly where an inflated measurement gets slid down
+        /// over the bar by `clampToWorkArea`. Taller than the reply pill because it
+        /// carries a real action, not just a quotation.
+        static let updateNoticeHeight: CGFloat = 38
+        static let updateNoticeWidth: CGFloat = 300
+
         /// Past this the field scrolls rather than growing. Three lines is roughly
         /// 90 Japanese characters at `inputBarWidth` — far more than a rewrite
         /// instruction needs, and short enough that the bar stays a bar.
