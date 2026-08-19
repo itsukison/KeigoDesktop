@@ -137,13 +137,35 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
     }
 
     public func drafts() -> [OnboardingButtonDraft] {
-        templates.map {
+        drafts(writtenIn: AppLanguageState.current)
+    }
+
+    /// The same buttons, for a language named explicitly rather than read off the
+    /// global. `StockButtonLanguage` needs this: it builds a replacement set while
+    /// reasoning about both languages at once, and a set that silently followed
+    /// whichever language the app happened to be in would be the same class of bug it
+    /// exists to fix.
+    public func drafts(writtenIn language: AppLanguage) -> [OnboardingButtonDraft] {
+        (language.writesJapanese ? japaneseTemplates : englishTemplates).map {
             OnboardingButtonDraft(
                 title: $0.title,
                 prompt: $0.prompt,
                 builtinKey: $0.builtinKey
             )
         }
+    }
+
+    /// Every stock prompt body for one writing language, across all five packs.
+    ///
+    /// Takes the language as an argument instead of reading `AppLanguageState`, which
+    /// is the whole point: `StockButtonLanguage` has to ask about the language the user
+    /// is *not* in to notice that their buttons were authored for it. `japanese` and
+    /// `simplifiedChinese` answer identically, because they write the same thing (§17).
+    public static func stockPromptBodies(writtenIn language: AppLanguage) -> Set<String> {
+        Set(allCases.flatMap { pack in
+            (language.writesJapanese ? pack.japaneseTemplates : pack.englishTemplates)
+                .map { $0.prompt.trimmingCharacters(in: .whitespacesAndNewlines) }
+        })
     }
 
     private struct Template {

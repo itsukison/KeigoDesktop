@@ -12,6 +12,11 @@ struct ButtonsView: View {
     static let rowHeight: CGFloat = 60
 
     @State private var pendingDelete: UserPrompt?
+    /// Open only from the language banner. Not a permanent control on this page: for
+    /// everyone whose buttons already write the right language there is nothing here to
+    /// choose, and a always-visible "replace all my buttons" affordance beside a list of
+    /// buttons someone spent time wording is an invitation to lose that work.
+    @State private var choosingPack = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -27,6 +32,9 @@ struct ButtonsView: View {
             if !model.isSignedIn {
                 signInPrompt
             } else {
+                if model.buttonsWriteOtherLanguage {
+                    languageMismatchBanner
+                }
                 toolbar
                 if let error = model.promptsError {
                     Text(error)
@@ -47,6 +55,51 @@ struct ButtonsView: View {
                 primaryButton: .destructive(Text(tr("削除", "Delete", "删除"))) { model.delete(prompt) },
                 secondaryButton: .cancel(Text(tr("キャンセル", "Cancel", "取消")))
             )
+        }
+        .sheet(isPresented: $choosingPack) {
+            PresetPackPicker(model: model) { choosingPack = false }
+        }
+    }
+
+    /// Shown when the buttons on this account are stock text for the *other* writing
+    /// language — §17's two questions having drifted apart. It is the visible half of
+    /// the bug this page could not otherwise explain: an English interface whose 敬語
+    /// button returns Japanese, because the instruction behind it is a Japanese sentence
+    /// asking for Japanese.
+    ///
+    /// An offer, never an automatic repair. The rows are shared with the phone and the
+    /// user may have chosen them there on purpose, so nothing is written until a pack is
+    /// picked in the sheet.
+    private var languageMismatchBanner: some View {
+        Card(padding: 18) {
+            HStack(alignment: .top, spacing: 14) {
+                IconPlate(icon: .info, diameter: 36)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(tr(
+                        "ボタンは英語向けの設定になっていません",
+                        "These buttons still write Japanese",
+                        "这些按钮仍然会写成日语"
+                    ))
+                        .font(Tokens.Font.body(14, weight: .medium))
+                        .foregroundStyle(Tokens.Window.textPrimary)
+                    Text(tr(
+                        "AIへの指示が日本語で書かれているため、英語を選んでいても日本語で返ってきます。英語向けのセットに入れ替えできます。",
+                        "The instruction behind each one asks the AI for Japanese, so a rewrite comes back in Japanese even with English selected. You can swap them for an English set.",
+                        "每个按钮给AI的指令都是日语，因此即使界面选了其他语言，改写结果仍是日语。可以替换为对应的按钮组。"
+                    ))
+                        .font(Tokens.Font.body(13))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                ActionButton(
+                    tr("セットを選ぶ", "Choose a set", "选择按钮组"),
+                    style: .primary
+                ) {
+                    choosingPack = true
+                }
+            }
         }
     }
 
@@ -303,5 +356,60 @@ private struct PromptEditor: View {
 
     private var trimmedTitle: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// The pack picker, reached only from ボタン's language banner.
+///
+/// The same five packs §15's purpose page offers, in the same order, resolved for the
+/// current writing language by `OnboardingPresetPack.available(for:)` — so an English
+/// user is shown Outreach and Polish where a Japanese one is shown 海外とのやり取り and
+/// 日本語を整える. The packs are not translations of one another (§17), which is why this
+/// asks rather than converting button by button: there is no English counterpart to 英訳
+/// to convert it *into*.
+private struct PresetPackPicker: View {
+    @ObservedObject var model: MainModel
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(tr("ボタンのセットを選ぶ", "Choose a set of buttons", "选择按钮组"))
+                    .font(Tokens.Font.body(16, weight: .semibold))
+                    .foregroundStyle(Tokens.Window.textPrimary)
+                Text(tr(
+                    "選んだ4つに入れ替えます。自分で作ったボタンはそのまま残ります。",
+                    "The four you pick replace the preset buttons. Anything you wrote yourself is kept.",
+                    "将替换为所选的4个按钮。你自己创建的按钮会保留。"
+                ))
+                    .font(Tokens.Font.body(13))
+                    .foregroundStyle(Tokens.Window.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            RowGroup {
+                let packs = OnboardingPresetPack.available(for: model.language)
+                ForEach(Array(packs.enumerated()), id: \.element.rawValue) { index, pack in
+                    if index > 0 { Hairline() }
+                    SettingsRow(
+                        title: pack.title,
+                        subtitle: pack.buttonTitles.joined(separator: " · ")
+                    ) {
+                        ActionButton(tr("これにする", "Use this", "使用"), style: .secondary) {
+                            model.applyPresetPack(pack)
+                            dismiss()
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                Spacer()
+                ActionButton(tr("キャンセル", "Cancel", "取消"), style: .ghost) { dismiss() }
+            }
+        }
+        .padding(24)
+        .frame(width: 460)
+        .background(Tokens.Window.canvas)
     }
 }

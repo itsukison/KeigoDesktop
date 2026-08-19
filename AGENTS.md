@@ -11,6 +11,163 @@ The first run produced `debug.png` and a round of overlay fixes (§4, §8).
 
 Verified (2026-08-07):
 
+- **2026-08-19 (later) — an English user's rewrite came back in Japanese, and the
+  system prompt was not the reason (§17).** `writingLanguage` worked end to end:
+  `OverlayController` sent `"en"`, `parseRequest` accepted it, and the deployed
+  `assistantIdentity` said "You are an English writing assistant on macOS." The cause was
+  one level up. **The button carries the instruction the model actually follows** — the
+  reported account's four buttons were the Japanese 「まずは定番」 pack, so 敬語's command
+  was 「…自然でやわらかい丁寧語に変換してください」 and `prompt.ts`'s own rule is "Apply the
+  user-supplied command instruction to it". Nothing had ever rewritten `user_prompts` when
+  the language changed, and the ⚙︎ 一般 row said so in as many words; `handle_new_user()`
+  seeds Japanese-writing prompts to every account regardless of language, and it cannot
+  stop — it is the iOS signup path too. Diagnosis needed `command_key` (`translateToEnglish`
+  and `natural` are keys no English pack contains) plus a hand read of the account's rows,
+  because the one field that answers the question directly was not logged.
+  Four changes: `outputLanguageRule` states the output language for `"en"` — as "do not
+  change the language of the target text", so pasted Japanese and translate buttons both
+  keep working, with English the default only for compose; the `Locale:` line is now
+  labelled for `"en"` as a system region rather than an output-language request;
+  `StockButtonLanguage` recognises stock button text by exact match in both languages plus
+  the four signup seeds, ボタン raises a banner when the set writes the wrong one, and its
+  pack picker swaps them while keeping every hand-written button (`replaceAll` deletes what
+  it is not handed); and `desktop.rewrite_events.writing_language` now records the field, with
+  `"ja"` no longer collapsed to null on the wire. 199 `swift test` tests (14 new), unsigned
+  `xcodebuild` clean with only the two pre-existing warnings, 23 Deno prompt tests (5 new)
+  plus `deno check` / `deno lint` clean. Migration `20260819050128` applied and the column
+  read back; `desktop-rewrite` **v14 is ACTIVE**, its four deployed files downloaded and
+  diffed byte-identical to the repository, `verify_jwt` still true, gateway still 401
+  without a JWT. **Not verified on screen:** the ボタン banner and the pack picker sheet.
+  **Not exercised against the provider:** no sampled rewrite was run through v14 — the
+  Deno tests pin the exact instruction text, not a model answer.
+- **2026-08-19 — reply mode now knows which side the user is on, and copied
+  selections cannot become drafts or destinations (§16).** Reply capture is now a
+  separate AX policy rather than normal rewrite capture with `allowEmpty`: a focused
+  selection equal to the copied incoming message becomes scratch context, carries that
+  source element as an excluded redirect, and can never replace the received message;
+  a selection inside a real reply field resolves to the field's whole value because the
+  result is a complete reply body; and there is deliberately no clipboard fallback,
+  which could only copy the already-known source again. `desktop-rewrite` resolves the
+  JWT subject to `profiles.display_name` with its server credential and supplies that
+  trusted author identity to the prompt. The reply rules now resolve leading sender
+  labels and matching @mentions before writing, forbid sender-perspective answers,
+  invented/placeholder names and sender signatures, and separate chat from email
+  sign-offs; a missing profile degrades to a natural name-free reply. The signed-in
+  welcome page asks for the optional **name the user uses with other people**, explicitly
+  explaining that it recognizes mentions and signs email only when appropriate, and
+  saves an entered value before Continue; Account uses the same communication-identity
+  framing rather than presenting it as an app nickname. 185 `swift test` tests (4 new), unsigned
+  `xcodebuild` clean, and 18 Deno prompt tests (4 new) plus `deno check` / `deno lint`
+  clean. `desktop-rewrite` **v13 is ACTIVE**, its four deployed files were downloaded
+  and diffed byte-identical to the repository, `verify_jwt` is still true, and the
+  gateway returns 401 without an Authorization header. **Not verified on screen:** the
+  welcome-page geometry and a real copy → hover → click reply field → Insert sequence.
+  **Not exercised against the provider:** one authenticated Josh/@itsuki reply with a
+  populated profile remains the owner check; unit tests pin the exact prompt and role
+  invariants, not a sampled model answer.
+- **2026-08-18 — Insert asks where the text can go, and ✎ no longer refuses to open
+  (§18).** Two reported UX failures, one missing idea between them: the destination was
+  captured once and then trusted for the life of the result panel, and a press with
+  nothing focused was a dead end. The result panel's primary button is now decided from a
+  live probe (挿入 / ここに挿入 / コピー) and re-resolved at press time; ✎ and reply mode
+  accept an empty field or no field at all and carry `writeStrategy: .none`, which is what
+  now keeps ⌘A out of the Finder; the composer's placeholder names what the instruction
+  will be applied to; a synthesized paste is verified rather than assumed; and
+  `prompt.ts` composes from nothing instead of rewriting a blank `<target>`.
+  181 `swift test` tests (26 new), `xcodebuild` clean, 14 Deno prompt tests clean.
+  `desktop-rewrite` **v12 is ACTIVE** with the compose branch, deployed 2026-08-18 and
+  read back byte-identical to the repository; `verify_jwt` is still true and the gateway
+  still returns 401 without a JWT.
+- **2026-08-19 (second pass) — the probe was reading focus with the wrong instrument.**
+  On screen the panel showed コピー correctly for a compose-from-nothing and then never
+  changed when the user clicked into a text field. `AXTextIO` had grown *two* focus
+  readings and the probe used the weaker one — `kAXFocusedUIElement` off the frontmost
+  application element, which is nil for the web-content and helper processes that
+  `AXManualAccessibility` priming exists for. Unified on one `focusedElement(frontmostPID:)`
+  shared with `capture`; `kAXFocusedApplication` now answers "is that us" instead of
+  `NSWorkspace`; `canTakeText` gained the range / character-count / insertion-point signals
+  and a password-field veto; app activation triggers an immediate re-probe; the 入力欄なし
+  capsule became a line above the footer; and every verdict is traced to `destinationLog`.
+- **2026-08-19 — the probe was too conservative to ever fire, and the toast floated.**
+  First on-screen testing: コピー never appeared once and every press ended in the insert
+  failure message. Two of the three capture paths resolved to `.ready` unconditionally,
+  which is most traffic. Settability is now re-asked, an element-less target asks the
+  captured app what it has focused (tri-state — nil is not evidence), a failed write
+  latches the button to コピー, 挿入 stays greyed beside it so the change is legible, the
+  label is frozen under the pointer, and `ErrorPanel` keeps the anchor *window* instead of
+  a rectangle it once had. **Not verified:** all of it, on screen.
+- **2026-08-19 (third pass) — the probe was asking the right question from the one place
+  it cannot be answered.** Reported on screen: 挿入 offered with no input box focused
+  anywhere, and pressing Insert made the whole bar disappear. Both are the same cause.
+  `ResultPanel` is key for its entire life — it has to be, Enter is bound to 挿入 — and §4
+  had already written down what that does: while one of our windows holds key,
+  `AXFocusedUIElement` points at our own field. So every live read the probe took answered
+  "us", `focusIsSelf` fell open to `.ready`, and `.redirect` could not fire at all. The
+  reading is now taken only when we are *not* holding the keyboard (at capture, and from
+  any poll landing while the user is back in their own window) and remembered as
+  `AXTextIO.UserFocus`; a reading that answered about us replaces nothing. `focusIsSelf`
+  is gone from `DestinationFacts`; `capturedElementIsField` was added so a selection taken
+  from a read-only web page stops resolving to 挿入; the bar stays on screen for the length
+  of a write instead of being torn down with the card; and the selection-feedback POST no
+  longer sits in front of the overlay coming back. 181 `swift test` tests (4 new),
+  `xcodebuild` clean with only the two pre-existing warnings. **Not verified on screen:**
+  all of it — see §18's closing section for what a `log stream` settles in one minute.
+- **2026-08-19 (fourth pass) — a result handoff may never leave the app with no
+  surface.** The reported ✎-from-nothing path was the only completion path that changed
+  the primary action's structure from 挿入 to コピー *after* the result window was
+  constructed and ordered: the no-destination line and footer controls entered during
+  the first AppKit/SwiftUI layout. At the same time `NSHostingView` retained its default
+  `.standardBounds` sizing while `ResultPanel.applyContentHeight` independently owned
+  the same window frame. The destination seed now happens before construction, the
+  hosting view has no sizing authority, the new result is ordered before the thinking
+  panel is dismissed, and result windows use `orderFrontRegardless` before taking key.
+  More importantly, visibility is now an invariant rather than a best effort: while the
+  controller remains in `.result`, a 0.5 s watchdog repeatedly restores an invisible
+  card and raises the normal pill whenever the card is absent or AppKit will not show it.
+  The transition itself applies the same fallback, so neither first presentation nor a
+  later Space/app change can intentionally leave both surfaces hidden. All 202
+  `swift test` tests pass and unsigned `xcodebuild` succeeds with only the pre-existing
+  AppIntents metadata warning. **Not verified on screen:** the exact no-field ✎ →
+  thinking → コピー result sequence and forced watchdog fallback remain the owner check.
+- **2026-08-19 (fifth pass) — focus changes no longer resize the result card.** The
+  no-destination explanation used to be inserted into the layout only for `.copyOnly`,
+  so clicking into or out of a field moved the whole window by one line even though the
+  answer had not changed. The card now always reserves the same 16 pt status line plus
+  8 pt spacing; its contents merely fade between visible and hidden. The visible copy
+  state is one neutral line — “No input field is focused. Copy, or focus one to Insert.”
+  — with an info symbol rather than an error symbol. Icon and copy are aligned on their
+  first text baseline with a 4 pt gap. The normal Insert states stay visually quiet,
+  while all three languages are constrained to the same single line.
+  This is presentation-only: destination probing and button behavior are unchanged.
+  All 202 `swift test` tests pass and unsigned `xcodebuild` succeeds with only the
+  pre-existing AppIntents metadata warning. **Not verified on screen:** the live
+  Copy ↔ Insert transition and the resulting whitespace in the normal state.
+- **2026-08-19 (sixth pass) — the destination distinction no longer makes the user
+  parse extra controls.** `.ready` and `.redirect` remain different write paths, but
+  both primary buttons now say the concise 挿入 / Insert / 插入; the help text can carry
+  the implementation detail about whether the original or current field receives it.
+  Copy mode now has only its live コピー button — the dead grey 挿入 beside it repeated
+  what the fixed status line already explains and looked actionable despite doing
+  nothing. The Chinese line now uses natural cursor language: 「光标当前不在输入框中。
+  可以复制文本，或先点击输入框再插入。」 Destination resolution and press-time safety
+  are unchanged. **Not verified on screen:** the simplified footer in all three states.
+- **2026-08-10 — `v0.1.4` is published from the final reply-composer fix.** Workflow
+  run `31364148576` succeeded in both jobs from commit `f3a842a`; the two earlier runs
+  deliberately cancelled while the placeholder and redundant Reply badge were still
+  being corrected published no tag or release. Read back rather than assumed: the
+  public latest DMG is 8,600,644 bytes at SHA-256
+  `496b1a2df694b0849c2d2c717849feabb603e7a37867589f2a8383fd853c31e8`, exactly
+  GitHub's asset metadata; `hdiutil verify` and `stapler validate` pass; Gatekeeper calls
+  both the DMG and mounted app `Notarized Developer ID`; and a strict deep signature
+  check passes. The mounted image has the saved Finder contents, `KeigoButton.app` and
+  the Applications link, and the bundle reports 0.1.4/build 9. The live Pages appcast
+  is valid XML with five releases, 0.1.4 newest at `sparkle:version` 9, and its signed
+  8,399,451-byte ZIP enclosure matches the released asset at SHA-256
+  `e06289c982c459433e08a9631776476e872160b43934539d3e160c6e3a60c16f`.
+  **Not verified:** dragging this DMG into Applications, the final overlay interaction
+  on screen, and a 0.1.4 → 0.1.5 scheduled discovery/install. That pair is the first one
+  capable of proving the new visible update notice; 0.1.0–0.1.3 cannot announce 0.1.4
+  because the announcing code is not in those installed builds.
 - **2026-08-10 — the shared custom/reply composer no longer asks AppKit to colour its
   placeholder.** In a non-activating panel the native placeholder followed the system
   appearance, ignored the dark overlay palette and rendered black; both ✎ and reply
@@ -1164,6 +1321,11 @@ For the custom-input path the capture happens when **✎ is pressed**, not when
 the user submits the text — by submit time the input bar is key and
 `AXFocusedUIElement` points at our own field.
 
+That press no longer *fails* when there is nothing to read: it accepts an empty field, and
+then nothing focused at all, and the composer says which it got (§18). Step 1 can
+therefore return a target with no destination, and everything downstream — the placeholder,
+the Insert button, the write — is decided from that rather than from the press succeeding.
+
 ---
 
 ## 5. Text I/O — Accessibility first, clipboard fallback
@@ -1234,6 +1396,13 @@ first because ⌘V goes to the key window, and the result panel *is* key.
 
 If the write fails anyway, the rewrite is left on the clipboard and the panel comes
 back — never silently discarded.
+
+Two later additions, both in §18: a fifth strategy value, `.none`, for a target captured
+with nowhere to write (Insert offers Copy instead and no keystroke is ever synthesized for
+it), and **verification of the synthesized paste** — ⌘V reports success as soon as it is
+posted, so the field is re-read afterwards and an unchanged one is a failure. Which
+destination a write goes to is also no longer fixed at capture time; `DestinationVerdict`
+decides that, live, before the button is pressed.
 
 ### Mandatory hardening
 
@@ -1451,6 +1620,13 @@ short version.
 - `desktop_rewrite_failed` now carries `message`, the app's own Japanese toast.
   It used to take the string and drop it, so the failure tile could only ever
   have been a count.
+- **`desktop_rewrite_copied` (2026-08-18)** is the other ending, with `reason`
+  (`no_destination` | `user_chose`). A copy is a completed rewrite and must not land in
+  `desktop_rewrite_failed`; without its own event the destination-less path §18 opened
+  would look like a funnel that simply stops. `scope` and `has_destination` ride on
+  completed, `scope` and `insert_destination` (`captured_field` | `insert_here`) on
+  inserted — `scope: scratch` is the measure of whether refusing that press was ever
+  worth it.
 
 ---
 
@@ -2378,8 +2554,8 @@ finished first run is replayed into it.
 
 Copy a message, go to where you are answering it, hover the bar: it opens an input box
 for *how* you want to reply, and the rewrite comes back as the reply. Two new
-`OverlayState` cases, one clipboard poll, and one flag on the AX capture. Everything
-from the generating capsule onward is §4 unchanged.
+`OverlayState` cases, one clipboard poll, and one reply-specific AX capture policy.
+Everything from the generating capsule onward is §4 unchanged.
 
 `desktop-rewrite` selects the reply branch from `replyTo`, as it always has, but reply
 prompt construction now lives in the pure, tested `prompt.ts`. The three fields mean:
@@ -2404,6 +2580,20 @@ must never be invented. When both the existing draft and guidance provide no sta
 fallback acknowledges the message without accepting, declining, promising action or
 choosing availability for the user. Normal rewrite prompt construction is unchanged.
 
+The author is not inferred from those three user-controlled text fields. After the
+gateway verifies the JWT, the Edge Function uses its subject to read the shared
+`profiles.display_name` row with the server credential and adds it to the internal
+`PromptRequest` as `<account_user>`; `parseRequest` never accepts that field from a
+client. Leading labels such as `Josh:` / `From: Josh` belong to the other participant,
+while a name/handle matching `<account_user>` identifies the person writing the reply.
+The system prompt forbids switching to the sender's perspective, addressing the account
+user as their own recipient, signing with the sender's name, or emitting `[name]`-style
+placeholders. Blank/missing profile rows are non-fatal and explicitly mean “write a
+name-free reply.” Chat defaults to no greeting/signature; email preserves an existing
+closing and may use only the account user's name when a named sign-off is actually
+called for. The same trusted identity is supplied to compose-from-nothing so an email
+request can end correctly without adding a client wire field.
+
 ### ⌘C is the trigger, and selection is not
 
 `ClipboardWatcher` polls `NSPasteboard.general.changeCount` every 0.5 s. `NSPasteboard`
@@ -2426,9 +2616,8 @@ from a user copy. Untracked, the worst of them — the insert-failure recovery a
 結果 copy button — would arm reply mode with the rewrite the app had just produced and
 offer to compose a reply to it.
 
-`ClipboardWatcher.suspend()` / `resume()` bracket all five: the fallback capture in
-`press`, `pressCustomInput` and `beginReplyInput` (which clears and restores the
-pasteboard around a synthesized ⌘C — three bumps), the write in `insert`, and the two
+`ClipboardWatcher.suspend()` / `resume()` bracket the fallback capture in `press` and
+`pressCustomInput`, the write in `insert`, and the two
 synchronous writes via `writingOurselves`. **Each is balanced by a `resume()` in its
 `catch`.** The depth counter alone is not enough and the `lastSelfChangeCount` snapshot
 is not redundant: `copyToClipboard` suspends, writes and resumes synchronously, so no
@@ -2442,12 +2631,16 @@ the other side of the app.
 
 `AXTextIO` threw `.noTarget` on a readable-but-blank field. "Copy a message, click into
 the empty reply box, hover" is the *central* reply flow, so that was not an edge case —
-it was the feature never working. `capture(frontmostPID:allowEmpty:)` accepts
-`kAXValue != nil` instead of non-blank, and only reply mode passes `true`.
+it was the feature never working. `captureReply(frontmostPID:copiedMessage:)` accepts a
+blank element when `canTakeText` says it is a field.
 
-A **nil** `kAXValue` still throws, and that is load-bearing: it is the only thing
-distinguishing "empty text field" from "no text field", and therefore the only thing
-keeping a ⌘A + ⌘V out of the Finder.
+A **nil** `kAXValue` no longer throws in reply capture — a usable text field becomes an
+empty draft, while a non-field or missing focus returns a target with
+`writeStrategy: .none` (§18). The invariant it was protecting is unchanged and now
+enforced somewhere stronger: the distinction between "empty text field" and "no text
+field" is carried by the strategy, and `.none` cannot reach the clipboard writer at all,
+so ⌘A + ⌘V still cannot land in the Finder. What used to be the difference between working
+and refusing is now the difference between 挿入 and コピー.
 
 ### Capture happens on hover, because that is the last moment it can
 
@@ -2455,14 +2648,32 @@ The input box takes key, so by the time anything is typed `AXFocusedUIElement` i
 own field — the same reason `pressCustomInput` captures on the press (§4). Hover is the
 last instant the user's app still owns focus.
 
+That instant may still be on the incoming message because copying usually requires a
+selection. Reply capture therefore compares the focused `kAXSelectedText` with the full
+copied source after whitespace/line-ending normalization. Equality means **copied
+source**, not draft: it returns scratch and records the source AX element in
+`excludedRedirectElement`, so §18's live probe cannot immediately offer to insert back
+into it. A later click into a different text field is still a valid redirect. Conversely,
+when a user selects one phrase inside an existing reply draft, reply capture ignores the
+fragment and sends the whole `kAXValue` as `<existing_draft>`; treating the fragment as
+the write target would splice a complete reply into the middle of the old one.
+
+There is no clipboard fallback in this path. Reply mode already owns the clipboard as
+`replyTo`; another synthesized ⌘C can only rediscover the received message and can never
+discover an empty reply box. General rewrite capture remains AX → clipboard, so a
+selection without a new copy remains an ordinary highlighted-fragment rewrite.
+
 Two consequences:
 
 - `replyCaptureInFlight` guards it. Hover fires again on re-entry and the capture is a
   cross-process AX call, so a cursor jittering on the bar's edge would otherwise start
   several.
-- A capture failure toasts **once per armed copy** (`warnedNoReplyTarget`). Hover is
-  passive; a message on every pass of the cursor over the bar would be worse than the
-  missing field it reports.
+- A capture failure used to toast **once per armed copy** (`warnedNoReplyTarget`), because
+  hover is passive and a message on every pass of the cursor would be worse than the
+  missing field it reported. Both are gone: with `allowScratch` (§18) the composer opens
+  regardless and the reply comes back to the clipboard, which is what that message was
+  telling the user to arrange by hand. Only the permission failure toasts now, and that
+  one is worth every repetition.
 
 ### The rest of the state machine
 
@@ -2801,6 +3012,90 @@ a matter of care. The reply branch is language-neutral and is deliberately left
 alone; four Deno tests pin the default, both English branches and the reply branch's
 independence.
 
+### The identity is not the output language, and the button outranks both
+
+`assistantIdentity` was doing less than its name suggests, and on 2026-08-19 that
+showed: an English user's rewrite came back in Japanese with `writingLanguage: "en"`
+on the wire and the English identity in the system prompt. **Three things were
+saying "Japanese" and only one of them was wrong to.**
+
+1. **The button's own instruction, which is the one the model follows.** The account
+   held the Japanese 「まずは定番」 pack, so 敬語's command was
+   「…自然でやわらかい丁寧語に変換してください」. `systemInstructions` says "Apply the
+   user-supplied command instruction to it" — the model obeyed the most specific
+   instruction it had, and a one-line persona statement does not outrank a sentence
+   that names a language. Nothing here was broken; the button was.
+2. **`Locale:`, which is the *system* locale** (`Locale.current.identifier`, defaulted
+   in `RewriteRequest.init` and never overridden). An English user on a Japanese Mac
+   sends `Locale: ja_JP`. Unlabelled, it is the clearest language signal in the
+   message. It is now named for `"en"` as a region rather than a request, rather than
+   changed at the source: the same value is what `desktop.rewrite_events.locale`
+   means, and rewriting it would change what every existing row says.
+3. **Nothing at all**, which was the actual gap. `outputLanguageRule` now states the
+   output language for `"en"`, phrased as *do not change the language of the target
+   text* rather than *write English* — an English user who pastes Japanese and presses
+   Shorten wants shorter Japanese, and a translate button has to keep working in both
+   directions. Compose (§18) has no target to preserve, so there and only there it
+   defaults to English. Both additions are `"en"`-only for §17's original reason: an
+   absent or `"ja"` request stays byte-identical, and a Deno test asserts it.
+
+### Buttons do not follow the language, and now they offer to
+
+The two questions this section opens with are stored in two places that nothing kept
+in agreement. The interface language is `UserDefaults` on one Mac; the buttons are
+`user_prompts` rows on the server, shared with the phone. Switching language never
+touched them — the ⚙︎ 一般 row promised exactly that — so an English interface could
+sit above four buttons whose instructions ask for Japanese.
+
+There are three ways in, and only the first was ever closed:
+
+- Onboarding's pack step reads `available(for:)` and writes the right language. Fine.
+- **`handle_new_user()` seeds Japanese-writing prompts to every account regardless of
+  language**, and it cannot be fixed there: it is the iOS signup path, in the database
+  both surfaces share, and it predates this app. So the Mac reconciles after the fact.
+- **⚙︎ 一般 and the language page**, for anyone who switched later.
+
+`StockButtonLanguage` is the reconciliation, and its two rules are the design:
+
+- **Detection is exact string matching**, against every preset body in both languages
+  (`OnboardingPresetPack.stockPromptBodies(writtenIn:)`) plus the four `handle_new_user`
+  seed strings copied verbatim. A wording change upstream makes the offer stop
+  appearing; a script or language detector would eventually flag a button the user
+  wrote on purpose — an English speaker in Japan with one 敬語 button — and propose
+  deleting it. Under-offering is the safe direction. Editing a preset's text makes it
+  the user's, and it stops being flagged.
+- **It offers, it never repairs.** ボタン raises a banner and its picker asks which pack;
+  nothing is written until one is chosen. The packs are not translations of each other,
+  which is the same reason this cannot map button by button — there is no English
+  counterpart to 英訳 to convert it *into*.
+
+`replacement(choosing:keeping:whenWriting:)` returns the pack **plus every button that
+is not stock text**, and that second half is load-bearing:
+`UserPromptRemoteStore.replaceAll` deletes any row absent from what it is handed, so
+returning the pack alone would destroy hand-made buttons — the one outcome a fix for
+"my buttons are in the wrong language" must not produce. It routes through
+`applyOnboardingButtons`, because that is already the only path that reconciles
+`builtin_key` identities before upserting (§6) and a second whole-set writer would be a
+second place for that 409 to come back.
+
+`drafts(writtenIn:)` and `stockPromptBodies(writtenIn:)` take the language as an
+argument instead of reading `AppLanguageState`. That is not tidiness: code that decides
+what the *other* language's buttons look like by consulting the language the app is
+currently in would be the same class of bug it exists to fix.
+
+### The field is logged now
+
+`desktop.rewrite_events.writing_language` (migration `20260819050128`). Diagnosing the
+above meant inferring the writing language from `command_key` — noticing that
+`translateToEnglish` and `natural` are keys no English pack contains — and then reading
+the account's `user_prompts` rows by hand, because the one field that answers the
+question directly was the one field the event did not carry. `locale` is not a
+substitute and never was, for the reason above.
+
+`parseRequest` no longer collapses an explicit `"ja"` to null. Every consumer tests
+`=== "en"` or `!== "en"`, so no prompt changes; on the event row, null had been
+conflating a 简体中文 user's deliberate `"ja"` with a build too old to have the field.
+
 ### The landing page — and it is **not** in this repository
 
 **The production site is `../web`**: a Next.js 16 app on Vercel at
@@ -2946,3 +3241,483 @@ every system-drawn control with it.
 
 Open, and a decision rather than a bug: `user_prompts` is shared with the phone
 (§2), so an English user's English button titles appear in the iOS keyboard.
+
+---
+
+## 18. Where the text goes
+
+Two failures, and they are the same missing idea: **the app knew what it had captured
+and never asked where the result could go.**
+
+- A rewrite whose destination disappeared between the press and Insert wrote into
+  nothing and said it had succeeded. The panel closed, ホーム said 挿入済み, and the
+  field never changed. Worse when the write strategy was clipboard and the mode was
+  `.wholeInput`: ⌘A + ⌘V then replaced whatever *had* taken focus — a different draft in
+  the same app — with a rewrite it was never read from.
+- A press with nothing focused was refused outright. 「書き換える文章が見つかりません」 is
+  the whole of what the user got, twice, and then they stopped opening the app. Two of
+  the three things they were trying are perfectly reasonable: rewrite what I selected,
+  and write me something from nothing.
+
+So the destination is now a first-class thing, resolved live, and the button says what
+it will do **before** it is pressed.
+
+### Scope: what the instruction applies to
+
+`TextTarget.scope` is derived, never stored — `RewriteScope.selection` / `.inputField` /
+`.scratch`, from `captureMode` and whether the text is blank. It exists for one reason:
+the composer's placeholder. 「どう書き換えますか？」 over an empty compose box, or over a
+desktop with nothing focused, *asserts that there is text*, so 「もっと丁寧に」 is a
+reasonable thing to type and a rewrite of nothing is the reasonable result. The
+placeholder now names the target — 「選択した文章をどう書き換えますか？」, 「何を書きますか？」
+— and that is the whole fix for the misunderstanding.
+
+**No badge beside the mascot.** `f3a842a` removed the reply badge for exactly this
+reason: the placeholder already names the mode, and a capsule repeating it compressed
+into an unlabeled dark shape.
+
+**Not a fourth `CaptureMode`.** That type is a copied contract shared with the iOS repo
+(§3) and the backend validates its three values, so a fourth would be a three-place
+change to say something only the desktop UI needs.
+
+### A blank field is a *field*, not merely something with a value
+
+`allowEmpty` exists so reply mode and ✎ accept a compose box the user has not typed into
+yet. §16 wrote its guard as *"a **nil** `kAXValue` still throws: that is what says this is
+not a text field at all, and it is the only thing keeping ⌘A + ⌘V out of the Finder."*
+Both halves are wrong, and it only mattered once ✎ started passing `allowEmpty` too.
+
+Plenty of things that are not text controls answer `kAXValue` with a string — static text,
+a table row, a web area. So with **nothing focused at all**, this branch returned a target
+carrying a real `writeStrategy`, `hasDestination` was true, the panel offered 挿入, and the
+press synthesized ⌘A + ⌘V into whatever was frontmost. Reported on screen: a free
+instruction written with no field anywhere, 挿入 offered, and the press ending in
+「挿入できませんでした」. The scratch path that exists for precisely that case never ran,
+because this branch answered first — `TextIOCoordinator.capture` only reaches
+`allowScratch` when AX *and* the clipboard have both failed.
+
+The branch now asks `canTakeText`, which is the test it always meant. Only the blank
+branch: a field with text in it was asked for by name, §5's separation of read from write
+still governs there, and the destination probe re-asks `canTakeText` of those at verdict
+time instead of refusing the read.
+
+### ✎ never fails for want of a target
+
+`pressCustomInput` captures with `allowEmpty: true, allowScratch: true`, in the normal
+AX → clipboard → scratch order. Reply mode does **not** call that API; §16's
+`captureReply` is AX → scratch because the clipboard content is the received message,
+not a second source from which a draft can be learned.
+
+`TextTarget.scratch` carries `writeStrategy: .none`, and **that is what now keeps ⌘A out
+of the Finder** — §16's invariant, enforced by the strategy instead of by refusing to
+capture. `TextIOCoordinator.write` throws `.noDestination` rather than synthesizing
+anything, and Insert never calls it in that state.
+
+A **saved button** still requires text, and that is not a regression to fix: 敬語 applied
+to nothing is not a request. What changed is the message, which now names the control
+that needs no text — 「文章を選択するか、✎ から新しい文章を書いてください」.
+
+Considered and deferred: probing on hover so the *row* could dim its buttons before
+anything is pressed. It costs one cross-process AX call on the hottest interaction in
+the product, and with ✎ no longer a dead end the remaining failure is one honest
+message. Revisit if `desktop_rewrite_failed` still carries that message at volume.
+
+### The three endings, decided by a live probe
+
+`DestinationVerdict.decide` is a pure function over `DestinationFacts`, split that way
+because gathering the facts needs another running app and choosing between them is what
+has edge cases — the same split as `writeLanded` and `context(around:in:)`.
+
+| Verdict | Button | What it does |
+|---|---|---|
+| `.ready` | 挿入 | Writes back where the text came from. |
+| `.redirect` | 挿入 | The original field is gone; writes at the caret in the field the user is in now. |
+| `.unavailable` | コピー | Nowhere to write. Copies; the fixed status line says to copy or click a field. |
+
+**There is one primary action, never a dead duplicate beside it.** The distinction between
+writing to the original field and writing to the field under the current caret matters to
+the implementation, not to the button label: both say 挿入, while their help text keeps the
+detail for anyone who asks. When neither is available the same control says コピー, and the
+one-line status immediately above it explains both valid next actions. A greyed-out 挿入
+beside the live コピー repeated that message and looked like a control despite doing
+nothing, so it is deliberately gone.
+
+**The label is frozen while the pointer is over the footer.** It is re-read twice a second
+and the pointer has to cross the row to reach the button, so without this it can change
+what it does in the ~100 ms between deciding to click and clicking. `InsertIntent` makes
+the press honour what was frozen: pressing コピー copies, full stop, and never writes into
+a document on the strength of a probe that changed its mind on the way down. `.write` still
+re-resolves, because there the safe answer is the probe's, not the button's.
+
+`.redirect` is what makes scratch composition *finish*: write a message from nothing,
+click where it belongs, press Insert. Its target is always `.selection` and carries **no
+`selectedRange`** — `performWrite` re-asserts a range when it has one, and a range read a
+moment ago from a field someone is typing in can only place the text worse than the app's
+own live caret.
+
+**The reading is taken when the question can be answered, not when the answer is
+wanted — and getting that backwards made the whole probe a no-op.** The panel that
+needs to know where the keyboard is, is the thing holding it. `ResultPanel` is key for
+its entire life (Enter is bound to 挿入, Esc dismisses), and §4 had already recorded the
+consequence in `pressCustomInput`: *"by submit time the input bar is key and
+`AXFocusedUIElement` points at our own field."* `PillPanel` says the same thing from the
+other end — *"if hovering the pill steals focus, the user's text field loses
+`AXFocused`."* The probe asked live anyway, was told "us", and fell open on it:
+
+- Any target with a destination resolved `.ready`, so **挿入 was offered with nothing
+  focused anywhere** — the first of the two reports.
+- `redirectAvailable` was computed as `focusIsSelf ? nil : …`, so it was **always nil**.
+  `.redirect` never fired, ここに挿入 never appeared, and every ✎-from-nothing resolved
+  `.unavailable`. Pressing that runs `copyInstead`, which copies and returns to `.pill`
+  — **the card and the bar both vanish**, which is the second report.
+- Worse, the two disagreed. A label computed while the user was in their own field said
+  ここに挿入; clicking it handed key back to the panel, the press re-resolved against a
+  focus read that now answered "us", and the redirect the label promised became a copy.
+
+So `AXTextIO.UserFocus` is the last reading taken from **outside** our own key window,
+and `readUserFocus` is tri-state for exactly the reason every other AX reading here is:
+`.user` is somebody else's element, `.unaskable` is our own, `.silent` is AX declining.
+Only `.user` may replace what is remembered. `OverlayController.snapshotUserFocus` takes
+the first one at capture — §4's ordering, which already guarantees the user's app owns
+the keyboard at that instant, used for a second purpose — and the poll refreshes it
+whenever the user has clicked back into their own window. That is what makes 「click
+where it belongs, then press ここに挿入」 survive the click that hands key back.
+
+`focusIsSelf` is therefore **gone from `DestinationFacts`.** It was never a fact about
+the destination; it was a fact about our own window management, and the verdict is not
+the place to answer it. `focusReadable` now means "there is a remembered reading",
+and the fail-open is `!focusReadable` alone.
+
+**Measured on screen 2026-08-19, and the answer is "only at the moment it matters".**
+Two readings, one minute apart, from the same session:
+
+    13:58:49.396  focus=user       why=-               pid=1166   self=88038  role=AXComboBox
+    13:58:50.769  focus=unaskable  why=focusedApp==self pid=88038  self=88038
+
+A result panel merely sitting on screen and key does **not** take AX focus — the first
+line is read with the card up, and it answers about the user's app. But the click that
+presses the button does: the second line is the press-time re-resolve, and by then
+`kAXFocusedApplication` is us. So the probe reads correctly right up until the one moment
+its answer is used, and then reads "us".
+
+That is the whole failure, and it is exactly the shape reported. The label was computed
+from `focus=user` and said ここに挿入; the press re-resolved against `focusIsSelf`, found
+no redirect, fell to `.unavailable`, and ran `copyInstead` — which copies and returns to
+`.pill`. Text on the clipboard, card gone, nothing inserted. "The entire button just
+disappeared."
+
+The same trace shows the fix working end to end:
+
+    13:58:50.766  insert pressed intent=write label=insertHere
+    13:58:50.769  focus=unaskable why=focusedApp==self
+    13:58:50.770  verdict=redirect  ← the remembered AXComboBox, not a live read
+    13:58:51.378  insert landed destination=insertHere
+
+**`.unaskable` replacing nothing is the load-bearing line.** Not a defensive measure
+against a hypothetical — it is what every press looks like.
+
+**`.silent` is read separately, and had to be.** A reading is otherwise only ever
+replaced by another `.user`, so a user who leaves a field for the Desktop produces
+`.silent` forever and the card goes on offering ここに挿入 for a window they have left —
+the same complaint from the other end. `UserFocus` therefore records
+`kAXFocusedApplication` at read time: the *same* app going quiet is an app declining to
+answer and must not downgrade, a **different** app owning the keyboard with nothing
+readable in it is the reading going stale, and the cache is dropped. Traced as
+`focus dropped movedTo=… was=…`.
+
+**A container is never the text entry, however many text questions it answers.** The
+trace above showed `capturedIsField=true` for an `AXWebArea`, and the next run reproduced
+the whole failure from it: ✎ pressed in a browser with nothing focused captured the page's
+web area, which answers signal 2 on behalf of the document.
+
+    verdict=ready role=AXWebArea/- strategy=clipboard hasDest=true capturedIsField=true capturedFocused=true
+    insert pressed intent=write label=insert
+    insert failed destination=insert strategy=clipboard error=writeFailed
+
+`hasDest=true` is the whole bug: the user had no input box, and the app believed it had a
+destination, so the button read 挿入 rather than コピー and the ⌘V went into a page that
+cannot be typed in. `canTakeText` now vetoes container roles — `AXWebArea`, `AXGroup`,
+`AXScrollArea`, `AXStaticText`, `AXList`, `AXOutline`, `AXTable`, `AXRow` — **ahead of
+settability**, because the veto is about what the element *is* and a container that also
+answers yes to a write question is the case being ruled out, not an exception to it.
+Signal 2 exists for Gmail's compose box, which is a *child* of a web area and not one, so
+this costs it nothing.
+
+The paste verification did its job here — `error=writeFailed`, clipboard recovery, toast —
+which is the first time that backstop has been seen working on screen.
+
+**There is exactly one focus reading in `AXTextIO`, and there used to be two — which is
+what made the previous round look broken on screen.** `capture` read
+`AXUIElementCreateSystemWide`'s `kAXFocusedUIElement` with the Electron/Chromium priming
+§5 requires; the destination probe read `kAXFocusedUIElement` off the **frontmost
+application element** instead, because a system-wide read seemed to risk answering about
+our own key panel. Those are not the same question. An application element answers nil for
+exactly the web-content and helper processes the priming exists for, so the probe could not
+see fields the capture had just successfully read from — the user clicked into a text box
+and the panel went on offering コピー. `focusedElement(frontmostPID:)` is now the only way
+this file asks where the keyboard is, and `capture` and the probe both call it.
+
+The fear that put the probe on the weaker read is answered directly instead of avoided:
+`focusedApplicationPID()` reads `kAXFocusedApplication`, and if the answer is us, that is
+recorded as **`focusIsSelf` — a question that could not be asked**, never as "the user is
+nowhere". Asking AX rather than `NSWorkspace.frontmostApplication` is also the more honest
+instrument: what is being predicted is where a synthesized ⌘V would land, and that follows
+keyboard focus.
+The frontmost app is also what a redirect write reactivates — never the element's own
+pid, because Chromium and Electron put the focused element in a helper process that
+`NSRunningApplication` cannot activate.
+
+### What counts as a field
+
+`canTakeText` asks four things, in descending order of how much they can be trusted,
+because the role is the least reliable of them in the apps that matter:
+
+1. `kAXSelectedText` settable — decisive when true, and the same test §5 uses to pick the
+   AX write strategy.
+2. A selected-text **range**, a character count (`kAXNumberOfCharacters`), or an
+   insertion-point line. Only text objects expose these, and Gmail's compose box —
+   unsettable, pasteable, the case §5 was rewritten around — has them.
+3. A known text role (`AXTextField`, `AXTextArea`, `AXComboBox`, `AXSearchField`), last.
+
+**Capture does not ask this, and that asymmetry was a hole.** `target(for:)` accepts
+anything with a readable `kAXSelectedText` or a string `kAXValue`; it never asks whether
+the thing could take text *back*. A selection dragged across a read-only web page is the
+common case, and it passed every later test — the element is alive, it still holds the
+keyboard, it still reads back the captured text — so 挿入 was offered over a page that
+cannot be typed in. The ⌘V went nowhere and `pasteLanded` could not catch it either,
+because an `AXWebArea` has no `kAXValue` and unreadable counts as landed. Capture is
+still not gated on it (§5's rule that reading and writing are decided separately stands),
+but `canTakeText` is now re-asked of the captured element at probe time as
+`capturedElementIsField`, and a positive **false** there retires the destination ahead of
+everything else. Nil — a clipboard target with no element to ask — still says nothing.
+
+One veto: `AXSecureTextField`. A rewrite does not belong in a password box, and macOS's
+secure input mode would swallow the ⌘V anyway. **The global `IsSecureEventInputEnabled()`
+was considered and rejected** — it is famously left stuck on by other applications, and one
+of those would have degraded every insert on the machine to a copy.
+
+Electron is the known hole and it is not ours to close: setting `AXManualAccessibility`
+returns `kAXErrorAttributeUnsupported` on current Electron
+([electron#37465](https://github.com/electron/electron/issues/37465)), and the private
+`AXEnhancedUserInterface` VoiceOver uses has side effects on the host app. So some Electron
+windows answer nothing, which is precisely why silence has to stay a non-answer.
+
+**Silence is not "no", and unknown is not "nowhere".** That is the whole of the policy, and
+the first two versions got it wrong in both directions. It fails open, but the first
+version failed open in every branch and that made the
+whole feature invisible.** A wrong `.unavailable` costs one ⌘V and a wrong `.ready` is the
+bug being fixed, so the asymmetry is right — but two of the three capture paths resolved
+to `.ready` *unconditionally*: any settable AX element, and any clipboard capture on the
+strength of the app merely being alive. Between them that is most real traffic, so コピー
+never appeared once in testing and the first the user heard of a missing destination was
+still an error after the press. Corrected on 2026-08-19:
+
+- **Settability is re-asked**, not trusted from capture time. A destroyed element and a
+  field that has since gone read-only both fail it; the old test (does it answer a role
+  read) passed for both.
+- **A target with no element asks the captured app what it has focused now.** The write is
+  "activate that app and ⌘V", so that is the thing to look at, and the answer is
+  tri-state: a text control is `.ready`, something that is not one is a downgrade, and
+  **nil is not evidence** — in an app opaque enough to have forced the clipboard path,
+  saying nothing is the ordinary answer.
+- **Frontmost being us is an unasked question, not a negative answer.** A target that
+  still has a destination is not retired on it. A scratch target still is, because there
+  `.ready` is not conservative — the write would throw `.noDestination`.
+
+The rule is now: a *positive* reading of "that is not a text field" downgrades, an
+*absent* reading does not, and the paste verification stays as the backstop.
+
+**A write that failed is stronger than any probe, and it latches.** Whatever the reading
+was, a destination that has just refused the text is not a destination. `destinationFailed`
+pins the button to コピー until a new rewrite, so the second press cannot be invited into
+the same dead end — which is what "the error message every time" actually was.
+
+Element identity alone is too strict: Electron and web views rebuild elements around a
+field that never changed, so the focused element reading back the captured text counts as
+the same field.
+
+### Polled, and the reason first given for that was wrong
+
+0.5 s while — and only while — a result panel is on screen. The original justification
+was that a caret moving between fields posts no notification and there is nothing to
+subscribe to. That is not true: `kAXFocusedUIElementChangedNotification` on an
+`AXObserver` attached to the frontmost application element is exactly that notification,
+re-anchored on `NSWorkspace.didActivateApplicationNotification` when the app changes. It
+was not what was missing, though — an observer would have reported the same thing the
+live read did, which is that *we* hold the keyboard. What the poll is for now is catching
+the moments when we **don't**, so `refreshUserFocus` can take a reading worth keeping.
+An observer is still the better instrument for that job and is the obvious follow-up once
+this round is confirmed on screen. Guarded by
+`destinationProbeInFlight` because the probe carries §5's 0.5 s messaging timeout and a
+beachballing app would otherwise queue one behind another, and not restarted when only
+the pager moved — every page of one context shares the captured target, so re-probing
+would blink the button back to 挿入 on the way past a result it has already ruled out.
+
+**The press re-resolves rather than trusting the poll.** Half a second is fine for a
+label and not fine for the press that replaces text in someone's document — the same
+reason §4 re-derives `anchorY` instead of carrying it over. `insertInFlight` guards it,
+because Enter is bound to the button and two presses inside one probe would paste twice.
+
+What it re-resolves is everything about the *captured* element — still alive, still
+settable, still a text control — because those are addressed to an element and answerable
+no matter who holds the keyboard. What it must **not** re-resolve is where the user is:
+the click that delivers the press is the click that makes our panel key, so a live read
+there always disagrees with the label, and it disagreed destructively. That reading comes
+from `lastUserFocus`, and the press taking it is the whole reason the cache exists.
+
+**The label is also seeded, not left at a default.** `insertAction` initialised to
+`.insert` and the first probe is a cross-process call, so every result panel read 挿入
+for the frames before it returned — with Enter bound to it. It is now seeded synchronously
+from `hasDestination`, which settles the scratch case without asking anybody.
+
+### A paste is posted, not acknowledged
+
+`ClipboardTextIO.write` reported success as soon as ⌘V was on the event queue, so a paste
+into somewhere that does not accept one — **selected text on a web page is the common
+case, and it is the case the destination probe cannot rule out** — was indistinguishable
+from a paste that landed. The coordinator now reads the value before the write, settles
+`pasteVerifyNanos` (150 ms, longer than `selectAllSettleNanos` because a web view takes a
+beat to reflect it), and re-reads.
+
+`pasteLanded` is deliberately **looser** than `writeLanded`: any change at all counts,
+because a field that normalises what it was given — smart quotes, a trimmed newline, an
+autocomplete — did accept the paste, and only "nothing happened whatsoever" is the
+failure being looked for. Unreadable still counts as landed, the same call `writeLanded`
+makes and for the same reason: pasting twice over a write that did land duplicates the
+user's text. A target with no element cannot be checked at all, which is the one hole
+left and the honest place for it.
+
+A verified failure lands in the recovery that already existed — clipboard, panel back,
+toast — rather than in a silent success.
+
+### The bar stays up while the write is out
+
+`writeBack` dismisses the result panel before touching the target app, because a
+synthesized ⌘V goes to whatever window is key and that would be the card. Correct — but
+it called `dismissResultPanel()` directly, behind the state machine's back, so `state`
+stayed `.result`, and `.result` is one of the two states `showsPill` is false for. The
+card was gone and the bar was still hidden: **nothing on screen at all** for the length
+of the write. That is 200 ms activate + 60 ms ⌘A + 100 ms restore + 150 ms paste
+verification, in front of which now sat the press-time probe — and behind which sat an
+awaited `submitSelection`, a network POST with a 10 s request timeout, directly in front
+of the `transition(to: .pill)` that brings everything back. "I pressed 挿入 and the whole
+button disappeared" was this, not the write.
+
+The bar is now shown for the duration and stands back down if the card returns. It cannot
+intercept the paste: `acceptsKey` is false by then, and `PillPanel.canBecomeKey` is just
+`acceptsKey`. The feedback POST is detached, the way `copyInstead`'s already was —
+telemetry is never a thing the interface waits on.
+
+### Copy is an ending, not a failure
+
+`copyInstead` is reached from a button that already said コピー, so the toast says what to
+do with it (`present(notice:)`, which is `showErrorToast` **without**
+`desktop_rewrite_failed`). History is deliberately not marked 挿入済み: that field means
+the text reached the field, and §14 keeps it as the list's one field you can trust. A
+tutorial rewrite with nowhere to land still completes its step — withholding it would
+strand first-run waiting for an insert this machine cannot perform.
+
+`desktop_rewrite_copied` carries `reason` (`no_destination` | `user_chose`), and
+`scope` / `has_destination` now ride on the completed and inserted events with
+`insert_destination` (`captured_field` | `insert_here`). Without them the destination-less
+path would look like a funnel that simply stops, and `scope: scratch` is the measure of
+whether refusing it for a year was worth it.
+
+### `prompt.ts` composes rather than rewriting a blank
+
+An empty `text` with no `replyTo` used to reach the whole-field branch — "the target text
+is the entire contents of the field the user is editing", with nothing in `<target>`. It
+now selects a third branch that writes the message the command asks for, forbids
+inventing names, dates, availability and commitments, and sends **no `<target>` section
+at all**.
+
+Derived from the two fields rather than a new one: no shipped client can send that
+combination, because capture used to refuse it, so the branch is unreachable from every
+build before this one and needs no wire change. **Deploy the function before shipping the
+app** — an app that can compose against a backend that cannot would produce exactly the
+bad output §18 exists to stop.
+
+### Making it visible, and making it observable
+
+The 4-character 入力欄なし capsule in the header was, correctly, called hard to see: it sat
+at the opposite end of the card from the button it explains, in the corner the eye leaves
+first. A result panel is read top to bottom and acted on at the bottom, so the explanation
+is now a line immediately above the footer — where reaching the button means passing it —
+and the header badge is gone. Only `.copyOnly` gets visible copy; a line under a working
+挿入 would be commentary on the normal case. The line's slot remains reserved in every
+state so a live focus change never resizes the card.
+
+`destinationLog` traces every verdict with the facts behind it: role, subrole, strategy,
+writability, whether the captured element is still a field, focus readability, and whether
+a redirect was found. It also traces every **state transition** by case name, every result
+panel dismissal, every capture the AX path rejected, and every failed insert with its
+error. Two rounds of this section were spent theorising about a card that disappeared with
+nothing on record about who dismissed it; the transition line is one grep away from that
+answer and costs a release build nothing. Case names and roles only — the associated
+values hold the user's captured and rewritten text.
+**Not behind `#if DEBUG`** — `Logger.debug` is compiled in but not recorded unless someone
+is streaming the subsystem, so it costs a release build nothing, and a release build is
+exactly where AX misbehaves with no debugger attached. It carries roles and booleans, never
+captured or rewritten text.
+
+    log stream --predicate 'subsystem == "com.core7.keigobutton.mac"' --level debug
+
+Same reasoning that produced `scripts/axdiag.swift`: AX reports success while doing nothing
+and answers a different question in every app, so a reading nobody can see is a reading
+nobody can correct. Two rounds of this section were spent theorising about behaviour that
+one line of output would have settled.
+
+### The toast anchored to a number, not to the thing
+
+`ErrorPanel` took `anchor: NSRect` and kept `anchor.maxY + 8` for life. `ResultPanel` is
+created at `resultPanelMaxHeight` (440) and only *then* measures its content and shrinks,
+bottom-fixed, to as little as 160 — and the insert-failure path re-creates that panel and
+raises the toast in the same turn. So the toast was always positioned against the 440 pt
+guess and ended up as much as 280 pt above a card that had shrunk out from under it: a
+message floating over a hole.
+
+The file's own doctrine was right and its implementation did not follow it — "deriving the
+origin from the anchor makes the position the same no matter who resized last" is only true
+if you keep the *anchor*, not a rectangle it once had. It now holds the window weakly,
+re-derives `desiredBottom` on every layout, and observes the anchor's resize **and** move
+notifications: a result panel shrinking keeps its bottom edge and reports only a resize,
+while the bar being dragged reports only a move.
+
+### Not verified
+
+`swift test` passes **181 tests** (4 new this round: the read-only-selection verdicts and
+the unasked-field case), `xcodebuild` succeeds with only the two pre-existing warnings,
+and 14 Deno prompt tests plus `deno check` are clean.
+
+**Nothing has been seen on screen, and one command settles the central claim.** With a
+result panel up, click into a text field in another app and watch:
+
+    log stream --predicate 'subsystem == "com.core7.keigobutton.mac"' --level debug
+
+`focusReadable=` and `redirect=` are the two to read. If `redirect=true` appears when the
+user is in a field and the button changes to ここに挿入, the cache is doing its job. If
+`focusReadable=false` persists from the moment the panel opens, the capture-time snapshot
+is failing and `snapshotUserFocus` is being called too late.
+
+Three things still cannot be settled any other way:
+
+1. **Whether a non-activating key panel takes AX focus at all.** The fix does not depend
+   on the answer — see §18's "safe under both readings" — but the answer decides whether
+   the poll is doing real work or the cache is. `scripts/axdiag.swift` is the tool.
+2. **Whether `canTakeText` admits the fields that matter**, now that it also gates the
+   *captured* element and not only a redirect. A false negative there turns 挿入 into
+   コピー in Gmail, which is the app §5 was rewritten around — its compose box is
+   unsettable and pasteable and has `kAXSelectedTextRange`, so it should pass signal 2,
+   but that is reasoning, not a measurement. **This is the one change that can take a
+   working action away**, and it is the first thing to look at if 挿入 stops appearing
+   where it used to.
+3. **Whether `pasteVerifyNanos` is long enough.** Too short reports a failure that did not
+   happen, and the recovery path then puts a second copy of the text on the clipboard and
+   the panel back over a field that already has the rewrite in it.
+
+Also unaddressed and known: an `AXWebArea` has no `kAXValue`, so `pasteLanded` cannot see
+a paste into one either way — the field check above is what keeps that case from arising,
+not the verification.
+
+`desktop-rewrite` has **not** been deployed with the compose branch; only the local tests
+have run.

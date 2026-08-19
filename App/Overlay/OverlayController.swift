@@ -18,6 +18,10 @@ final class OverlayController: ObservableObject {
     /// Set when there is no usable session at all. The hover row answers this with a
     /// sign-in button rather than an apology — see `refreshPrompts`.
     @Published private(set) var signedOut = false
+    /// What Insert would do if it were pressed right now (§18). Re-read on a timer while
+    /// the result panel is up, so the button is labelled with the truth rather than with
+    /// what was true when the rewrite started.
+    @Published private(set) var insertAction: InsertAction = .insert
 
     private let panel: PillPanel
     private var generatingPanel: GeneratingPanel?
@@ -33,6 +37,38 @@ final class OverlayController: ObservableObject {
     private var collapseTask: Task<Void, Never>?
     private var rewriteTask: Task<Void, Never>?
     private var positionTracker: Timer?
+    /// §18. Polled for the same reason `DockProbe` is: AX has nothing to subscribe to,
+    /// and a caret moving to another field inside the same app posts no notification of
+    /// any kind. Only alive while a result panel is on screen.
+    private var destinationTracker: Timer?
+    /// The probe is a cross-process AX call with a 0.5 s timeout and the poll runs at
+    /// 0.5 s, so a beachballing target app would otherwise queue one behind another.
+    private var destinationProbeInFlight = false
+    /// Enter is bound to the primary button and the press now waits for a probe before
+    /// it writes. Two presses inside that window would paste twice.
+    private var insertInFlight = false
+    /// A write that was attempted and failed. **The strongest evidence there is**, and
+    /// stronger than any probe: the probe reasons about whether a destination is there,
+    /// this is the destination refusing the text. It latches so the poll cannot put 挿入
+    /// back and invite the user into the same dead end a second time, and it is cleared
+    /// only by a new rewrite or a new result.
+    private var destinationFailed = false
+    /// Where the user's keyboard was, the last time that could honestly be asked (§18).
+    ///
+    /// **The probe cannot read this for itself, and that is what made the whole feature
+    /// a no-op.** `ResultPanel` is key for its entire life — it has to be, Enter is bound
+    /// to 挿入 — and §4 already recorded the consequence: while one of our windows holds
+    /// key, `AXFocusedUIElement` points at our own field. So every live read the probe
+    /// took answered "us", fell open to `.ready`, and 挿入 was offered with nothing
+    /// focused anywhere; `.redirect` could not fire at all, so ✎-from-nothing always
+    /// ended as コピー and pressing it tore the card down.
+    ///
+    /// So the reading is taken only from moments when we are *not* holding the keyboard
+    /// — at capture, and from any poll that lands while the user is back in their own
+    /// window — and kept. A reading that answered about us replaces nothing, which is
+    /// exactly what lets 「click where it belongs, then press ここに挿入」 survive the
+    /// click that hands key back to the panel.
+    private var lastUserFocus: AXTextIO.UserFocus?
     private var errorPanel: ErrorPanel?
     private var errorDismissTask: Task<Void, Never>?
     private var lastWorkArea: NSRect = .zero
@@ -81,9 +117,6 @@ final class OverlayController: ObservableObject {
     private var clipboardWatcher: ClipboardWatcher?
     private var replyContextPanel: ReplyContextPanel?
     private var replyExpiryTask: Task<Void, Never>?
-    /// Hover is passive, so the "no field to reply into" toast fires once per armed
-    /// copy. Unbounded, every pass of the cursor over the bar would raise it again.
-    private var warnedNoReplyTarget = false
     /// Hover fires on re-entry and the capture is a cross-process AX call, so a
     /// cursor jittering on the bar's edge could otherwise start several.
     private var replyCaptureInFlight = false
@@ -171,6 +204,15 @@ final class OverlayController: ObservableObject {
             name: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil
         )
+        // Switching app is the loudest way to change where an Insert would land, and it
+        // is the one change that *does* post a notification — so it is answered
+        // immediately rather than up to half a poll later (§18).
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(focusedAppChanged),
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
         // Clicking into another app is a cancel. Scoped to `panel`, so the user's own
         // window resigning key when we take it does not come back through here.
         NotificationCenter.default.addObserver(
@@ -197,6 +239,12 @@ final class OverlayController: ObservableObject {
     // MARK: - Lifecycle
 
     func show() {
+        // First line of any log capture: which build is talking, and whether the one
+        // permission everything depends on is actually granted.
+        destinationLog.debug(
+            "overlay show version=\(self.appVersion, privacy: .public) trusted=\(AXPermission.isTrusted, privacy: .public)"
+        )
+
         // Decode the three tiny atlases before the panel is visible. Loading the
         // engaged atlas on the first hover used to occupy the main thread during the
         // same 160 ms in which AppKit was animating the window frame.
@@ -522,7 +570,6 @@ final class OverlayController: ObservableObject {
             return
         }
 
-        warnedNoReplyTarget = false
         transition(to: .replyArmed(source))
         scheduleReplyExpiry(source)
     }
@@ -563,14 +610,16 @@ final class OverlayController: ObservableObject {
             guard let self else { return }
             defer { self.replyCaptureInFlight = false }
             do {
-                // `allowEmpty`: the reply box the user just clicked into is usually
-                // blank, and a blank field is exactly what the normal capture rejects.
-                ClipboardWatcher.suspend()
-                let target = try await self.textIO.capture(
+                // Reply capture is intentionally not normal rewrite capture. If the
+                // user copied by selecting the incoming message and has not clicked a
+                // reply field yet, that selection is context — never their draft and
+                // never an Insert destination. A selection inside an actual draft uses
+                // the whole field because the backend returns a complete reply body.
+                let target = try await self.textIO.captureReply(
                     frontmostPID: frontmostPID,
-                    allowEmpty: true
+                    copiedMessage: source.text
                 )
-                ClipboardWatcher.resume()
+                await self.snapshotUserFocus()
                 // The copy can expire, or be dismissed, while a slow AX call is out.
                 guard case .replyArmed(let armed) = self.state, armed == source else { return }
                 self.transition(to: .replyInput(
@@ -578,18 +627,10 @@ final class OverlayController: ObservableObject {
                     target: CapturedTarget(target: target, frontmostPID: frontmostPID)
                 ))
             } catch {
-                ClipboardWatcher.resume()
-                // Once per armed copy. Hover is passive: a toast on every pass of the
-                // cursor over the bar would be worse than the missing field it reports.
-                guard !self.warnedNoReplyTarget else { return }
-                self.warnedNoReplyTarget = true
-                self.present(
-                    message: tr(
-                        "返信を書き込む入力欄が見つかりません。返信したい場所をクリックしてから、バーにカーソルを合わせてください。",
-                        "No text field to reply in. Click where you want to write, then hover the bar.",
-                        "找不到可以写回复的输入框。请先点击要回复的位置，再将光标移到工具栏上。"
-                    )
-                )
+                // Reply capture returns scratch for missing/non-text focus, leaving only
+                // the permission failure here. That is not
+                // hover-frequency noise — it is the one thing the user has to act on.
+                self.present(error)
             }
         }
     }
@@ -658,6 +699,10 @@ final class OverlayController: ObservableObject {
                 ClipboardWatcher.suspend()
                 let target = try await self.textIO.capture(frontmostPID: frontmostPID)
                 ClipboardWatcher.resume()
+                // Still the user's keyboard at this point, which is the only moment the
+                // question can be asked at all (§18) — the result panel that will need
+                // the answer is the thing that makes it unaskable.
+                await self.snapshotUserFocus()
                 let captured = CapturedTarget(target: target, frontmostPID: frontmostPID)
                 self.startRewrite(
                     captured: captured,
@@ -679,6 +724,14 @@ final class OverlayController: ObservableObject {
     ///
     /// §4: capture happens **now**, not on submit. By submit time the input bar is key
     /// and `AXFocusedUIElement` points at our own field.
+    ///
+    /// **This one never fails for want of a target (§18).** `allowEmpty` accepts the
+    /// empty compose box someone has just clicked into, and `allowScratch` accepts
+    /// having nothing focused at all — free text is a request in its own right, and the
+    /// two rejections it used to end in were the same dead end reply mode had already
+    /// been through in §16. What changes with the scope is the placeholder, which is the
+    /// one thing the user reads before typing: an instruction like 「もっと丁寧に」 needs
+    /// something to apply to, and only the field can say whether there is any.
     func pressCustomInput() {
         let frontmostPID = NSWorkspace.shared.frontmostPID
 
@@ -686,8 +739,15 @@ final class OverlayController: ObservableObject {
             guard let self else { return }
             do {
                 ClipboardWatcher.suspend()
-                let target = try await self.textIO.capture(frontmostPID: frontmostPID)
+                let target = try await self.textIO.capture(
+                    frontmostPID: frontmostPID,
+                    allowEmpty: true,
+                    allowScratch: true
+                )
                 ClipboardWatcher.resume()
+                // Before the transition: the input bar takes key, and from then on a
+                // focus read answers about us (§18).
+                await self.snapshotUserFocus()
                 self.transition(to: .inputBar(
                     target: CapturedTarget(target: target, frontmostPID: frontmostPID)
                 ))
@@ -791,6 +851,9 @@ final class OverlayController: ObservableObject {
         previousResults: ResultContext? = nil
     ) {
         resultContextBeforeRewrite = previousResults
+        // A regenerate keeps the result panel's pages, so the latch has to be released
+        // explicitly — the new attempt deserves a fresh reading of where it can go.
+        destinationFailed = false
         let requestText = requestText ?? captured.target.text
         let pending = PendingRewrite(
             captured: captured,
@@ -927,18 +990,281 @@ final class OverlayController: ObservableObject {
         transition(to: .result(context))
     }
 
-    /// Writes the accepted candidate back, then dismisses.
-    func insert() {
+    // MARK: - Where Insert lands (§18)
+
+    /// Polled while the result panel is up. The whole value of it is that the button is
+    /// labelled before it is pressed — a result that can only be copied used to offer
+    /// 挿入 and write the text into nothing.
+    ///
+    /// **Polled rather than subscribed, and the reason given for that was wrong.** §18
+    /// claimed a caret moving between fields posts no notification and there was nothing
+    /// to subscribe to; `kAXFocusedUIElementChangedNotification` on an `AXObserver`
+    /// attached to the frontmost app is exactly that notification. It is not what was
+    /// missing, though — an observer would have reported the same thing the live read
+    /// did, which is that *we* hold the keyboard. What the poll is actually for now is
+    /// catching the moments when we **don't**, so `refreshUserFocus` can take a reading
+    /// worth keeping. An observer remains the better instrument for the same job and is
+    /// worth doing once this is confirmed on screen.
+    ///
+    /// Cheap enough to run at the position tracker's cadence: a handful of attribute
+    /// reads, no keystrokes, nothing on the main thread.
+    private func seedInsertAction(from captured: CapturedTarget?) {
+        // This must happen before `ResultPanel` is constructed. A scratch result is the
+        // only path that changes the initial layout from Insert to Copy; doing it after
+        // the panel was ordered front made its first SwiftUI layout structurally mutate
+        // while AppKit was presenting the window.
+        insertAction = (captured?.target.hasDestination ?? true) ? .insert : .copyOnly
+    }
+
+    private func startDestinationTracking() {
+        destinationTracker?.invalidate()
+        refreshInsertAction()
+        destinationTracker = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                // Ahead of the probe, and outside its guards: after a failed insert
+                // `destinationFailed` latches and `refreshInsertAction` returns at once,
+                // so the whole timer went quiet — which is precisely the window in which
+                // the card was reported vanishing with nothing on record.
+                self?.ensureResultSurfaceVisible()
+                self?.refreshInsertAction()
+            }
+        }
+    }
+
+    /// A result panel that stopped being on screen without anybody dismissing it.
+    ///
+    /// `dismissResultPanel` and `transition` both trace, so a card that goes away with
+    /// neither line in the log was ordered out by AppKit rather than by us — and that is
+    /// a different bug with a different fix. Logged once per disappearance so a 0.5 s
+    /// timer cannot fill the stream.
+    private var reportedResultPanelGone = false
+
+    private func ensureResultSurfaceVisible() {
+        guard case .result = state else { return }
+        guard let card = resultPanel else {
+            // `.result` without its window is an invalid state, but the recovery must
+            // not depend on explaining how it happened. Keep the durable surface up.
+            setPillVisible(true)
+            return
+        }
+        guard !card.isVisible else {
+            reportedResultPanelGone = false
+            // A fallback pill may have been raised while AppKit was restoring the card.
+            // Once the result is back, it resumes owning the bottom edge.
+            if panel.isVisible { setPillVisible(false) }
+            return
+        }
+        if !reportedResultPanelGone {
+            reportedResultPanelGone = true
+            destinationLog.debug(
+                "result panel vanished unasked state=\(self.state.name, privacy: .public) frame=\(NSStringFromRect(card.frame), privacy: .public) key=\(card.isKeyWindow, privacy: .public) failed=\(self.destinationFailed, privacy: .public)"
+            )
+        }
+        // Never leave the product with no surface. Keep trying on every tick because a
+        // transient Space/app transition can outlive one attempt. If AppKit still
+        // declines to show the card, the pill is the durable fallback and gives the
+        // user a way to recover without quitting.
+        card.orderFrontRegardless()
+        if card.isVisible {
+            setPillVisible(false)
+        } else {
+            setPillVisible(true)
+        }
+    }
+
+    private func stopDestinationTracking() {
+        destinationTracker?.invalidate()
+        destinationTracker = nil
+        destinationFailed = false
+        insertAction = .insert
+    }
+
+    @objc private func focusedAppChanged() {
+        // Guarded inside: this fires on every app switch, and only a result on screen
+        // has anything to re-read.
+        refreshInsertAction()
+    }
+
+    private func refreshInsertAction() {
         guard case .result(let context) = state, let page = context.selectedPage else { return }
+        guard !destinationFailed, !destinationProbeInFlight, !insertInFlight else { return }
+        destinationProbeInFlight = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.destinationProbeInFlight = false }
+            let resolved = await self.resolveDestination(for: page.pending.captured)
+            // The probe is a cross-process call and the panel can be dismissed while it
+            // is out.
+            guard case .result = self.state else { return }
+            self.insertAction = Self.insertAction(for: resolved.verdict)
+        }
+    }
+
+    private func resolveDestination(
+        for captured: CapturedTarget
+    ) async -> (verdict: DestinationVerdict, redirect: TextTarget?) {
+        await refreshUserFocus()
+        return await textIO.resolveDestination(
+            for: captured.target,
+            capturedPID: captured.frontmostPID,
+            userFocus: lastUserFocus
+        )
+    }
+
+    /// Takes a live reading, and decides what it is worth (§18).
+    ///
+    /// - `.user` replaces the remembered reading. The ordinary case.
+    /// - `.unaskable` replaces nothing. **Measured: this is what every reading taken at
+    ///   the moment of the press looks like** — clicking the card makes us the AX-focused
+    ///   application, so the press can never see the field the label was computed from.
+    ///   Keeping the reading is the entire reason ここに挿入 can be pressed at all.
+    /// - `.silent` is the one that has to be read carefully. The *same* app going quiet
+    ///   is an app declining to answer and §18's rule is that silence never downgrades.
+    ///   A **different** app owning the keyboard with nothing readable in it is not
+    ///   silence about the old field, it is evidence the user has left it — clicking the
+    ///   Desktop is the everyday case, and carrying a stale field through it is how
+    ///   ここに挿入 would be offered for a window that is no longer there.
+    private func refreshUserFocus() async {
+        switch await textIO.readUserFocus(frontmostPID: NSWorkspace.shared.frontmostPID) {
+        case .user(let focus):
+            lastUserFocus = focus
+
+        case .unaskable:
+            break
+
+        case .silent(let focusedAppPID):
+            guard let cached = lastUserFocus, let focusedAppPID,
+                  focusedAppPID != cached.focusedAppPID
+            else { break }
+            destinationLog.debug(
+                "focus dropped movedTo=\(focusedAppPID, privacy: .public) was=\(cached.focusedAppPID.map(String.init) ?? "-", privacy: .public)"
+            )
+            lastUserFocus = nil
+        }
+    }
+
+    /// Called at each capture, while the user's app still owns the keyboard and before
+    /// any of our windows can take key — §4's ordering, used for a second purpose.
+    ///
+    /// Cleared first: a reading left over from the previous rewrite is about a field the
+    /// user may have closed minutes ago, and `focusReadable: false` (which fails open to
+    /// 挿入) is the honest answer when this one cannot be taken.
+    private func snapshotUserFocus() async {
+        lastUserFocus = nil
+        await refreshUserFocus()
+    }
+
+    private static func insertAction(for verdict: DestinationVerdict) -> InsertAction {
+        switch verdict {
+        case .ready: return .insert
+        case .redirect: return .insertHere
+        case .unavailable: return .copyOnly
+        }
+    }
+
+    /// Writes the accepted candidate back, then dismisses.
+    ///
+    /// **The destination is resolved here, not read off the poll.** The label the user
+    /// pressed is at most half a second old, which is fine for a label and not fine for
+    /// the press that replaces text in someone's document — and it is the same reason §4
+    /// re-derives `anchorY` instead of carrying it over.
+    /// - Parameter intent: what the button *said* when it was pressed. `.copy` is
+    ///   honoured literally and never writes: the label is frozen while the pointer is
+    ///   over it, so a probe that changed its mind in the meantime must not turn a press
+    ///   on コピー into text appearing in somebody's document. `.write` still re-resolves,
+    ///   because there the safe answer is the one the probe gives, not the one on the
+    ///   button.
+    func insert(intent: InsertIntent = .write) {
+        guard case .result(let context) = state, let page = context.selectedPage else { return }
+        guard !insertInFlight else { return }
+        guard intent == .write else {
+            // No probe runs on this branch, so without this line the press leaves no
+            // trace at all and the card simply vanishes from the log's point of view.
+            destinationLog.debug(
+                "insert pressed intent=copy label=\(String(describing: self.insertAction), privacy: .public)"
+            )
+            copyInstead(page: page, reason: .noDestination)
+            return
+        }
+        insertInFlight = true
+        let captured = page.pending.captured
+        destinationLog.debug(
+            "insert pressed intent=write label=\(String(describing: self.insertAction), privacy: .public)"
+        )
+
+        // Deliberately not cleared when this task returns: `writeBack` starts a task of
+        // its own and comes back immediately, so a `defer` here would reopen the door
+        // while the ⌘V was still in the air.
+        Task { [weak self] in
+            guard let self else { return }
+            let resolved = await self.resolveDestination(for: captured)
+            guard case .result = self.state else {
+                self.insertInFlight = false
+                return
+            }
+            self.insertAction = Self.insertAction(for: resolved.verdict)
+
+            switch resolved.verdict {
+            case .ready:
+                self.writeBack(
+                    page: page,
+                    context: context,
+                    to: captured.target,
+                    frontmostPID: captured.frontmostPID,
+                    destination: .insert
+                )
+
+            case .redirect:
+                guard let redirect = resolved.redirect else {
+                    self.copyInstead(page: page, reason: .noDestination)
+                    return
+                }
+                self.writeBack(
+                    page: page,
+                    context: context,
+                    to: redirect,
+                    // The app to reactivate, not the element's process: web content and
+                    // helper processes own the focused element in Chromium and Electron,
+                    // and `NSRunningApplication` cannot activate one of those.
+                    //
+                    // Taken from the reading the redirect came from, not read fresh:
+                    // pressing the button hands key to the result panel, so "frontmost
+                    // now" is a different question than "the app that field is in".
+                    frontmostPID: self.lastUserFocus?.frontmostPID ?? NSWorkspace.shared.frontmostPID,
+                    destination: .insertHere
+                )
+
+            case .unavailable:
+                self.copyInstead(page: page, reason: .noDestination)
+            }
+        }
+    }
+
+    /// - Parameter target: where the text goes, which is not always where it came from.
+    ///   A redirect writes at the caret in the field the user is in now, and carries
+    ///   `.selection` for that reason — see `TextTarget.redirect`.
+    private func writeBack(
+        page: ResultPage,
+        context: ResultContext,
+        to target: TextTarget,
+        frontmostPID: pid_t?,
+        destination: InsertAction
+    ) {
         let candidate = page.candidate
         let pending = page.pending
-        let captured = pending.captured
 
-        // Get our windows out of the way BEFORE touching the target app. The write may
+        // Get the *card* out of the way BEFORE touching the target app. The write may
         // escalate to a synthesized ⌘V, and ⌘V goes to whatever window is key — which
         // would be this result panel. `prompt/`'s insert handler calls `hideOverlay`
         // before `activateApp` for exactly this reason.
         dismissResultPanel()
+        // **But the bar stays.** `.result` hides the pill (`showsPill`), and this runs
+        // without a state change, so dismissing the card used to leave the screen with
+        // nothing on it at all until the write finished — 0.5–1 s of clipboard settle and
+        // paste verification, and longer behind the feedback POST that used to be awaited
+        // below. "I pressed 挿入 and the whole button disappeared" was this, not the write.
+        // It cannot intercept the paste: `acceptsKey` is false, so `canBecomeKey` is too.
+        setPillVisible(true)
         panel.acceptsKey = false
 
         Task { [weak self] in
@@ -949,14 +1275,19 @@ final class OverlayController: ObservableObject {
                 ClipboardWatcher.suspend()
                 try await self.textIO.write(
                     candidate.replacement,
-                    to: captured.target,
-                    frontmostPID: captured.frontmostPID
+                    to: target,
+                    frontmostPID: frontmostPID
                 )
                 ClipboardWatcher.resume()
+                // Reported against the target that was *captured*, because that is what
+                // `capture_mode` and `io_path` describe. `insert_destination` is the new
+                // field and the one that says whether the rewrite went home or somewhere
+                // the user pointed it afterwards.
                 self.analytics.inserted(
-                    target: captured.target,
+                    target: pending.captured.target,
                     isReply: pending.replyTo != nil,
-                    selectedIndex: page.responseCandidateIndex
+                    selectedIndex: page.responseCandidateIndex,
+                    destination: destination
                 )
                 // Only marked once the write actually landed — the catch below is a
                 // real path, and a history row claiming 挿入済み over text that never
@@ -964,12 +1295,21 @@ final class OverlayController: ObservableObject {
                 if !pending.isTutorial, let entryId = page.historyEntryId {
                     await self.history.markAccepted(id: entryId)
                 }
+                // Detached, like `copyInstead`'s `submitAction`. Awaited here it sat
+                // directly in front of `transition(to: .pill)` with a 10 s request
+                // timeout, so a bad network kept the whole overlay off screen for as
+                // long as it took to fail.
                 if let eventId = page.eventId {
-                    try? await self.rewriteService.submitSelection(
-                        eventId: eventId,
-                        selectedIndex: page.responseCandidateIndex
-                    )
+                    Task { [rewriteService] in
+                        try? await rewriteService.submitSelection(
+                            eventId: eventId,
+                            selectedIndex: page.responseCandidateIndex
+                        )
+                    }
                 }
+                destinationLog.debug(
+                    "insert landed destination=\(String(describing: destination), privacy: .public)"
+                )
                 let tutorialCompletion = pending.isTutorial ? self.tutorialInserted : nil
                 if pending.isTutorial {
                     self.tutorialPrompts = []
@@ -981,10 +1321,21 @@ final class OverlayController: ObservableObject {
                 // over whatever the bar is doing minutes from now.
                 self.replyExpiryTask?.cancel()
                 self.replyExpiryTask = nil
+                self.insertInFlight = false
                 self.transition(to: .pill)
                 tutorialCompletion?()
             } catch {
                 ClipboardWatcher.resume()
+                destinationLog.debug(
+                    "insert failed destination=\(String(describing: destination), privacy: .public) strategy=\(target.writeStrategy.rawValue, privacy: .public) error=\(String(describing: error), privacy: .public)"
+                )
+                self.insertInFlight = false
+                // The write is the only witness that cannot be argued with. Whatever the
+                // probe believed, this destination just refused the text, so the panel
+                // comes back offering the action that will work rather than the one that
+                // has now failed once.
+                self.destinationFailed = true
+                self.insertAction = .copyOnly
                 // The panel was already dismissed to get out of ⌘V's way, so a failure
                 // here would otherwise throw the rewrite away. Leave it on the
                 // clipboard and say so — the same recovery `prompt/` offers when its
@@ -992,16 +1343,71 @@ final class OverlayController: ObservableObject {
                 ClipboardWatcher.writingOurselves {
                     SystemPasteboard().write(candidate.replacement)
                 }
+                // The card is coming back, and `.result` is a state the bar stands down
+                // for — undoing the `setPillVisible(true)` above rather than stacking the
+                // two on the same bottom edge.
                 self.presentResultPanel(context)
+                self.setPillVisible(false)
                 self.present(
                     message: tr(
-                        "挿入できませんでした。文章をクリップボードにコピーしました。元の入力欄で ⌘V を押して貼り付けてください。",
-                        "Couldn't insert it. The text is on your clipboard — press ⌘V in the original field.",
-                        "无法插入。文本已复制到剪贴板，请在原输入框中按 ⌘V 粘贴。"
+                        "挿入できませんでした。文章をクリップボードにコピーしました。入力欄で ⌘V を押して貼り付けてください。",
+                        "Couldn't insert it. The text is on your clipboard — press ⌘V in the field you want it in.",
+                        "无法插入。文本已复制到剪贴板，请在输入框中按 ⌘V 粘贴。"
                     )
                 )
             }
         }
+    }
+
+    /// The Insert that is a Copy, because there is nowhere to insert (§18).
+    ///
+    /// Reached from the button the user pressed while it said コピー, so this is not a
+    /// consolation prize — it is the action they chose, and the toast says what to do
+    /// with it rather than apologising. History is deliberately **not** marked accepted:
+    /// 挿入済み means the text reached the field, and a copy has not (§14).
+    private func copyInstead(page: ResultPage, reason: CopyReason) {
+        destinationLog.debug("copyInstead reason=\(String(describing: reason), privacy: .public)")
+        let pending = page.pending
+        ClipboardWatcher.writingOurselves {
+            SystemPasteboard().write(page.candidate.replacement)
+        }
+        analytics.copied(
+            target: pending.captured.target,
+            isReply: pending.replyTo != nil,
+            reason: reason
+        )
+        if let eventId = page.eventId {
+            Task { [rewriteService] in
+                try? await rewriteService.submitAction(
+                    eventId: eventId,
+                    action: "copy",
+                    selectedIndex: page.responseCandidateIndex,
+                    latencyMs: nil
+                )
+            }
+        }
+
+        // A tutorial rewrite with nowhere to land still finished. Withholding the step
+        // would leave first-run stuck on a screen waiting for an insert that this
+        // machine cannot perform.
+        let tutorialCompletion = pending.isTutorial ? tutorialInserted : nil
+        if pending.isTutorial {
+            tutorialPrompts = []
+            tutorialInserted = nil
+            tutorialMode = nil
+        }
+        replyExpiryTask?.cancel()
+        replyExpiryTask = nil
+        insertInFlight = false
+        transition(to: .pill)
+        present(
+            notice: tr(
+                "コピーしました。貼り付けたい場所で ⌘V を押してください。",
+                "Copied. Press ⌘V where you want it.",
+                "已复制。请在要粘贴的位置按 ⌘V。"
+            )
+        )
+        tutorialCompletion?()
     }
 
     func copyToClipboard() {
@@ -1010,6 +1416,13 @@ final class OverlayController: ObservableObject {
         // output and offer to write a reply to a rewrite.
         ClipboardWatcher.writingOurselves {
             SystemPasteboard().write(candidate.replacement)
+        }
+        if let page = context.selectedPage {
+            analytics.copied(
+                target: page.pending.captured.target,
+                isReply: page.pending.replyTo != nil,
+                reason: .userChose
+            )
         }
         sendAction("copy", context: context)
     }
@@ -1079,6 +1492,7 @@ final class OverlayController: ObservableObject {
     }
 
     func dismiss() {
+        destinationLog.debug("dismiss state=\(self.state.name, privacy: .public)")
         rewriteTask?.cancel()
         resultContextBeforeRewrite = nil
         transition(to: .pill)
@@ -1096,6 +1510,12 @@ final class OverlayController: ObservableObject {
         // against.
         dismissSnoozeMenu()
 
+        // Every state change, named. "The card vanished and nothing said why" is what
+        // two rounds of §18 were spent guessing at, and one line of this settles who
+        // tore it down. Case names only — the associated values hold the user's text.
+        destinationLog.debug(
+            "transition \(self.state.name, privacy: .public) -> \(next.name, privacy: .public)"
+        )
         state = next
 
         // **Only work in progress clears the message.** This used to dismiss on every
@@ -1125,18 +1545,38 @@ final class OverlayController: ObservableObject {
         case .pill, .hoverRow, .inputBar, .replyArmed, .replyInput:
             if wasGenerating { dismissGeneratingPanel() }
             if wasResult { dismissResultPanel() }
+            stopDestinationTracking()
             if next.wantsKeyWindow { panel.makeKey() }
 
         case .generating(let pending):
             if wasResult { dismissResultPanel() }
+            stopDestinationTracking()
             presentGeneratingPanel(pending)
 
         case .result(let context):
-            if wasGenerating { dismissGeneratingPanel() }
+            // Configure the result's first layout before constructing its window. The
+            // scratch path is Copy on first paint; presenting an Insert layout and then
+            // adding the Copy notice was the only structural mutation during handoff.
+            if !wasResult { seedInsertAction(from: context.selectedPage?.pending.captured) }
             presentResultPanel(context)
+            // The new surface is ordered before the thinking capsule leaves, so there is
+            // never a frame in which both the old and new owners are absent.
+            if wasGenerating { dismissGeneratingPanel() }
+            // Not restarted when only the pager moved: every page of one context shares
+            // the captured target, so re-probing would blink the button back to 挿入 on
+            // the way past a result the poll has already said cannot be inserted.
+            if !wasResult { startDestinationTracking() }
         }
 
-        if !next.showsPill { setPillVisible(false) }
+        if !next.showsPill {
+            if case .result = next, resultPanel?.isVisible != true {
+                // A failed window handoff must never strand the app in `.result` with
+                // both surfaces ordered out. The tracker will keep trying the card.
+                setPillVisible(true)
+            } else {
+                setPillVisible(false)
+            }
+        }
 
         // Stacked above the bar rather than replacing it — the one other thing that
         // does this is the error toast. Ordered after the bar is visible so the card
@@ -1356,14 +1796,25 @@ final class OverlayController: ObservableObject {
     private func presentResultPanel(_ context: ResultContext) {
         if let existing = resultPanel {
             existing.update(context: context)
+            existing.orderFrontRegardless()
             return
         }
         let result = ResultPanel(anchor: panel.frame, controller: self, context: context)
-        result.makeKeyAndOrderFront(nil)
         resultPanel = result
+        // Accessory apps are not necessarily active. Order independently of activation,
+        // then take key for Enter/Escape without asking macOS to activate the app.
+        result.orderFrontRegardless()
+        result.makeKey()
+        reportedResultPanelGone = false
+        destinationLog.debug(
+            "result panel presented visible=\(result.isVisible, privacy: .public) frame=\(NSStringFromRect(result.frame), privacy: .public)"
+        )
     }
 
     private func dismissResultPanel() {
+        if resultPanel != nil {
+            destinationLog.debug("result panel dismissed state=\(self.state.name, privacy: .public)")
+        }
         resultPanel?.orderOut(nil)
         resultPanel = nil
     }
@@ -1444,6 +1895,13 @@ final class OverlayController: ObservableObject {
     /// `if case .generating` was the *only* branch and everything else set a message
     /// that went nowhere — pressing a button in an app with no editable field did
     /// nothing whatsoever.
+    /// A toast that is not a failure. Same window and same 8 s, deliberately — the only
+    /// difference is that it does not report `desktop_rewrite_failed`, because a copy the
+    /// user asked for is an ending, not an error (§18).
+    private func present(notice: String) {
+        showErrorToast(notice)
+    }
+
     private func present(message: String) {
         analytics.failed(error: message)
 
@@ -1462,12 +1920,16 @@ final class OverlayController: ObservableObject {
     private func showErrorToast(_ message: String) {
         dismissErrorToast()
         // Sits above whatever currently owns the bottom edge, which is not always the
-        // bar — an insert failure happens with a 440 pt result card in its place, and
-        // the reply composer stacks its context card on top of the bar (§16).
-        let anchor = resultPanel?.frame
-            ?? generatingPanel?.frame
-            ?? replyContextPanel?.frame
-            ?? panel.frame
+        // bar — an insert failure happens with a result card in its place, and the reply
+        // composer stacks its context card on top of the bar (§16).
+        //
+        // The **window**, not its frame: the result card is created at 440 pt and shrinks
+        // to its measured height a pass later, so a rectangle taken here is a number that
+        // was never true for longer than one layout (see `ErrorPanel`).
+        let anchor: NSWindow = resultPanel
+            ?? generatingPanel
+            ?? replyContextPanel
+            ?? panel
         let toast = ErrorPanel(anchor: anchor, message: message) { [weak self] in
             self?.dismissErrorToast()
         }
@@ -1499,16 +1961,26 @@ final class OverlayController: ObservableObject {
                 "需要辅助功能权限。请在系统设置中授予。"
             )
         case TextIOError.noTarget:
+            // Only a saved button can reach this now: ✎ and reply mode both accept
+            // having nothing to work from (§18). So the message can be specific about
+            // why — a button applies to text, and there is none — and name the control
+            // that does not need any.
             return tr(
-                "書き換える文章が見つかりませんでした。文章を選択してもう一度お試しください。",
-                "Couldn't find any text to rewrite. Select some text and try again.",
-                "找不到要改写的文字。请选中文字后重试。"
+                "書き換える文章がありません。文章を選択するか、✎ から新しい文章を書いてください。",
+                "There's no text to rewrite. Select some text, or use ✎ to write something new.",
+                "没有可改写的文字。请选中文字，或用 ✎ 写一段新文字。"
             )
         case TextIOError.notEditable:
             return tr(
                 "この場所には書き戻せません。編集できる入力欄で試してください。",
                 "Can't write back here. Try it in an editable text field.",
                 "无法在此处写回。请在可编辑的输入框中尝试。"
+            )
+        case TextIOError.noDestination:
+            return tr(
+                "書き込める入力欄がありません。コピーして貼り付けてください。",
+                "There's no field to write into. Copy it and paste it where you want it.",
+                "没有可写入的输入框。请复制后粘贴到需要的位置。"
             )
         case TextIOError.writeFailed:
             return tr(

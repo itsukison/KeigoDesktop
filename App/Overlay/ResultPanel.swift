@@ -37,11 +37,17 @@ final class ResultPanel: NSPanel {
         isMovableByWindowBackground = true
         animationBehavior = .none
 
-        contentView = NSHostingView(
+        let hostingView = NSHostingView(
             rootView: ResultView(controller: controller, box: box) { [weak self] height in
                 self?.applyContentHeight(height)
             }
         )
+        // `applyContentHeight` is the sole owner of this window's frame. Leaving
+        // `.standardBounds` enabled lets a conditional SwiftUI subtree (most notably
+        // the no-destination notice) resize the panel behind the controller's back
+        // during its first presentation.
+        hostingView.sizingOptions = []
+        contentView = hostingView
     }
 
     /// Reused rather than rebuilt when only the pager index changed — recreating the
@@ -120,6 +126,16 @@ struct ResultView: View {
     /// The result text's own height, before any clamping. Only meaningful next to
     /// `bodyHeight`: the two differing is exactly what "the body overflows" means.
     @State private var bodyIntrinsic: CGFloat = 0
+    /// The label held still while the pointer is over the footer.
+    ///
+    /// The destination is re-read twice a second and the primary button is labelled from
+    /// it, so without this the button can change what it does in the ~100 ms between
+    /// someone deciding to click and clicking. Frozen on entry, released on exit — and
+    /// `InsertIntent` makes the press honour what was frozen rather than what the probe
+    /// has since decided.
+    @State private var frozenAction: InsertAction?
+
+    private var action: InsertAction { frozenAction ?? controller.insertAction }
 
     private var context: ResultContext { box.value }
 
@@ -139,6 +155,7 @@ struct ResultView: View {
             header
             promptField
             body_
+            notice
             footer
         }
         .background(
@@ -339,6 +356,41 @@ struct ResultView: View {
         .onPreferenceChange(BodyHeightKey.self) { bodyIntrinsic = $0 }
     }
 
+    // MARK: Notice
+
+    /// Why the primary button says コピー.
+    ///
+    /// This started as a 4-character capsule in the header and was, correctly, called
+    /// hard to see: it sat at the opposite end of the card from the button it explains,
+    /// in the corner the eye leaves first. A result panel is read top to bottom and acted
+    /// on at the bottom, so the explanation belongs on the last line before the action —
+    /// where it is also impossible to reach the button without passing it.
+    ///
+    /// The slot is always present even though its contents are shown only for
+    /// `.copyOnly`. Focus can change while the card is open; reserving one line keeps
+    /// that live change from making the entire result panel jump taller or shorter.
+    /// A visible line under a working 挿入 would be commentary on the normal case.
+    private var notice: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 11, weight: .medium))
+            Text(tr(
+                "入力欄が選択されていません。コピーするか、入力欄を選んで挿入。",
+                "No input field is focused. Copy, or focus one to Insert.",
+                "光标当前不在输入框中。可以复制文本，或先点击输入框再插入。"
+            ))
+            .font(Tokens.Font.body(Tokens.Overlay.labelMedium))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .foregroundStyle(Tokens.Overlay.textSecondary)
+        .frame(height: 16)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .opacity(action == .copyOnly ? 1 : 0)
+        .accessibilityHidden(action != .copyOnly)
+    }
+
     // MARK: Footer
 
     private var footer: some View {
@@ -368,15 +420,25 @@ struct ResultView: View {
             // remaining actions in their original positions without leaving a second,
             // invisible regenerate button in keyboard or accessibility navigation.
             Color.clear.frame(width: 28, height: 28)
-            footerButton("doc.on.doc") { controller.copyToClipboard() }
+            // Dropped when the primary *is* Copy. Two controls that do the same thing,
+            // one of them labelled and one of them an icon, only raise the question of
+            // how they differ.
+            if action != .copyOnly {
+                footerButton("doc.on.doc") { controller.copyToClipboard() }
+            }
             footerButton("hand.thumbsup") { controller.vote(up: true) }
             footerButton("hand.thumbsdown") { controller.vote(up: false) }
 
             Spacer()
 
-            Button { controller.insert() } label: {
+            // One button, three jobs, and the label is the whole fix (§18): whichever of
+            // them this press will do is decided from a live read of the destination
+            // before it is pressed, not discovered after the text has gone nowhere.
+            // Enter stays bound to it in all three, because it is still the one thing
+            // to do with a result.
+            Button { controller.insert(intent: action == .copyOnly ? .copy : .write) } label: {
                 HStack(spacing: 6) {
-                    Text(tr("挿入", "Insert", "插入"))
+                    Text(insertLabel)
                         .font(Tokens.Font.body(Tokens.Overlay.labelLarge, weight: .medium))
                     Image(systemName: "return")
                         .font(.system(size: 10, weight: .medium))
@@ -389,6 +451,45 @@ struct ResultView: View {
             .buttonStyle(.plain)
             .keyboardShortcut(.defaultAction)
             .cursor(.pointingHand)
+            .help(insertHelp)
+        }
+        // Freezing the whole row, not just the button: the pointer has to cross the row
+        // to reach the button, and a label that changes on the way there is the same
+        // surprise one frame earlier.
+        .onHover { hovering in
+            frozenAction = hovering ? controller.insertAction : nil
+        }
+    }
+
+    private var insertLabel: String {
+        switch action {
+        case .insert, .insertHere: return tr("挿入", "Insert", "插入")
+        case .copyOnly: return tr("コピー", "Copy", "复制")
+        }
+    }
+
+    /// Why the button says what it says. The label carries the action; this carries the
+    /// reason, which is the part a user who never saw the original field disappear needs.
+    private var insertHelp: String {
+        switch action {
+        case .insert:
+            return tr(
+                "元の入力欄に書き戻します。",
+                "Writes it back into the original field.",
+                "写回原来的输入框。"
+            )
+        case .insertHere:
+            return tr(
+                "元の入力欄は選択が外れています。いまカーソルがある入力欄に挿入します。",
+                "The original field lost focus. This inserts into the field you're in now.",
+                "原输入框已失去焦点。将插入到当前光标所在的输入框。"
+            )
+        case .copyOnly:
+            return tr(
+                "書き込める入力欄がありません。コピーして、貼り付けたい場所で ⌘V を押してください。",
+                "There's no field to write into. Copy it, then press ⌘V where you want it.",
+                "没有可写入的输入框。请复制后在需要的位置按 ⌘V。"
+            )
         }
     }
 

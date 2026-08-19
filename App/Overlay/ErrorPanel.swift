@@ -12,27 +12,34 @@ import SwiftUI
 /// field focused, and stealing that to show an apology would make it worse.
 final class ErrorPanel: NSPanel {
 
-    /// The bottom edge the toast is supposed to keep, in screen coordinates.
+    /// The window the toast sits on top of — the bar, the generating capsule, or the
+    /// result card.
     ///
-    /// Recomputed into every resize rather than read back off `frame`, because the frame
-    /// is not ours alone: `NSHostingView` re-satisfies its own constraints afterwards and
-    /// holds the window's **top**, so growing by 6 pt moved the bottom 6 pt *down* and
-    /// ate the gap above the bar. Deriving the origin from the anchor makes the position
-    /// the same no matter who resized last.
-    private let desiredBottom: CGFloat
+    /// **A reference, not the rectangle it had at the time, and that was the bug.** The
+    /// result panel is created at `resultPanelMaxHeight` (440) and only then measures its
+    /// content and shrinks, bottom-fixed, to as little as 160. An insert failure raises
+    /// this toast in the same turn as it re-creates that panel, so a snapshot of the
+    /// anchor was always the 440 pt guess: the toast settled up to 280 pt above a card
+    /// that had since shrunk out from under it, which is the floating message with a hole
+    /// beneath it. Weak, because the anchor can be ordered out while the toast is still
+    /// up — the last known bottom is then the right thing to keep.
+    private weak var anchorWindow: NSWindow?
+    private var desiredBottom: CGFloat
 
-    init(anchor: NSRect, message: String, onDismiss: @escaping () -> Void) {
+    init(anchor: NSWindow, message: String, onDismiss: @escaping () -> Void) {
         // A first guess only — `applyContentHeight` measures the wrapped message and
         // resizes. Close to the one-line case so the toast does not visibly settle.
         let size = NSSize(width: Tokens.Geometry.errorToastWidth, height: 62)
-        desiredBottom = anchor.maxY + 8
+        let frame = anchor.frame
+        anchorWindow = anchor
+        desiredBottom = frame.maxY + 8
         super.init(
             contentRect: OverlayPlacement.clampToWorkArea(
                 NSRect(
-                    x: anchor.midX - size.width / 2,
+                    x: frame.midX - size.width / 2,
                     // Above whatever is currently holding the bottom edge — the bar,
                     // the generating capsule, or a result card up to 440 pt tall.
-                    y: anchor.maxY + 8,
+                    y: frame.maxY + 8,
                     width: size.width,
                     height: size.height
                 )
@@ -56,6 +63,32 @@ final class ErrorPanel: NSPanel {
                 self?.applyContentHeight(height)
             }
         )
+
+        // The anchor settles *after* this returns — `NSHostingView` measures the card and
+        // resizes the window on a later pass — and it can settle more than once. Both
+        // notifications, because a result panel that shrinks keeps its bottom edge and so
+        // only reports a resize, while the bar being dragged only reports a move.
+        for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(anchorMoved),
+                name: name,
+                object: anchor
+            )
+        }
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    @objc private func anchorMoved() {
+        guard let anchorWindow else { return }
+        desiredBottom = anchorWindow.frame.maxY + 8
+        var target = frame
+        target.origin.y = desiredBottom
+        target.origin.x = anchorWindow.frame.midX - frame.width / 2
+        guard target != frame else { return }
+        setFrame(OverlayPlacement.clampToWorkArea(target), display: true)
+        invalidateShadow()
     }
 
     /// Same measure-then-resize contract as `ResultPanel`: the message wraps, so the
@@ -71,6 +104,9 @@ final class ErrorPanel: NSPanel {
     private func applyContentHeight(_ height: CGFloat) {
         let clamped = min(max(height, Tokens.Geometry.errorToastMinHeight),
                           Tokens.Geometry.errorToastMaxHeight)
+        // Re-derived rather than carried: between construction and this call the anchor
+        // has usually finished measuring itself and moved.
+        if let anchorWindow { desiredBottom = anchorWindow.frame.maxY + 8 }
         var target = frame
         target.size.height = clamped
         target.origin.y = desiredBottom

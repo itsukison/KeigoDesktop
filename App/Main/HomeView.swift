@@ -587,7 +587,9 @@ private struct HistoryRow: View {
                     .lineLimit(isExpanded ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if isExpanded {
+                // A rewrite written from nothing has no original (§18), and a 元の文章
+                // heading over an empty line reads as text that failed to load.
+                if isExpanded, !entry.originalText.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(tr("元の文章", "Original", "原文"))
                             .font(Tokens.Font.body(11))

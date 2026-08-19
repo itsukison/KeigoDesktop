@@ -424,19 +424,27 @@ final class MainModel: NSObject, ObservableObject {
     }
 
     func saveDisplayName() {
-        let trimmed = displayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed != displayName else { return }
-        isSavingName = true
+        Task { _ = await saveDisplayNameForContinuation() }
+    }
 
-        Task {
-            defer { isSavingName = false }
-            do {
-                try await profileStore.setDisplayName(trimmed)
-                displayName = trimmed
-                profileError = nil
-            } catch {
-                profileError = tr("名前を保存できませんでした。", "Couldn't save your name.", "无法保存名称。")
-            }
+    /// Saves the current draft and reports whether it is safe for onboarding to
+    /// continue. A blank first-run name is optional; an entered one is never silently
+    /// left only in the text field when the user presses Continue.
+    @discardableResult
+    func saveDisplayNameForContinuation() async -> Bool {
+        let trimmed = displayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != displayName else { return true }
+        guard !isSavingName else { return false }
+        isSavingName = true
+        defer { isSavingName = false }
+        do {
+            try await profileStore.setDisplayName(trimmed)
+            displayName = trimmed
+            profileError = nil
+            return true
+        } catch {
+            profileError = tr("名前を保存できませんでした。", "Couldn't save your name.", "无法保存名称。")
+            return false
         }
     }
 
@@ -653,6 +661,38 @@ final class MainModel: NSObject, ObservableObject {
             promptsError = nil
         } catch {
             promptsError = tr("ボタンを読み込めませんでした。", "Couldn't load your buttons.", "无法加载按钮。")
+        }
+    }
+
+    /// Whether the buttons on this account write a language the app is not writing.
+    ///
+    /// Computed rather than stored: `prompts` and `language` are both `@Published`, so a
+    /// swap or a language change re-evaluates it without a second thing to keep in sync
+    /// — which is the exact failure this whole surface exists to correct.
+    var buttonsWriteOtherLanguage: Bool {
+        isSignedIn && StockButtonLanguage.writesOtherLanguage(prompts, whenWriting: language)
+    }
+
+    /// Replaces the stock buttons with one preset pack in the current writing language,
+    /// keeping everything the user made themselves (`StockButtonLanguage.replacement`).
+    ///
+    /// Routed through `applyOnboardingButtons` deliberately — that is already the one
+    /// path that reconciles `builtin_key` identities before upserting (§6,
+    /// `UserPromptIdentity`), and a second whole-set writer would be a second place for
+    /// the 409 that note describes to come back.
+    func applyPresetPack(_ pack: OnboardingPresetPack) {
+        let drafts = StockButtonLanguage.replacement(
+            choosing: pack,
+            keeping: prompts,
+            whenWriting: language
+        )
+        mutate {
+            try await self.applyOnboardingButtons(drafts)
+            PostHogSDK.shared.capture("desktop_button_language_realigned", properties: [
+                "pack": pack.rawValue,
+                "writing_language": self.language.writingLanguageCode,
+                "buttons": drafts.count,
+            ])
         }
     }
 

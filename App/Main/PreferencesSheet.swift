@@ -180,12 +180,18 @@ struct PreferencesSheet: View {
                 // The only entry point for everyone who finished onboarding before
                 // §15's language page existed — they are never asked, so this row is
                 // the whole answer for them (§17).
+                // The old second sentence read "Your existing buttons are not rewritten."
+                // True, and the reason an English user's rewrite came back in Japanese:
+                // the buttons carry the instruction the AI actually follows, so leaving
+                // them alone leaves them writing the previous language. Still true — this
+                // row writes nothing to `user_prompts` — but it now says where the rest of
+                // the change is, and ボタン raises a banner offering the swap.
                 SettingsRow(
                     title: tr("言語", "Language", "语言"),
                     subtitle: tr(
-                        "アプリの表示言語です。ボタンの文章は変わりません。",
-                        "The app's interface. Your existing buttons are not rewritten.",
-                        "应用的界面语言。已有按钮的内容不会改变。"
+                        "アプリの表示言語です。ボタンの文章はそのままなので、必要なら「ボタン」で入れ替えてください。",
+                        "The app's interface. Your buttons keep their current wording — swap them in Buttons if they write the wrong language.",
+                        "应用的界面语言。按钮内容保持不变，如需更换请前往「按钮」。"
                     )
                 ) {
                     Picker("", selection: Binding(

@@ -1,6 +1,7 @@
 import AppKit
 import DesktopRewriteKit
 import SwiftUI
+import TextIO
 
 /// Reports the content's intrinsic size up to the controller.
 ///
@@ -305,9 +306,27 @@ struct InputBar: View {
         return false
     }
 
+    /// What the instruction will actually be applied to (§18).
+    ///
+    /// This is the one place the user can be told, and it is the reason they were being
+    /// misled: the bar asked 「どう書き換えますか？」 over an empty compose box and over a
+    /// desktop with nothing focused at all, so 「もっと丁寧に」 was a reasonable thing to
+    /// type and a rewrite of nothing was the reasonable result.
+    private var scope: RewriteScope? {
+        switch controller.state {
+        case .inputBar(let captured), .replyInput(_, let captured):
+            return captured.target.scope
+        case .pill, .hoverRow, .generating, .result, .replyArmed:
+            return nil
+        }
+    }
+
     /// Empty submits are allowed in reply mode and blocked in rewrite mode. There is
     /// no rewrite without an instruction, but "just write me a reply" is a request —
     /// `OverlayController.defaultReplyInstruction` is what actually goes over the wire.
+    ///
+    /// A scratch compose (§18) stays blocked for the strongest version of the same
+    /// reason: with no source text *and* no instruction there is nothing to send at all.
     private var canSubmit: Bool {
         isReply || !text.trimmingCharacters(in: .whitespaces).isEmpty
     }
@@ -316,13 +335,29 @@ struct InputBar: View {
     /// overlay foreground in a non-activating panel and follows the system appearance,
     /// which can put black text on this always-dark bar.
     private var placeholderText: String {
-        isReply
-            ? tr(
+        // Reply mode names itself, and its scope is always the message that was copied
+        // rather than anything in the field — §16's whole point.
+        if isReply {
+            return tr(
                 "返信の指示（空欄でおまかせ）",
                 "Reply instructions (optional)",
                 "回复要求（可留空）"
             )
-            : tr("どう書き換えますか？", "How should this be rewritten?", "想怎么改写？")
+        }
+        switch scope {
+        case .scratch:
+            // Nothing to rewrite: either the field is empty or there is no field. Asking
+            // *what to write* is what stops an instruction being typed at nothing.
+            return tr("何を書きますか？", "What should I write?", "要写什么？")
+        case .selection:
+            return tr(
+                "選択した文章をどう書き換えますか？",
+                "How should the selected text be rewritten?",
+                "选中的文字要怎么改写？"
+            )
+        case .inputField, .none:
+            return tr("どう書き換えますか？", "How should this be rewritten?", "想怎么改写？")
+        }
     }
 
     var body: some View {

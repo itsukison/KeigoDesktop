@@ -44,6 +44,20 @@ enum OverlayState: Equatable {
         }
     }
 
+    /// Just the case, for `destinationLog`. Never `String(describing:)` — the associated
+    /// values carry the user's captured and rewritten text.
+    var name: String {
+        switch self {
+        case .pill: return "pill"
+        case .hoverRow: return "hoverRow"
+        case .inputBar: return "inputBar"
+        case .generating: return "generating"
+        case .result: return "result"
+        case .replyArmed: return "replyArmed"
+        case .replyInput: return "replyInput"
+        }
+    }
+
     /// The generating capsule and the result panel take the bar's place rather than
     /// stacking above it — `generating.png` and `result.png` both show the bottom of
     /// the screen occupied by one thing at a time, and leaving the pill underneath a
@@ -92,6 +106,29 @@ enum OverlayState: Equatable {
             return Tokens.Geometry.inputBarHeight
         }
     }
+}
+
+/// What the result panel's primary button will do, decided from a live read of the
+/// destination rather than from what was captured (§18).
+///
+/// The whole point is that this is known *before* the button is pressed. A result that
+/// can only be copied used to be presented with 挿入 as its primary action, and the
+/// press wrote the text into nothing.
+enum InsertAction: Equatable {
+    /// The field the rewrite came from is still there.
+    case insert
+    /// It is not, but the user is in another field that can take text. The rewrite goes
+    /// in at the caret there.
+    case insertHere
+    /// Nowhere to write. The primary action is Copy, and the panel says why.
+    case copyOnly
+}
+
+/// What the user pressed, as opposed to what the probe thinks. See
+/// `OverlayController.insert(intent:)`.
+enum InsertIntent: Equatable {
+    case write
+    case copy
 }
 
 enum OverlayContentLayout: Equatable {

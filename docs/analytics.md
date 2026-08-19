@@ -110,8 +110,9 @@ partner: an event without it, in the desktop project, came from somewhere it sho
 
 | Event | Where | Properties |
 |---|---|---|
-| `desktop_rewrite_completed` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `prompt_origin`, `is_reply`, `latency_ms`, `candidate_count` |
-| `desktop_rewrite_inserted` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `accepted`, `selected_index` |
+| `desktop_rewrite_completed` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `prompt_origin`, `is_reply`, `latency_ms`, `candidate_count`, `scope`, `has_destination` |
+| `desktop_rewrite_inserted` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `accepted`, `selected_index`, `scope`, `insert_destination` |
+| `desktop_rewrite_copied` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `scope`, `reason` |
 | `desktop_rewrite_failed` | `Analytics.swift` | `message` (the app's own Japanese toast — never captured or rewritten text) |
 | `desktop_signed_up` | `MainModel.swift` | `method` (`password` \| `google`), `confirmation_required` (password only) |
 | `desktop_signed_in` | `MainModel.swift` | `method` (`password` \| `google`) |
@@ -120,6 +121,7 @@ partner: an event without it, in the desktop project, came from somewhere it sho
 | `desktop_prompt_created` | `MainModel.swift` | `slot` |
 | `desktop_prompt_updated` | `MainModel.swift` | `slot`, `is_enabled`, `origin` |
 | `desktop_prompt_deleted` | `MainModel.swift` | `slot`, `origin` |
+| `desktop_button_language_realigned` | `MainModel.swift` | `pack`, `writing_language`, `buttons` |
 | `desktop_checkout_started` | `MainModel.swift` | `billing_interval`, `currency`, `offer_expected` |
 | `desktop_welcome_offer_shown` | `OnboardingWindowController.swift` | `currency` |
 | `desktop_welcome_offer_accepted` | `OnboardingWindowController.swift` | `billing_interval`, `currency` |
@@ -205,6 +207,26 @@ shipped, and the Stripe catalog they describe has not been applied.
 `distinct_id` is the Supabase user id, the same as on iOS. In separate projects that is
 a feature rather than a leak: the two platforms can be joined deliberately, in the
 warehouse, when someone actually wants a cross-surface number.
+
+### The 2026-08-18 destination properties (AGENTS.md §18)
+
+Three additions, and the reason for each is that the core loop grew a second ending.
+
+- **`desktop_rewrite_copied`** with `reason` (`no_destination` | `user_chose`). A rewrite
+  the user copied because there was nowhere to insert it is *completed*, not failed, so it
+  must not go into `desktop_rewrite_failed` — and without an event of its own that whole
+  path reads as a funnel that stops after `completed`. **Tile 11's acceptance rate is now
+  an undercount** by exactly the `no_destination` volume; the honest formula is
+  `(inserted + copied[no_destination]) / completed`, and tile 11 has not been changed.
+- **`scope`** (`selection` | `input_field` | `scratch`) on completed, inserted and copied.
+  `scratch` is a rewrite composed from an instruction alone — the press that used to be
+  refused outright — so its share is the measure of whether opening it up was worth it.
+- **`insert_destination`** (`captured_field` | `insert_here`) on inserted. A rising
+  `insert_here` rate means people compose first and choose the field afterwards, which is
+  the flow §18 made possible; it is also the only signal that the live destination probe
+  is firing at all in the wild.
+
+None of these have a tile yet, and none has been seen in the live project.
 
 ### Known instrumentation gaps
 

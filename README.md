@@ -1,8 +1,8 @@
-# KeigoDesktop
+# KeigoButton for Mac
 
-macOS companion to [敬語ボタン](https://github.com/itsukison) (AIキーボード) — the same account, the same rewrite buttons, a different surface.
+[KeigoButton](https://keigobutton.com/) is an AI rewrite assistant for macOS and iPhone. This repository contains the Mac app: the same account and saved rewrite buttons as the iPhone keyboard, on a desktop surface.
 
-A small pill sits at the bottom of the screen above the Dock. Hover to expand your configured buttons, press one to rewrite the text you're editing in any app, and insert the result in place. No keyboard, no IME — macOS already has a Japanese input method.
+A small bar sits at the bottom of the screen above the Dock. Hover to expand your configured buttons, run a saved or one-off instruction against the text you are editing, review the result, and insert it in place. Copying an incoming message can also provide explicit context for a complete reply.
 
 ## Features
 
@@ -62,8 +62,9 @@ For full architectural detail, state machines, and implementation constraints, s
 
 ## Related
 
+- [Official product site](https://keigobutton.com/)
+- [Mac workflow guides](https://keigobutton.com/mac/custom-rewrite-prompts)
 - iOS keyboard app: sibling repo (`Japanese` / KeigoButton)
-- Landing page: lives in `landing/` locally but is not part of this repository
 
 ## License
 

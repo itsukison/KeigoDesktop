@@ -6,17 +6,22 @@ empty or temporary key creates a manual-update break in the chain.
 
 Current release status (2026-08-10):
 
-- **`v0.1.3` is published and is `latest`.** Workflow run `31355973591` succeeded in
-  both jobs from commit `7b00774`. The public
+- **`v0.1.4` is published and is `latest`.** Workflow run `31364148576` succeeded in
+  both jobs from commit `f3a842a`. The public
   `/releases/latest/download/KeigoButton.dmg` downloads with SHA-256
-  `677a65cd…f09ad2aff`, matching GitHub's asset digest; `stapler validate` passes and
-  Gatekeeper reports `Notarized Developer ID` for
-  `Developer ID Application: Yihuan Sun (4KS6YS23KT)`. The live Pages appcast carries
-  four items with 0.1.3 newest — `sparkle:version` 6, the real Japanese release notes
-  embedded, and an enclosure length matching the released
-  `KeigoButton-0.1.3.zip` byte for byte (8,334,768).
-- **0.1.2 → 0.1.3 is the first pair of public releases signed by the same identities,
-  so the two-version Sparkle test below can finally be run for real.** It has not been.
+  `496b1a2df694b0849c2d2c717849feabb603e7a37867589f2a8383fd853c31e8`, matching
+  GitHub's asset digest and 8,600,644-byte asset; `hdiutil verify` and
+  `stapler validate` pass, and Gatekeeper reports `Notarized Developer ID`. The mounted
+  app passes strict deep code-signature verification, reports version 0.1.4/build 9,
+  and sits beside the expected Applications link. The live Pages appcast is valid XML
+  with five items and 0.1.4 newest — `sparkle:version` 9, the Japanese release notes,
+  and a signed enclosure whose 8,399,451-byte length and SHA-256
+  `e06289c982c459433e08a9631776476e872160b43934539d3e160c6e3a60c16f` match the
+  released `KeigoButton-0.1.4.zip` exactly.
+- **The first real scheduled announcement and install-chain proof is 0.1.4 → 0.1.5.**
+  Versions through 0.1.3 did not contain the visible pending-update surfaces, so they
+  need a manual update or fresh DMG to reach 0.1.4. Installing this public DMG and then
+  completing the two-version Sparkle test below once 0.1.5 exists remain unverified.
 
 Previous release status (2026-08-09):
 
@@ -34,8 +39,8 @@ Previous release status (2026-08-09):
   downloaded SHA-256 matched GitHub's asset digest, and its mounted contents include the
   saved Finder layout plus the Applications link. The live Pages appcast is valid and
   carries the signed `KeigoButton-0.1.0.zip` enclosure.
-- The remaining proof is drag-installing that replacement public DMG and completing the
-  two-version Sparkle test below.
+- The original 0.1.0 artifact remains verified as recorded above; current install-chain
+  testing is tracked in the current-release section.
 
 ## One-time setup
 

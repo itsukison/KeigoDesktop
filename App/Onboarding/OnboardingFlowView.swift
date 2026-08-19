@@ -94,10 +94,12 @@ private struct OnboardingNavigationBar: View {
                 case .welcome:
                     if model.isSignedIn {
                         primaryButton(
-                            coordinator.isPreparingPurpose
+                            model.isSavingName
+                                ? tr("名前を保存中…", "Saving your name…", "正在保存名字…")
+                                : coordinator.isPreparingPurpose
                                 ? tr("ボタンを読み込み中…", "Loading your buttons…", "正在加载按钮…")
                                 : tr("続ける", "Continue", "继续"),
-                            enabled: !coordinator.isPreparingPurpose
+                            enabled: !coordinator.isPreparingPurpose && !model.isSavingName
                         )
                     }
 
@@ -324,6 +326,46 @@ private struct WelcomeStep: View {
                             .foregroundStyle(Tokens.Window.textSecondary)
                     }
                 }
+            }
+            Card(padding: 16, radius: 12) {
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(tr("メッセージで使う名前", "Name you use in messages", "你在消息中使用的名字"))
+                            .font(Tokens.Font.body(13, weight: .medium))
+                            .foregroundStyle(Tokens.Window.textPrimary)
+                        Text(tr(
+                            "普段、相手に名乗る名前を入力してください。AIがあなたへの呼びかけを見分け、必要なときにメールの署名へ使います。",
+                            "Enter the name other people know you by. AI uses it to recognize when a message refers to you and, when appropriate, sign emails.",
+                            "请输入他人熟悉的称呼。AI 会用它识别消息何时在称呼你，并在适当时用于邮件署名。"
+                        ))
+                            .font(Tokens.Font.body(11))
+                            .foregroundStyle(Tokens.Window.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    HStack(spacing: 8) {
+                        SettingsField(
+                            placeholder: tr("例：山田 樹（任意）", "e.g. Itsuki Sonobe (optional)", "例如：山田树（可选）"),
+                            text: $model.displayNameDraft,
+                            onSubmit: { model.saveDisplayName() }
+                        )
+                        ActionButton(
+                            model.isSavingName
+                                ? tr("保存中…", "Saving…", "保存中…")
+                                : tr("保存", "Save", "保存"),
+                            style: .primary,
+                            enabled: model.canSaveDisplayName
+                        ) {
+                            model.saveDisplayName()
+                        }
+                    }
+                }
+            }
+            if let error = model.profileError {
+                Text(error)
+                    .font(Tokens.Font.body(12))
+                    .foregroundStyle(Tokens.Window.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let error = coordinator.purposeError {
                 Text(error)

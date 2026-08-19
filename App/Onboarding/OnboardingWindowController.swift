@@ -328,6 +328,10 @@ final class OnboardingCoordinator: ObservableObject {
         isPreparingPurpose = true
         purposeError = nil
         Task {
+            guard await mainModel.saveDisplayNameForContinuation() else {
+                isPreparingPurpose = false
+                return
+            }
             await mainModel.reloadPrompts()
             isPreparingPurpose = false
             if mainModel.promptsError != nil {

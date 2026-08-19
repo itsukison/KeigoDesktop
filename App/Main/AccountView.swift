@@ -79,8 +79,12 @@ struct AccountView: View {
             SectionCaption(text: tr("プロフィール", "Profile", "个人资料"))
             RowGroup {
                 SettingsRow(
-                    title: tr("表示名", "Display name", "显示名称"),
-                    subtitle: tr("スマホにも同じ名前が表示されます", "Shown on your phone too", "手机上也会显示相同名称")
+                    title: tr("メッセージで使う名前", "Name used in messages", "消息中使用的名字"),
+                    subtitle: tr(
+                        "あなたへの呼びかけの判別と、必要なメール署名に使います",
+                        "Recognizes references to you and signs emails when appropriate",
+                        "用于识别对你的称呼，并在适当时用于邮件署名"
+                    )
                 ) {
                     HStack(spacing: 8) {
                         SettingsField(

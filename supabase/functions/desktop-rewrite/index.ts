@@ -63,6 +63,12 @@ type DesktopRewriteRequest = {
   requestId: string;
 };
 
+/// Internal prompt context. `parseRequest` never reads this field from the client;
+/// it is added only after the JWT subject has been resolved to the shared profile.
+type PromptReadyRequest = DesktopRewriteRequest & {
+  accountUserName: string | null;
+};
+
 type RewriteCandidate = { replacement: string; changed: boolean };
 type RewriteResult = { candidates: RewriteCandidate[]; language: string };
 
@@ -181,7 +187,13 @@ Deno.serve(async (req) => {
   const usagePromise = reserveUsage(userId, request.requestId, request.candidateCount)
     .then((value) => ({ ...value, guardMs: Date.now() - guardStartedAt }));
 
-  const rewritePromise = rewriteWithProviders(providers, request);
+  const needsIdentity = !!request.replyTo?.trim() || (!request.replyTo?.trim() && !request.text.trim());
+  const identityPromise = needsIdentity
+    ? fetchAccountUserName(userId)
+    : Promise.resolve(null);
+  const rewritePromise = identityPromise.then((accountUserName) =>
+    rewriteWithProviders(providers, { ...request, accountUserName })
+  );
   // Without a handler attached here, a guard denial would surface the provider
   // rejection as unhandled and take down the isolate.
   rewritePromise.catch(() => {});
@@ -223,6 +235,8 @@ Deno.serve(async (req) => {
       promptOrigin: request.promptOrigin,
       candidateCount: rewrite.result.candidates.length,
       inputLength: [...request.text].length,
+      replyMode: !!request.replyTo,
+      identityAvailable: rewrite.accountUserNameAvailable,
       latencyMs,
       guardMs: usage.guardMs,
       status: "ok",
@@ -322,7 +336,17 @@ function parseRequest(body: unknown): { value: DesktopRewriteRequest } | { error
       hostAppBundleId: optionalString(data.hostAppBundleId),
       captureMode,
       browserURL: optionalString(data.browserURL),
-      writingLanguage: data.writingLanguage === "en" ? "en" : null,
+      // `"ja"` is preserved rather than collapsed to null, and only because the
+      // value is logged now: null used to mean "en was not requested", which is the
+      // same thing `systemInstructions` still reads it as, but on the event row it
+      // would conflate a 简体中文 user's deliberate 'ja' with a build too old to have
+      // the field. Every consumer tests for `=== "en"` or `!== "en"`, so widening
+      // this changes no prompt.
+      writingLanguage: data.writingLanguage === "en"
+        ? "en"
+        : data.writingLanguage === "ja"
+        ? "ja"
+        : null,
       ioPath: data.ioPath === "ax" || data.ioPath === "clipboard" ? data.ioPath : null,
       // A generated fallback keeps a pre-billing client working, and it degrades in
       // the only direction that is safe: without a stable id a retry reserves twice
@@ -512,6 +536,11 @@ async function logRewriteEvent(
       host_app_bundle_id: request.hostAppBundleId,
       io_path: request.ioPath,
       locale: request.locale,
+      // Not derivable from `locale`, which is the user's system region: an
+      // English-mode user on a Japanese Mac sends `ja_JP`. Without this column the
+      // only way to tell which system prompt a rewrite got was to read the account's
+      // `user_prompts` rows by hand.
+      writing_language: request.writingLanguage,
       app_version: request.appVersion,
       candidate_count: result.candidates.length,
       input_length: [...request.text].length,
@@ -555,6 +584,7 @@ async function logBlockedEvent(
       host_app_bundle_id: request.hostAppBundleId,
       io_path: request.ioPath,
       locale: request.locale,
+      writing_language: request.writingLanguage,
       app_version: request.appVersion,
       candidate_count: 0,
       input_length: [...request.text].length,
@@ -584,6 +614,33 @@ async function fetchConsent(userId: string): Promise<{ optIn: boolean; version: 
     };
   } catch {
     return { optIn: false, version: null };
+  }
+}
+
+/// Reads the authenticated account's shared display name for prompt context only.
+///
+/// The service-role key stays inside the Edge Function and bypasses RLS, so the JWT
+/// subject is the filter — never a client-supplied profile id or name. Failure and a
+/// blank row intentionally collapse to null; the prompt then forbids guessing and uses
+/// a name-free reply rather than making generation depend on profile availability.
+async function fetchAccountUserName(userId: string): Promise<string | null> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/profiles?select=display_name&id=eq.${encodeURIComponent(userId)}&limit=1`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } },
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    const raw = Array.isArray(rows) ? rows[0]?.display_name : null;
+    if (typeof raw !== "string") return null;
+    const trimmed = raw.trim();
+    return trimmed ? [...trimmed].slice(0, 120).join("") : null;
+  } catch {
+    return null;
   }
 }
 
@@ -737,8 +794,8 @@ function resolveProviderConfig(provider: ProviderName): ProviderConfig {
 
 async function rewriteWithProviders(
   providers: ProviderName[],
-  request: DesktopRewriteRequest,
-): Promise<{ provider: ProviderName; model: string; result: RewriteResult }> {
+  request: PromptReadyRequest,
+): Promise<{ provider: ProviderName; model: string; result: RewriteResult; accountUserNameAvailable: boolean }> {
   let lastError: unknown;
   const deadlineAt = Date.now() + envInt("DESKTOP_TOTAL_TIMEOUT_MS", 22000);
 
@@ -749,7 +806,7 @@ async function rewriteWithProviders(
         throw new ProviderError(provider, "provider_error", "AIの処理に失敗しました。", "deadline exhausted");
       }
       const output = await rewriteWithProvider(provider, request, remainingMs);
-      return { provider, ...output };
+      return { provider, ...output, accountUserNameAvailable: !!request.accountUserName };
     } catch (error) {
       lastError = error;
       const providerError = error instanceof ProviderError ? error : null;
@@ -769,7 +826,7 @@ async function rewriteWithProviders(
 
 async function rewriteWithProvider(
   provider: ProviderName,
-  request: DesktopRewriteRequest,
+  request: PromptReadyRequest,
   remainingMs: number,
 ): Promise<{ model: string; result: RewriteResult }> {
   const config = resolveProviderConfig(provider);
