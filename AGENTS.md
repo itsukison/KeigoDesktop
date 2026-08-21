@@ -566,9 +566,38 @@ host of the URL the app hands the session, so it used to quote
 | Table | Use |
 |---|---|
 | `auth.users` | one identity across phone and laptop |
-| `profiles` | display name, subscription state |
+| `profiles` | display name, subscription state. Four columns: `id`, `display_name` (NOT NULL, default `''`), `created_at`, and `platform` — see below |
 | `user_prompts` | the buttons — read and write (columns: `id, user_id, slot, builtin_key, origin, title, prompt, is_enabled, sort_order, created_at, updated_at`). **`id` is not its only unique key**: `user_prompts_user_builtin_unique (user_id, builtin_key) WHERE builtin_key IS NOT NULL` makes a builtin key an identity, and `handle_new_user()` seeds all four (`polite`, `natural`, `email`, `translateToEnglish`) at signup. Any write that mints a fresh id for an already-owned key is a 409 — see `UserPromptIdentity` |
 | `user_ai_consent` | AI-improvement consent, honored by both surfaces |
+
+#### `profiles.platform` — derived, and never written by a client
+
+`macos` | `ios` | `both` | null. `profiles` is shared and carries no surface of its
+own, so "is this account a Mac user" used to mean an EXISTS against
+`desktop.activations` beside one against `public.ai_rewrite_events`. Triggers on both
+of those tables now keep the answer on the row, routed through
+`public.mark_profile_platform()` so the two cannot disagree; it escalates only, never
+downgrades. The `desktop.activations` trigger is INSERT-only — later launches take
+`ON CONFLICT DO UPDATE` and have nothing new to say. The `ai_rewrite_events` trigger
+**swallows its own exceptions on purpose**: it fires on the live keyboard's hot path,
+and a bookkeeping column is never worth rolling a user's rewrite back.
+
+**Null does not mean mobile.** iOS becomes visible here only on an account's first
+rewrite, so a signup that never rewrote is indistinguishable from one that was never
+seen anywhere — 2,767 of 3,376 rows at the time of writing. Making that number honest
+needs an activation record written by the iOS app on launch, which is work in
+`../Japanese`.
+
+**Two grant rules this table imposes on any future column.** `profiles` carries
+Supabase's default table-wide `GRANT ALL` to `anon`/`authenticated`, and both apps
+fetch it with `select=*`:
+
+- **A new column must be granted SELECT** or profile loading breaks on *both*
+  platforms — Postgres rejects `SELECT *` outright when one column is unreadable.
+- **A column-level `REVOKE` does not cut into a table-level grant.** Making a column
+  read-only to clients means revoking the table-wide UPDATE/INSERT and re-granting an
+  explicit column list; `platform` is left out of that list, which is the only reason
+  `profiles_update_own` cannot be used to forge it.
 
 ### Desktop-only `desktop` schema — tables there, entry points in `public`
 
@@ -587,6 +616,7 @@ actually did.
 |---|---|
 | `desktop.rewrite_events` | mirrors `ai_rewrite_events` in spirit, never in storage. `redact.ts` applies identically; text is opt-in behind the shared `user_ai_consent` |
 | `desktop.usage_buckets` | per-user day/hour/minute counters. Shape from `web_rewrite_usage` |
+| `desktop.plan_limits` | the caps `desktop_reserve_usage` enforces and `desktop_get_entitlement` reports — **the authority, and the only place a limit changes.** `month` is the quota (free 30, Pro 1,000). `day` is **null on every plan**: there is no daily cap, and `desktop_reserve_usage` skips that arm when it is null. `hour`/`minute` (120/12) stay NOT NULL — they are burst protection against a stuck client, not a quota. `PlanPricing.freeMonthlyRewrites` / `proMonthlyRewrites` only mirror this row for copy shown before an entitlement loads |
 | `desktop.activations` | `(user_id, first_seen_at, last_seen_at, app_version)` — **how desktop counts stay honest.** `profiles` holds both platforms' users; desktop MAU comes from here and PostHog, never from counting `profiles` rows |
 | `public.desktop_bump_usage` | atomic increment, returns running `(units, requests)` |
 | `public.desktop_log_rewrite_event` | takes the event as one `jsonb` arg |
@@ -1398,11 +1428,11 @@ The account page's email address is read from the JWT's `email` claim, not from
 ### The account page is as big as `profiles` allows
 
 `ProfileRemoteStore` reads and writes the shared `profiles` row (§6). The live
-table is **exactly three columns** — `id`, `display_name` (NOT NULL, default
-`''`) and `created_at` — with `select/insert/update own` RLS. So the page offers
-a name, an address and a join date, and that is the whole honest surface: there
-is no plan, avatar or subscription column to render, and inventing one would mean
-a migration in the iOS repo.
+table is **four columns** — `id`, `display_name` (NOT NULL, default `''`),
+`created_at`, and `platform`, which is derived and not client-writable (§6) — with
+`select/insert/update own` RLS. So the page offers a name, an address and a join date,
+and that is the whole honest surface: there is no plan, avatar or subscription column
+to render, and inventing one would mean a migration in the iOS repo.
 
 Saving the name **upserts** rather than PATCHes. `profiles_insert_own` exists
 because the row may genuinely not be there — a user who signed up on this Mac has
@@ -1543,8 +1573,22 @@ row was already growing. And the preview column reads nothing about the left one
 used to flip from centred to top-aligned whenever a row opened, which moved the one thing
 on screen the user had not touched.
 
-Sign-in and Accessibility are hard gates. バー and 練習 can be skipped once both
-exist. `OnboardingProgressStore.currentVersion` is persisted in `UserDefaults`;
+Sign-in, Accessibility and **the name** are hard gates, and バー and 練習 are the only
+pages that can be skipped at all. 「あとで始める」 declines **one exercise** — it moves to
+the next page in `DesktopOnboardingStep.flow` via `skippingEducation`, which answers nil
+for everything outside `educationSteps`. It must never call `finish()` again: きっかけ and
+オファー sit *after* the practices, so ending the run from a practice page also cancels
+the only ask for money first run contains, and did for two of the first four accounts to
+complete onboarding — neither has a `desktop.welcome_offers` row, and nothing in the app
+will ever mint one for them, because `desktop_get_entitlement` only reads that table.
+The name gate is `MainModel.hasDisplayNameDraft` on both the Continue button and
+`advance()`'s `.welcome` case. It reads the **draft** rather than the stored value
+because Continue is what saves it, and it exists because reply mode resolves @mentions
+and email signatures against `profiles.display_name` (§16): `handle_new_user()` seeds it
+from `raw_user_meta_data->>'display_name'`, a key Google does not send, so every Google
+signup arrives blank. First run is the only place this is required — the account page
+can still clear it, since the column is NOT NULL default `''` and an empty name stays a
+legal row. `OnboardingProgressStore.currentVersion` is persisted in `UserDefaults`;
 an unfinished close saves the current step, while the menu-bar item changes from
 「セットアップを続ける」 to 「使い方を見る」 after completion. A later sign-out or
 revoked permission does not reset onboarding; Home's compact recovery card handles it.
@@ -1606,8 +1650,12 @@ applied in `SourceMark` rather than baked into an asset that would then be wrong
 another size. **These are third-party trademarks, shown to identify the channel and for
 nothing else.**
 
-It is a question, not a gate: 「答えない」 sits beside 「次へ」, moves on without sending
-anything, so a skipped run is absent from the series rather than a guess inside it.
+**It is a gate. 「答えない」 was removed and 次へ waits for a selection.** The question
+carried a skip link while attribution was nice to have; it answers the one thing §3 of
+`Marketing/GTM.md` cannot get anywhere else, and at a 1-in-3 answer rate the series was
+not worth reading. Requiring an answer is only honest because 「その他」 is one of the
+eight options — nobody has to invent a channel they did not come from — and it is the
+reason a neutral option must survive any future edit to `OnboardingSource`.
 `OnboardingSource.rawValue` is the wire key and is pinned by a test — a rename splits an
 attribution series with nothing in the data to show it happened — while `label` is free
 to be reworded. `desktop_source_selected` carries `source` plus a `$set_once`

@@ -118,7 +118,11 @@ struct PlanView: View {
                 unit: tr("/ 月", "/ month", "/ 月"),
                 caption: nil,
                 features: [
-                    tr("月50回まで書き換え", "50 rewrites a month", "每月50次改写"),
+                    tr(
+                        "月\(PlanPricing.freeMonthlyRewrites)回まで書き換え",
+                        "\(PlanPricing.freeMonthlyRewrites) rewrites a month",
+                        "每月\(PlanPricing.freeMonthlyRewrites)次改写"
+                    ),
                     tr("自分のボタンをそのまま同期", "Your own buttons, synced", "同步你自己的按钮"),
                     tr("どのアプリでも使える", "Works in every app", "在任何应用中都能使用"),
                 ],
@@ -370,9 +374,9 @@ struct PlanView: View {
                 .foregroundStyle(Tokens.Window.textTertiary)
 
             Text(tr(
-                "iPhone版の「AIキーボード」はこれからも無料で、上限も変わりません。",
+                "iPhone版の「敬語ボタン」はこれからも無料で、上限も変わりません。",
                 "The iPhone keyboard stays free, with its own separate limit.",
-                "iPhone 版「AIキーボード」将持续免费，上限也不会改变。"
+                "iPhone 版「敬語ボタン」将持续免费，上限也不会改变。"
             ))
                 .font(Tokens.Font.body(12))
                 .foregroundStyle(Tokens.Window.textTertiary)

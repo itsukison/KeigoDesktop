@@ -196,6 +196,22 @@ final class PlanPricingTests: XCTestCase {
         XCTAssertFalse(pro.hasWelcomeOffer)
     }
 
+    /// The copy constants mirror `desktop.plan_limits`, which is what the gateway
+    /// actually enforces. A test cannot reach that table, so this pins the pair a
+    /// human has to re-check against it — the failure mode is the app quoting a cap it
+    /// does not enforce, and it is silent.
+    func testCopyCapsMatchTheServerPlanLimits() {
+        XCTAssertEqual(PlanPricing.freeMonthlyRewrites, 30)
+        XCTAssertEqual(PlanPricing.proMonthlyRewrites, 1_000)
+    }
+
+    /// `.formatted()` reads the system locale, which is not the app's language — a Mac
+    /// set to fr_FR renders `1 000` into Japanese copy. The display string pins en_US
+    /// grouping, and all three languages want the comma.
+    func testProCapRendersWithACommaRegardlessOfSystemLocale() {
+        XCTAssertEqual(PlanPricing.proMonthlyRewritesDisplay, "1,000")
+    }
+
     private func entitlement(offerExpiring: Date?) -> Entitlement {
         Entitlement(
             plan: .free,

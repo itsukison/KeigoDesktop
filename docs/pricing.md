@@ -19,7 +19,7 @@ sells in **USD as well as JPY**, chosen by interface language, and there is a
 
 | | 無料 | Pro |
 |---|---|---|
-| 書き換え | **50回 / 月** | **1,000回 / 月**（約33回/日） |
+| 書き換え | **30回 / 月** | **1,000回 / 月**（約33回/日） |
 | リセット | 毎月1日（暦月） | 毎月1日（暦月） |
 | 価格（JPY） | ¥0 | **¥1,480 / 月** ・ 年払い **¥1,200 / 月相当** |
 | 年払い総額（JPY） | — | ¥14,400 / 年（**2ヶ月分以上お得**） |
@@ -65,7 +65,7 @@ sells in **USD as well as JPY**, chosen by interface language, and there is a
 
 | Decision | Reason |
 |---|---|
-| 50 free | Enough to experience real value; a habitual user reaches the wall naturally within a month |
+| 30 free | Cut from 50 on 2026-08-21 (§7 lever 2). Still enough to reach the wall on real work inside a month, and it reaches it sooner |
 | 1,000 Pro | ~33/day — beyond any human writing pace, and it holds the margin if someone does reach it (§7) |
 | ¥1,480/月 | The monthly anchor |
 | ¥14,400/年 | Produces a clean **¥1,200/月相当** that compares directly against ¥1,480, at a ~19% discount |
@@ -139,9 +139,9 @@ email and keep purchase mechanics out of the iOS binary.
 
 ## 3. Why there is no trial
 
-The 50回/月 free tier is the trial, and a better one: it never expires, so it
+The 30回/月 free tier is the trial, and a better one: it never expires, so it
 can't run out while someone is on holiday; it demonstrates value on real work in
-real apps; and 50 rewrites is enough for anyone who will love this to know.
+real apps; and 30 rewrites is enough for anyone who will love this to know.
 
 A card-required trial would add a second, worse gate — JP consumers are averse to
 auto-converting card trials, 特商法 imposes 自動更新 disclosure obligations, and
@@ -158,10 +158,10 @@ just been stopped. A user who declines the first is not a user who has said no.
 |---|---|
 | End of first run | The welcome offer page — 33% off the first period, 72 hours, **annual preselected** (§1) |
 | While that window is open | A ホーム card carrying the same price and the remaining time |
-| 40 / 50 used | Quiet 残り10回 note in the ホーム usage row |
-| 48 / 50 used | 残り2回 — 今月分の書き換えがまもなく上限に達します |
-| 50 / 50, on press | Upgrade panel on the overlay, **annual (¥1,200/月相当 · $10/month) preselected** |
-| Always | Persistent 今月 34 / 50 readout in the main window's usage row |
+| 20 / 30 used | Quiet 残り10回 note in the ホーム usage row |
+| 28 / 30 used | 残り2回 — 今月分の書き換えがまもなく上限に達します |
+| 30 / 30, on press | Upgrade panel on the overlay, **annual (¥1,200/月相当 · $10/month) preselected** |
+| Always | Persistent 今月 21 / 30 readout in the main window's usage row |
 
 The offer also does not undermine §3's argument against a trial: it asks for a card
 **once, optionally, at a lower price**, and refusing it leaves the free tier exactly as
@@ -256,7 +256,7 @@ output  200 × $15.00 / 1M = $0.003000
 | Usage / month | COGS | Note |
 |---|---|---|
 | 15 | **¥9.8** | assumed free-tier average 【推測】 |
-| 50 | **¥32.8** | free cap — the worst a free user can cost |
+| 30 | **¥19.7** | free cap — the worst a free user can cost |
 | 150 | **¥98.4** | assumed Pro average 【推測】 |
 | 500 | ¥328 | |
 | 1,000 | **¥656** | Pro cap — the worst a payer can cost |
@@ -367,10 +367,10 @@ holds above **25% of MRR**. Levers, in order:
    1,000 free users, 2.3% of revenue at 2% conversion) and takes a maxing Pro user
    from ¥656 to ¥41. Costs nothing to test; the only question is quality on longer
    desktop inputs. **Try this before touching the free cap.**
-2. Cut the free cap to 30/month.
+2. ~~Cut the free cap to 30/month.~~ **Taken 2026-08-21**, ahead of lever 1 — `desktop.plan_limits.free.month` is 30 and `PlanPricing.freeMonthlyRewrites` matches it. Lever 1 is still untried and still the cheaper move.
 3. Require a card for the free tier.
 
-Account farming (a fresh account per 50 rewrites) is worth ¥33 of AI and is
+Account farming (a fresh account per 30 rewrites) is worth ¥20 of AI and is
 already slowed by the email-confirmation signup flow (`AGENTS.md` §14). Not worth
 engineering against.
 
@@ -457,10 +457,15 @@ cohort codes like 「最初の100名は初年度 ¥9,800」.
   `desktop_delete_old_usage_buckets` to GC them — and note §6's warning that GC
   runs on `updated_at`, never on `bucket_key`.
 - `reserveUsage` in `desktop-rewrite/index.ts` reads fixed env limits today. It has
-  to look up plan state first and choose the limit set: free 50/month + 20/day,
-  Pro 1,000/month + 100/day, both under the existing 120/hour + 12/minute.
+  to look up plan state first and choose the limit set: free 30/month, Pro
+  1,000/month, both under the existing 120/hour + 12/minute. **There is no daily
+  cap.** `desktop.plan_limits.day` is null on every plan as of 2026-08-21 and
+  `desktop_reserve_usage` skips the check when it is — a second, differently-shaped
+  wall that no copy mentioned and the usage row could not show. The day bucket is
+  still written, so per-day usage stays observable; a number in that column
+  re-enables the brake.
 - **A read path for the user's own usage**, which `AGENTS.md` §10 lists as out of
-  scope. §3 makes it required: the 今月 34 / 50 readout has to be true. One new
+  scope. §3 makes it required: the 今月 21 / 30 readout has to be true. One new
   `SECURITY DEFINER` function granted to `authenticated` — the first `desktop_*`
   entry point that is not `service_role`-only, so re-verify the
   `has_function_privilege` assertions in the migration.

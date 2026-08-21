@@ -157,8 +157,9 @@ final class OnboardingProgressStoreTests: XCTestCase {
 
         XCTAssertEqual(visited.last, .source)
         XCTAssertFalse(visited.contains(.complete))
-        // `.source` has no link of its own; 答えない runs `skipSource()`, which moves to
-        // `.offer`. So the pages after the last skip are the two the run cannot lose.
+        // `.source` has no link of its own — 答えない was removed on 2026-08-21, so the
+        // only way past it is answering. The pages after the last skip are therefore
+        // the three the run cannot lose.
         XCTAssertEqual(Array(DesktopOnboardingStep.flow.suffix(3)), [.source, .offer, .complete])
     }
 

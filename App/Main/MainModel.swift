@@ -423,6 +423,18 @@ final class MainModel: NSObject, ObservableObject {
         return !isSavingName && trimmed != displayName
     }
 
+    /// Whether first run has a name to continue on. The **draft**, not `displayName`:
+    /// the field saves on Continue anyway, so gating on the stored value would refuse
+    /// a name the user has typed and not yet pressed Save on.
+    ///
+    /// Only first run consults this. The account page can still clear the field —
+    /// `handle_new_user()` writes `''` for every signup and `profiles.display_name` is
+    /// NOT NULL with that default, so an empty name stays a legal state of the row and
+    /// making it illegal would mean a migration in the iOS repo.
+    var hasDisplayNameDraft: Bool {
+        !displayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func saveDisplayName() {
         Task { _ = await saveDisplayNameForContinuation() }
     }

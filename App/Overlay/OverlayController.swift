@@ -1859,9 +1859,9 @@ final class OverlayController: ObservableObject {
         case .month where denial.plan == .free:
             message = [
                 tr(
-                    "今月の無料枠（\(denial.monthLimit ?? 50)回）を使い切りました。",
-                    "You've used this month's free \(denial.monthLimit ?? 50) rewrites.",
-                    "本月的免费额度（\(denial.monthLimit ?? 50)次）已用完。"
+                    "今月の無料枠（\(denial.monthLimit ?? PlanPricing.freeMonthlyRewrites)回）を使い切りました。",
+                    "You've used this month's free \(denial.monthLimit ?? PlanPricing.freeMonthlyRewrites) rewrites.",
+                    "本月的免费额度（\(denial.monthLimit ?? PlanPricing.freeMonthlyRewrites)次）已用完。"
                 ),
                 reset,
             ].compactMap { $0 }.joined()

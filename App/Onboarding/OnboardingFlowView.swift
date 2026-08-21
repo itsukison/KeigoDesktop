@@ -100,6 +100,7 @@ private struct OnboardingNavigationBar: View {
                                 ? tr("ボタンを読み込み中…", "Loading your buttons…", "正在加载按钮…")
                                 : tr("続ける", "Continue", "继续"),
                             enabled: !coordinator.isPreparingPurpose && !model.isSavingName
+                                && model.hasDisplayNameDraft
                         )
                     }
 
@@ -146,7 +147,6 @@ private struct OnboardingNavigationBar: View {
                     primaryButton(tr("次へ", "Next", "下一步"), enabled: coordinator.replyPracticeCompleted)
 
                 case .source:
-                    LinkButton(title: tr("答えない", "Skip", "不回答")) { coordinator.skipSource() }
                     primaryButton(tr("次へ", "Next", "下一步"), enabled: coordinator.selectedSource != nil)
 
                 case .offer:
@@ -344,7 +344,12 @@ private struct WelcomeStep: View {
 
                     HStack(spacing: 8) {
                         SettingsField(
-                            placeholder: tr("例：山田 樹（任意）", "e.g. Itsuki Sonobe (optional)", "例如：山田树（可选）"),
+                            // Each language's own filler name, not a translation of one
+                            // person: 山田太郎, John Smith and 张三 are what a form example
+                            // looks like to a reader of that language. 山田树 was the
+                            // Japanese example transliterated, which is a name no
+                            // Chinese speaker would recognise as a placeholder.
+                            placeholder: tr("例：山田 太郎", "e.g. John Smith", "例如：张三"),
                             text: $model.displayNameDraft,
                             onSubmit: { model.saveDisplayName() }
                         )
@@ -1366,7 +1371,10 @@ private struct OnboardingPracticeEditor: NSViewRepresentable {
 /// 「どこで知りましたか？」 — the one page of first run that asks for something rather
 /// than teaching something, so it deliberately reuses 用途's exact composition: the same
 /// question-left / choice-grid-right split, the same card metrics, the same selection
-/// dot. It is a question, not a gate — 「答えない」 sits beside the forward action.
+/// dot. It carried 「答えない」 beside the forward action until 2026-08-21, and the answer
+/// rate was 1 in 3 — so the link is gone and 次へ waits for a choice. Forcing an answer
+/// is only honest because 「その他」 is one of the eight: nobody has to invent a channel
+/// they did not come from.
 private struct SourceStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
 
@@ -1554,9 +1562,9 @@ private struct OfferStep: View {
                         "首次可以优惠价体验 Pro"
                     ),
                     subtitle: tr(
-                        "無料のままでも月50回まで書き換えできます。Pro は月1,000回まで。この価格は今回の設定から\(PlanPricing.welcomeOfferWindowHours)時間だけです。",
-                        "The free plan keeps its 50 rewrites a month. Pro raises that to 1,000. This price is available for \(PlanPricing.welcomeOfferWindowHours) hours from now.",
-                        "免费版每月仍可改写50次，Pro 可达1,000次。此价格仅在设置后的\(PlanPricing.welcomeOfferWindowHours)小时内有效。"
+                        "無料のままでも月\(PlanPricing.freeMonthlyRewrites)回まで書き換えできます。Pro は月\(PlanPricing.proMonthlyRewritesDisplay)回まで。この価格は今回の設定から\(PlanPricing.welcomeOfferWindowHours)時間だけです。",
+                        "The free plan keeps its \(PlanPricing.freeMonthlyRewrites) rewrites a month. Pro raises that to \(PlanPricing.proMonthlyRewritesDisplay). This price is available for \(PlanPricing.welcomeOfferWindowHours) hours from now.",
+                        "免费版每月仍可改写\(PlanPricing.freeMonthlyRewrites)次，Pro 可达\(PlanPricing.proMonthlyRewritesDisplay)次。此价格仅在设置后的\(PlanPricing.welcomeOfferWindowHours)小时内有效。"
                     )
                 )
 

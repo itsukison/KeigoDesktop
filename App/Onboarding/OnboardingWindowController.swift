@@ -129,7 +129,12 @@ final class OnboardingCoordinator: ObservableObject {
     func advance() {
         switch step {
         case .language: move(to: .welcome)
-        case .welcome where mainModel.isSignedIn: preparePurpose()
+        // The name is required from 2026-08-21: it is what reply mode resolves
+        // @mentions against and what signs an email, and a blank one silently degrades
+        // both (§16). Gated here as well as on the button so the state machine, not the
+        // view, is the thing that will not move.
+        case .welcome where mainModel.isSignedIn && mainModel.hasDisplayNameDraft:
+            preparePurpose()
         case .purpose: move(to: .review)
         case .review: confirmButtons()
         case .access where mainModel.isTrusted: move(to: .bar)
@@ -211,12 +216,6 @@ final class OnboardingCoordinator: ObservableObject {
 
     func select(source: OnboardingSource) {
         selectedSource = source
-    }
-
-    /// The question is optional by construction: 「答えない」 moves on and sends nothing,
-    /// so a skipped run is absent from the series rather than a guess inside it.
-    func skipSource() {
-        move(to: .offer)
     }
 
     private func submitSource() {

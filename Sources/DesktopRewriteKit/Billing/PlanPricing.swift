@@ -151,6 +151,28 @@ public enum PlanPricing {
     /// deliberately unenforced one a claim rather than a formatting choice.
     public static let welcomeOfferWindowHours = 72
 
+    /// The monthly rewrite caps, for copy only.
+    ///
+    /// **`desktop.plan_limits` is authoritative** — the gateway reads that table and a
+    /// number here can only ever describe it. These exist because the same two figures
+    /// were written out by hand in the plan card, the offer page and the quota-exhausted
+    /// toast, and a limit change has to reach all three or the app quotes a cap it does
+    /// not enforce. Anywhere an entitlement is already loaded, prefer
+    /// `Entitlement.monthLimit`: that came from the server and is right even when these
+    /// are stale.
+    public static let freeMonthlyRewrites = 30
+    public static let proMonthlyRewrites = 1_000
+
+    /// `proMonthlyRewrites` as all three languages write it: `1,000`.
+    ///
+    /// Grouping is pinned to `en_US` rather than taken from `.formatted()`, because
+    /// that reads the *system* locale, which is not the app's language (§17) — a Mac
+    /// set to French would render `1 000` inside otherwise Japanese copy. All three of
+    /// our languages comma-group at thousands, so one pinned format serves them all.
+    public static var proMonthlyRewritesDisplay: String {
+        proMonthlyRewrites.formatted(.number.locale(Locale(identifier: "en_US")))
+    }
+
     // MARK: - Derived figures
 
     /// The annual plan's per-month figure, or **nil when the division is not exact**.
