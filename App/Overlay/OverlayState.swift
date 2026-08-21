@@ -77,6 +77,25 @@ enum OverlayState: Equatable {
         }
     }
 
+    /// Whether Sparkle may run a check right now. A scheduled updater window can take
+    /// key, which is safe only while the bar is resting — anywhere else it would
+    /// interrupt capture, typing, a rewrite in flight, or a result being judged.
+    ///
+    /// **Both resting states, not just `.pill`.** `.replyArmed` is documented above as
+    /// standing in for `.pill` while a copy is live, and clipboard watching is on by
+    /// default, so a copy puts the bar here for `ReplySource.lifetime` — 180 s at a
+    /// time, many times a day. Declining a check is not free: Sparkle stamps
+    /// `SULastCheckTime` *before* it asks `updater(_:mayPerform:)`
+    /// (`SPUUpdater.m:789` against `:847`) and then reschedules with
+    /// `usingCurrentDate:NO`, so one refusal costs a whole interval rather than
+    /// delaying the check to the moment the bar is free again.
+    var allowsUpdateCheck: Bool {
+        switch self {
+        case .pill, .replyArmed: return true
+        case .hoverRow, .inputBar, .generating, .result, .replyInput: return false
+        }
+    }
+
     /// The SwiftUI subtree whose intrinsic size drives `PillPanel`.
     ///
     /// This is deliberately separate from the state itself: generating and result both

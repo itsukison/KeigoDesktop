@@ -47,26 +47,30 @@ from any of these, and add a case to `Icon.Name`.
 
 ## The product mark — not Reicon
 
-Three assets here are the app's own artwork, drawn from `public/` at the repo root. They
+Four assets here are the app's own artwork, drawn from `public/` at the repo root. They
 are raster (32 / 64 px — macOS builds no 3x), not SVG, because that is the form the
 artwork arrived in.
 
 | Asset | Cut | Source | Used for |
 |---|---|---|---|
-| `icon-mark` | line art, **template** | `public/black.png` | `AppMark` (sidebar, onboarding), the menu-bar status item |
+| `icon-brand` | the full-bleed purple tile | `public/default.png` | `AppMark` (sidebar, onboarding) |
+| `icon-mark` | line art, **template** | `public/black.png` | the menu-bar status item, `IconPlate(icon: .mark)` |
 | `icon-mark-filled` | filled, two-tone, **not** a template | `public/bgremoved.png` | static source/fallback for the overlay animation |
 | `AppIcon` | the full tile | `public/default.png` | the Dock, Finder, the Accessibility dialog |
 
-**Why two cuts.** The mark is a two-tone illustration: an off-white keycap with a black
-keyline and black eyes. On the window's near-white sidebar the keyline reads as a
-photograph rather than as chrome, so the window takes the line art and tints it
-`#5a57ba` like every other glyph. On the overlay's `#141312` the reverse is true — the
-line art's own double keyline closes into a smudge at 16 pt, while the filled art is a
-white shape with two dark counters and stays legible. The menu bar needs alpha (it
-inverts its contents), so it takes the template cut.
+**Why the cuts.** The mark is a two-tone illustration: an off-white keycap with a black
+keyline and black eyes. The window's brand row shows the full-bleed default artwork
+(the keycap on its purple field, the same cut `AppIcon` ships) clipped to a rounded
+tile in `AppMark`. On the overlay's `#141312` the line art's own double keyline closes
+into a smudge at 16 pt, while the filled art is a white shape with two dark counters
+and stays legible. The menu bar needs alpha (it inverts its contents), so it takes the
+template cut.
 
 **How they were derived**, so this is repeatable:
 
+- `icon-brand` — `public/default.png` resized to 64 / 128, full bleed. The corners are
+  rounded at draw time by `AppMark` (22.5 %, continuous), not baked in, so the radius
+  scales with the tile.
 - `icon-mark` — `public/black.png` is white strokes on pure black, so luminance *is* the
   alpha. Ramp 40→200 to drop the faint halo, crop to the content box, pad to square,
   resize. Padding to square matters: `Icon` draws into a square frame and the artwork is

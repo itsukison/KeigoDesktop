@@ -303,9 +303,18 @@ final class OnboardingCoordinator: ObservableObject {
         overlay.copyReplyTutorialSource(message)
     }
 
+    /// 「あとで始める」 declines **one exercise**, not the run.
+    ///
+    /// This called `finish()` until 2026-08-21, which ended onboarding from whichever
+    /// practice the link was pressed on — and `source` and `offer` are the two pages
+    /// after the practices, so declining a tutorial also cancelled the only ask for
+    /// money the run contains. `DesktopOnboardingStep.skippingEducation` owns where it
+    /// lands now; the guard stays because these pages already require both conditions
+    /// and advancing without a session would reach `.offer` with nothing to offer.
     func skipEducation() {
         guard mainModel.isSignedIn, mainModel.isTrusted else { return }
-        finish()
+        guard let next = step.skippingEducation else { return }
+        move(to: next)
     }
 
     func close() {

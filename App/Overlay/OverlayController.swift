@@ -156,11 +156,10 @@ final class OverlayController: ObservableObject {
         tutorialPrompts.isEmpty ? prompts : tutorialPrompts
     }
 
-    /// A scheduled updater window may take key, which is safe only while the bar is
-    /// fully at rest. In every other state that would interrupt capture, typing, a
-    /// rewrite in flight, or a result the user is still judging.
+    /// Sparkle's gate, decided by the state alone — see `OverlayState.allowsUpdateCheck`
+    /// for which states rest and why refusing one is expensive.
     var allowsUpdateCheck: Bool {
-        state == .pill
+        state.allowsUpdateCheck
     }
 
     init(

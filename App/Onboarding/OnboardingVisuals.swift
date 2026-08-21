@@ -238,7 +238,7 @@ struct OnboardingSlackScene<Composer: View>: View {
                                         RoundedRectangle(cornerRadius: 9)
                                             .strokeBorder(
                                                 copied ? Tokens.Window.accent : Tokens.Window.hairline,
-                                                lineWidth: copied ? 1.5 : 1
+                                                lineWidth: 1
                                             )
                                     )
                                     .clipShape(RoundedRectangle(cornerRadius: 9))

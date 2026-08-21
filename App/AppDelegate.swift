@@ -49,6 +49,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     private var statusMenu: NSMenu?
     private var updaterStarted = false
     private var deferredUpdateCheckTask: Task<Void, Never>?
+    /// How recent a check has to be for a wake to leave it alone. Ten minutes against
+    /// an hourly floor: often enough that coming back to the machine is a real
+    /// opportunity to hear about a release, rare enough that a burst of wake
+    /// notifications is still one appcast read.
+    private static let wakeUpdateCheckThrottle: TimeInterval = 600
 
     private lazy var updaterController = SPUStandardUpdaterController(
         startingUpdater: false,
@@ -141,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         // update found in an earlier run is announced again now rather than waiting a
         // day for the next scheduled check to rediscover it.
         mainModel?.restorePendingUpdate()
+        observeSystemWake()
         startUpdaterIfConfigured()
         Task { [auth] in
             let signedIn = await auth.isSignedIn
@@ -604,6 +610,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         guard let publicKey, !publicKey.isEmpty, !publicKey.contains("$(") else { return }
         updaterController.startUpdater()
         updaterStarted = true
+        // `startUpdater` only looks straight away when the scheduled interval has
+        // *already* elapsed; inside it, Sparkle just arms its timer. Ask anyway, so
+        // every launch reads the appcast once. `requestBackgroundUpdateCheck` stands
+        // down when Sparkle is already mid-session, so the overdue case is not checked
+        // twice.
+        requestBackgroundUpdateCheck()
+    }
+
+    /// Look now, or as soon as looking is safe.
+    ///
+    /// **Why this exists beside the timer.** `SUScheduledCheckInterval` is a ceiling on
+    /// how stale a find can be, and Sparkle clamps it to an hour, so the timer alone
+    /// cannot answer "the release went out, when will they hear about it?" any better
+    /// than that. `checkForUpdatesInBackground` has no rate limit of its own, so the
+    /// moments that mean *the user is back and the machine has been away* are cheaper
+    /// and better-timed than a tick whose phase is set by whenever the app last
+    /// launched.
+    ///
+    /// `canCheckForUpdates` is false exactly while a Sparkle session is in progress. A
+    /// false reading is therefore not a reason to defer — Sparkle is already looking,
+    /// or already holding a find this app has announced — so this returns instead of
+    /// arming the retry loop and stacking a second check behind the first.
+    private func requestBackgroundUpdateCheck() {
+        guard updaterStarted, updaterController.updater.canCheckForUpdates else { return }
+        guard overlay?.allowsUpdateCheck == true else {
+            scheduleDeferredUpdateCheck()
+            return
+        }
+        updaterController.updater.checkForUpdatesInBackground()
+    }
+
+    /// `NSWorkspace`'s own centre, not `NotificationCenter.default` — these two names are
+    /// only posted on the workspace centre, and observing the wrong one is silent.
+    ///
+    /// Both names, because they answer different questions: `didWake` is the machine
+    /// coming out of sleep, `screensDidWake` is the display coming back while the
+    /// machine never slept, which is what a lock-and-return actually looks like. The
+    /// throttle in `systemDidWake` is what makes registering for both cheap.
+    private func observeSystemWake() {
+        let centre = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+            centre.addObserver(
+                self,
+                selector: #selector(systemDidWake),
+                name: name,
+                object: nil
+            )
+        }
+    }
+
+    /// Waking is the one event that reliably means the user has come back to a machine
+    /// that was away, and it is the moment a pending update is most worth mentioning.
+    ///
+    /// Throttled, because these arrive in bursts — opening a lid fires `didWake` and
+    /// `screensDidWake` together, and a display that sleeps on its own at a desk fires
+    /// the latter repeatedly through a day. `lastUpdateCheckDate` is Sparkle's own
+    /// record, so this also stands down after a check the timer just made.
+    @objc private func systemDidWake() {
+        guard updaterStarted else { return }
+        if let last = updaterController.updater.lastUpdateCheckDate,
+           Date().timeIntervalSince(last) < Self.wakeUpdateCheckThrottle {
+            return
+        }
+        requestBackgroundUpdateCheck()
     }
 
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
@@ -691,7 +761,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
                 try? await Task.sleep(for: .seconds(2))
                 guard let self else { return }
                 guard self.updaterStarted else { continue }
-                if self.overlay?.allowsUpdateCheck == true {
+                // Both conditions, and the task stays armed until both hold. Declining
+                // in `mayPerform` aborts a session that is still being torn down, so
+                // `canCheckForUpdates` can be false for a moment after the refusal —
+                // and `checkForUpdatesInBackground` logs an error and returns when it
+                // is. Clearing the task before that call was how the retry got lost:
+                // nothing was left to re-arm it, and the find waited for the next
+                // launch or the next interval.
+                if self.overlay?.allowsUpdateCheck == true,
+                   self.updaterController.updater.canCheckForUpdates {
                     self.deferredUpdateCheckTask = nil
                     self.updaterController.updater.checkForUpdatesInBackground()
                     return

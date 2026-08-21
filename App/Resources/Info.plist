@@ -46,7 +46,14 @@
 	<string>編集中の文章を読み取って書き換えた文章を戻すために、アクセシビリティの許可が必要です。画面の内容を記録したり、他の目的で使用することはありません。</string>
 
 	<!-- §9: Sparkle checks a static HTTPS appcast. The public EdDSA key is injected
-	     as a build setting; release builds fail in CI if it has not been configured. -->
+	     as a build setting; release builds fail in CI if it has not been configured.
+
+	     SUScheduledCheckInterval is an hour, which is Sparkle's own floor: release
+	     builds clamp anything smaller up to 3600 s in SPUUpdaterSettings'
+	     minimumUpdateCheckInterval, so a smaller number here would be a lie. A day was
+	     the reason a 0.1.4 install saw nothing for a release published 20 minutes
+	     earlier. The timer is the *ceiling* on staleness, not the mechanism — see
+	     AppDelegate's requestBackgroundUpdateCheck for the events that beat it. -->
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUAutomaticallyUpdate</key>
@@ -56,7 +63,7 @@
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
 	<key>SUScheduledCheckInterval</key>
-	<integer>86400</integer>
+	<integer>3600</integer>
 
 	<!-- §6: sign-in returns through this scheme. -->
 	<key>CFBundleURLTypes</key>

@@ -504,7 +504,7 @@ private struct PlanCard: View {
             RoundedRectangle(cornerRadius: Tokens.Window.cardRadius, style: .continuous)
                 .strokeBorder(
                     highlighted ? Tokens.Window.accent : Tokens.Window.hairline,
-                    lineWidth: highlighted ? 1.5 : 1
+                    lineWidth: 1
                 )
         )
         .clipShape(

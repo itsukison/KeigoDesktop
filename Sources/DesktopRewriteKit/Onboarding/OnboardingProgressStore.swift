@@ -46,6 +46,40 @@ public enum DesktopOnboardingStep: Int, CaseIterable, Sendable {
         $0 != .language && $0 != .offer
     }
 
+    /// The four pages that carry 「あとで始める」 — the bar explainer and the three
+    /// practices. They are the only pages of the run whose content is teaching rather
+    /// than setup, and so the only ones a user can decline without leaving the app in
+    /// a half-configured state.
+    public static let educationSteps: [DesktopOnboardingStep] = [
+        .bar, .practice, .customPractice, .replyPractice,
+    ]
+
+    /// Where 「あとで始める」 goes: **the next page in `flow`, never the end of the run.**
+    ///
+    /// It used to call `finish()`, which fired `desktop_onboarding_completed` and shut
+    /// the window from whichever practice the user was on. That skipped `source` and
+    /// `offer` along with the exercise — so declining one tutorial silently cancelled
+    /// the only time the run ever asks for money, and did it on the four pages that
+    /// come *before* the ask. Two of the first four completions took that exit and
+    /// were never shown a price; `desktop.welcome_offers` has no row for either,
+    /// because `desktop_start_welcome_offer` is called from `.offer` and `.offer` was
+    /// never reached.
+    ///
+    /// Skipping is per page, so the link and the primary button differ only in whether
+    /// the current exercise had to be finished first. That is deliberate: the run's
+    /// last three pages are not optional, and the way out of the tutorial is forward
+    /// through it rather than around it.
+    ///
+    /// `nil` for every other page — nothing else offers the link, and a caller asking
+    /// on `.offer` or `.complete` is asking the wrong question.
+    public var skippingEducation: DesktopOnboardingStep? {
+        guard Self.educationSteps.contains(self),
+              let position = Self.flow.firstIndex(of: self),
+              position + 1 < Self.flow.count
+        else { return nil }
+        return Self.flow[position + 1]
+    }
+
     /// Which rail segment to light for a step that has none: the last counted step at
     /// or before it. Without this the rail reads `firstIndex(of:) ?? 0` and jumps back
     /// to segment one for the length of the offer page.

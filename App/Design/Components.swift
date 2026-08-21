@@ -652,7 +652,7 @@ struct FieldBackground: View {
             .fill(Tokens.Window.group)
             .overlay(
                 RoundedRectangle(cornerRadius: Tokens.Window.inputRadius, style: .continuous)
-                    .strokeBorder(focused ? Tokens.Window.accent : .clear, lineWidth: 1.5)
+                    .strokeBorder(focused ? Tokens.Window.accent : .clear, lineWidth: 1)
             )
             .animation(.easeOut(duration: 0.12), value: focused)
     }

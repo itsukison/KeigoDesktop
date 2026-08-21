@@ -134,6 +134,47 @@ final class OnboardingProgressStoreTests: XCTestCase {
         XCTAssertEqual(DesktopOnboardingStep.flow.dropLast(2).last, .source)
     }
 
+    /// 「あとで始める」 advances one page. It used to call `finish()`, which ended the run
+    /// from a practice screen and took `source` and `offer` with it — so declining a
+    /// tutorial cancelled the ask for money that comes two pages later.
+    func testSkippingAnEducationPageAdvancesOnePageInsteadOfEndingTheRun() {
+        XCTAssertEqual(DesktopOnboardingStep.bar.skippingEducation, .practice)
+        XCTAssertEqual(DesktopOnboardingStep.practice.skippingEducation, .customPractice)
+        XCTAssertEqual(DesktopOnboardingStep.customPractice.skippingEducation, .replyPractice)
+        XCTAssertEqual(DesktopOnboardingStep.replyPractice.skippingEducation, .source)
+    }
+
+    /// Skipping every page that offers the link still walks through both closing
+    /// questions. This is the assertion that fails if a future edit routes any skip
+    /// past `.offer` again.
+    func testSkippingEveryEducationPageStillReachesTheSourceQuestionAndTheOffer() {
+        var visited: [DesktopOnboardingStep] = []
+        var step = DesktopOnboardingStep.bar
+        while let next = step.skippingEducation {
+            visited.append(next)
+            step = next
+        }
+
+        XCTAssertEqual(visited.last, .source)
+        XCTAssertFalse(visited.contains(.complete))
+        // `.source` has no link of its own; 答えない runs `skipSource()`, which moves to
+        // `.offer`. So the pages after the last skip are the two the run cannot lose.
+        XCTAssertEqual(Array(DesktopOnboardingStep.flow.suffix(3)), [.source, .offer, .complete])
+    }
+
+    /// Only the four teaching pages carry the link. Everything else answers nil, so a
+    /// caller cannot use it to jump out of a setup page that has to be completed.
+    func testOnlyTheFourTeachingPagesCanBeSkipped() {
+        XCTAssertEqual(
+            DesktopOnboardingStep.educationSteps,
+            [.bar, .practice, .customPractice, .replyPractice]
+        )
+        for step in DesktopOnboardingStep.allCases
+        where !DesktopOnboardingStep.educationSteps.contains(step) {
+            XCTAssertNil(step.skippingEducation, "\(step) must not be skippable")
+        }
+    }
+
     /// The rail counts setting-up steps. Neither the language question nor the offer
     /// is one, and the offer being counted would frame paying as part of installing.
     func testTheRailCountsNeitherTheLanguagePageNorTheOffer() {

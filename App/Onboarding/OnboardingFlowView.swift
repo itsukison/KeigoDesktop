@@ -262,8 +262,7 @@ private struct WelcomeStep: View {
         HStack(alignment: .top, spacing: 40) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 9) {
-                    AppMark(size: 20)
-                        .opticalCentre()
+                    AppMark(size: 24)
                     Text(tr("敬語ボタン", "KeigoButton", "敬語ボタン"))
                         .font(Tokens.Font.body(14, weight: .medium))
                         .foregroundStyle(Tokens.Window.textPrimary)
@@ -547,7 +546,7 @@ private struct LanguageOptionCard: View {
                     Circle()
                         .strokeBorder(
                             selected ? Tokens.Window.accent : Tokens.Window.controlOff,
-                            lineWidth: 1.5
+                            lineWidth: 1
                         )
                         .frame(width: 18, height: 18)
                     if selected {
@@ -565,7 +564,7 @@ private struct LanguageOptionCard: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(
                         selected ? Tokens.Window.accent : Tokens.Window.hairline,
-                        lineWidth: selected ? 1.5 : 1
+                        lineWidth: 1
                     )
             )
         }
@@ -695,7 +694,7 @@ private struct PurposeOptionCard: View {
                     Spacer(minLength: 8)
                     ZStack {
                         Circle()
-                            .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1.5)
+                            .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1)
                             .frame(width: 18, height: 18)
                         if selected {
                             Circle().fill(Tokens.Window.accent).frame(width: 10, height: 10)
@@ -723,7 +722,7 @@ private struct PurposeOptionCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.hairline, lineWidth: selected ? 1.5 : 1)
+                    .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.hairline, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -1457,7 +1456,7 @@ private struct SourceOptionCard: View {
                 Spacer(minLength: 6)
                 ZStack {
                     Circle()
-                        .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1.5)
+                        .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1)
                         .frame(width: 18, height: 18)
                     if selected {
                         Circle().fill(Tokens.Window.accent).frame(width: 10, height: 10)
@@ -1472,7 +1471,7 @@ private struct SourceOptionCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.hairline, lineWidth: selected ? 1.5 : 1)
+                    .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.hairline, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -1652,7 +1651,7 @@ private struct OfferCard: View {
                     Spacer(minLength: 6)
                     ZStack {
                         Circle()
-                            .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1.5)
+                            .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1)
                             .frame(width: 18, height: 18)
                         if selected {
                             Circle().fill(Tokens.Window.accent).frame(width: 10, height: 10)
@@ -1692,7 +1691,7 @@ private struct OfferCard: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(
                         selected ? Tokens.Window.accent : Tokens.Window.hairline,
-                        lineWidth: selected ? 1.5 : 1
+                        lineWidth: 1
                     )
             )
         }

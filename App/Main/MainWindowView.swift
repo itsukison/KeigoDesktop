@@ -39,8 +39,7 @@ struct MainWindowView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                AppMark(size: 15)
-                    .opticalCentre()
+                AppMark(size: 22)
                 Text(tr("敬語ボタン", "KeigoButton", "敬語ボタン"))
                     .font(Tokens.Font.body(15, weight: .semibold))
                     .foregroundStyle(Tokens.Window.textPrimary)

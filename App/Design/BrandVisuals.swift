@@ -9,20 +9,21 @@ import SwiftUI
 /// puts the accent on the chrome itself, so nothing here is load-bearing any more —
 /// it is just the handful of shapes the window draws that are not text or a control.
 
-/// The product mark: the keycap, as line art, in the accent.
-///
-/// The window gets the outline cut rather than the full-colour app icon. The icon is a
-/// two-tone illustration with a black keyline, and at 15 pt on a `#f5f6f7` sidebar it
-/// reads as a photograph of something rather than as chrome. Line art in `#5a57ba` is
-/// the same rule the rest of §14 follows — the accent is on the chrome. The overlay,
-/// which is dark and cannot tint a keyline away, takes the colour cut instead
-/// (`BrandGlyph`).
+/// The product mark: the default artwork — the keycap on its purple field — clipped
+/// to a rounded tile. This is the same cut `AppIcon` ships, so the window's brand row
+/// shows the icon the Dock and Finder show. The corner radius follows the macOS icon
+/// grid (~22.5 %, continuous) rather than a fixed number, so the tile keeps the
+/// squircle's proportion at any size. The menu bar keeps the template line-art cut
+/// (it inverts its contents); the overlay keeps the animation atlases (`BrandGlyph`).
 struct AppMark: View {
-    var size: CGFloat = 15
+    var size: CGFloat = 22
 
     var body: some View {
-        Icon(.mark, size: size)
-            .foregroundStyle(Tokens.Window.accent)
+        Image(Icon.Name.brand)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.225, style: .continuous))
     }
 }
 
