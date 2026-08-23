@@ -35,6 +35,16 @@ import {
   stripe,
   welcomeCouponId,
 } from "../_shared/billing.ts";
+import { capture } from "../_shared/posthog.ts";
+
+/// The two event types that mean "a Checkout Session this app created has been paid
+/// for". `async_payment_succeeded` is the delayed-method leg (Konbini, bank transfer):
+/// the session completes first and the money arrives later, so treating only
+/// `completed` as the purchase would count an unpaid intent as revenue.
+const CHECKOUT_PAID_TYPES = new Set([
+  "checkout.session.completed",
+  "checkout.session.async_payment_succeeded",
+]);
 
 /// Stripe's default tolerance. NEVER 0: that would reject every event whose delivery
 /// took longer than the clocks disagree by.
@@ -165,7 +175,7 @@ async function handle(event: any): Promise<void> {
     return;
   }
 
-  if (type === "checkout.session.completed" || type === "checkout.session.async_payment_succeeded") {
+  if (CHECKOUT_PAID_TYPES.has(type)) {
     await desktopRPC("desktop_clear_checkout_intent", {
       p_user_id: null,
       p_session_id: typeof object.id === "string" ? object.id : null,
@@ -324,6 +334,34 @@ async function handle(event: any): Promise<void> {
       p_coupon_id: redeemed,
       p_currency: selected?.currency ?? null,
     }).catch(() => {});
+  }
+
+  // `docs/analytics.md` §3, "Closed on 2026-08-22" — the far end of `desktop_checkout_started`.
+  //
+  // Deliberately placed here, after `desktop_process_stripe_event`: the event reports
+  // what was actually WRITTEN, not what the payload claimed. `result.applied` is the
+  // monotonic `reconciled_at` guard having accepted this snapshot, so a stale duplicate
+  // delivery cannot report a second purchase.
+  //
+  // Only the two paid Checkout types, so the nine subscribed events do not each send
+  // one — `invoice.paid` recurs for the life of the subscription and would turn a
+  // conversion count into a renewal count.
+  if (CHECKOUT_PAID_TYPES.has(type) && result?.applied === true && result?.plan === "pro") {
+    // `billing_interval` and `currency` match `desktop_checkout_started`'s property
+    // names exactly, so the funnel's two ends can be broken down by the same key. Both
+    // come from the Stripe fetch rather than the client's belief — which is the point
+    // of the pair: §3's `offer_expected` is what the app THOUGHT, `welcome_offer_redeemed`
+    // is what the server did, and the two disagreeing is the signal.
+    await capture(userId, "desktop_checkout_completed", {
+      billing_interval: selected?.interval ?? null,
+      currency: selected?.currency ?? null,
+      welcome_offer_redeemed: redeemed !== null,
+      stripe_status: selected?.status ?? null,
+      // Konbini and bank transfer land here rather than on `completed`, and a delayed
+      // payment is a materially different conversion — it is worth being able to split
+      // the funnel by it rather than discovering the shape later.
+      payment_deferred: type === "checkout.session.async_payment_succeeded",
+    });
   }
 
   console.log(JSON.stringify({

@@ -1,6 +1,7 @@
 import DesktopRewriteKit
 import Foundation
 import PostHog
+import TextIO
 
 enum PostHogConfiguration {
     static func configure() {
@@ -25,7 +26,7 @@ enum PostHogConfiguration {
 
     /// Stamps every event — including the ones we never call `capture` for, such as
     /// `$exception`, `$identify` and the application lifecycle events — with
-    /// `surface: macos`.
+    /// `surface: macos`, the interface language, and whether Accessibility is granted.
     ///
     /// §7 makes the separate project the boundary, and this is the second layer behind
     /// it: the desktop and the iOS keyboard share one `auth.users` id and therefore one
@@ -44,6 +45,22 @@ enum PostHogConfiguration {
             // and so the English and 简体中文 funnels are separable from day one
             // rather than after the fact.
             "app_language": AppLanguageState.current.rawValue,
+            // §5 says the app is useless without this permission, and until 2026-08-22
+            // nothing measured it. The install → onboarding → first-real-rewrite funnel
+            // stepped straight over the one gate that can silently end the product, so a
+            // user who never granted it and one who granted it and hit a broken AX tree
+            // were the same row.
+            //
+            // A super property rather than a per-event one for the same reason as
+            // `app_language`: the question is always "split this series" — did the users
+            // who never completed a real rewrite have permission? — and never "what
+            // happened on this row". The rewrite events *also* send it live, because
+            // stored state is only as fresh as the last `refresh()` and a
+            // `TextIOError.notTrusted` failure is exactly when it is stale.
+            //
+            // Re-registered by `MainModel.applyTrusted` whenever the state flips — the
+            // same hazard as the surface being cleared by `reset()` on sign-out.
+            "accessibility_granted": AXPermission.isTrusted,
         ])
     }
 

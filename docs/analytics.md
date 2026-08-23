@@ -16,6 +16,11 @@ the one thing they falsified. The dashboard was rebuilt on 2026-08-10 from 15 ti
 21: the original set measured the rewrite loop and nothing before it, so there was no
 answer to "how many people arrived today". §4 is the new set.
 
+**2026-08-22 — 23 tiles, and three instrumentation gaps closed.** The first read of real
+user behaviour is what prompted it: 6 external users had produced **4 real rewrites
+between them**, and 14 of their 18 completed rewrites were the onboarding tutorial. §3's
+"Closed on 2026-08-22" has the three fixes; §6 is why session replay is not one of them.
+
 ---
 
 ## 1. Why this is a separate project and not a filter
@@ -110,12 +115,15 @@ partner: an event without it, in the desktop project, came from somewhere it sho
 
 | Event | Where | Properties |
 |---|---|---|
-| `desktop_rewrite_completed` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `prompt_origin`, `is_reply`, `latency_ms`, `candidate_count`, `scope`, `has_destination` |
-| `desktop_rewrite_inserted` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `accepted`, `selected_index`, `scope`, `insert_destination` |
-| `desktop_rewrite_copied` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `scope`, `reason` |
-| `desktop_rewrite_failed` | `Analytics.swift` | `message` (the app's own Japanese toast — never captured or rewritten text) |
+| `desktop_rewrite_completed` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `prompt_origin`, `is_reply`, `latency_ms`, `candidate_count`, `scope`, `has_destination`, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_inserted` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `accepted`, `selected_index`, `scope`, `insert_destination`, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_copied` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `scope`, `reason`, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_failed` | `Analytics.swift` | `message` (the app's own Japanese toast — never captured or rewritten text), `is_tutorial`, `accessibility_granted` |
 | `desktop_signed_up` | `MainModel.swift` | `method` (`password` \| `google`), `confirmation_required` (password only) |
 | `desktop_signed_in` | `MainModel.swift` | `method` (`password` \| `google`) |
+| `desktop_accessibility_prompted` | `MainModel.swift` | `source` (`onboarding` \| `preferences` \| `home`), `method` (`system_prompt` \| `settings_link`) |
+| `desktop_accessibility_granted` | `MainModel.swift` | `source` (the prompt that preceded it, or `outside_app`), `seconds_since_prompt` |
+| `desktop_checkout_completed` | `desktop-stripe-webhook` (**server**) | `billing_interval`, `currency`, `welcome_offer_redeemed`, `stripe_status`, `payment_deferred`, `captured_by: server` |
 | `desktop_onboarding_completed` | `OnboardingWindowController.swift` | — |
 | `desktop_source_selected` | `OnboardingWindowController.swift` | `source`, plus person property `attribution_source` (`$set_once`) |
 | `desktop_prompt_created` | `MainModel.swift` | `slot` |
@@ -148,6 +156,22 @@ happened on this row". Two things to know when reading it:
 Events captured before the first build carrying this property have no
 `app_language` at all; they are Japanese by construction, since the language page
 did not exist.
+
+**And `accessibility_granted` (2026-08-22)**, registered in the same call. §5 says the
+app is useless without the Accessibility permission and until this date nothing measured
+it, so the activation funnel stepped straight over the one gate that can silently end the
+product: a user who never granted it and a user who granted it and hit a broken AX tree
+were the same row. It is a super property for `app_language`'s reason — the question is
+always "split this series", never "what happened on this row" — and:
+
+- **`MainModel.applyTrusted` is the single writer of `isTrusted` and re-registers on
+  every flip.** Super properties are stored, so without that the value keeps whatever it
+  held at launch and every event after a grant still reports no permission.
+- **The four rewrite events also send it as a per-event property, read live from
+  `AXPermission.isTrusted` at capture time.** Deliberate redundancy, and not the same
+  reading: the stored one is only as fresh as the last `refresh()`, and a
+  `TextIOError.notTrusted` failure is exactly the moment it is stale. A row where the
+  two disagree is a permission that changed without the window ever activating.
 
 **`desktop_update_offered` / `desktop_update_accepted` are new on 2026-08-10**, and they
 exist because the update path is otherwise entirely unobservable. A scheduled Sparkle
@@ -241,32 +265,82 @@ These bound what §4 can show, and each is a small change rather than a design p
    built on — **tiles 1, 2 and 5 therefore carry no surface filter**, which is recorded
    in their own descriptions so nobody "fixes" them later. The real fix is to hand the
    properties to `setup` rather than register them after it.
-2. **No `desktop_checkout_completed`.** The revenue funnel ends at intent. The Stripe
-   webhook (`desktop-stripe-webhook`) knows the answer server-side; nothing forwards it.
-3. **The rewrite events have no `is_tutorial`,** and onboarding practice sends them.
-   `OverlayController` skips history for a tutorial rewrite but calls
-   `analytics.rewriteCompleted` and `analytics.inserted` either way, and all three
-   practice lessons complete *only* on a successful Insert. So every new user donates
-   three guaranteed acceptances to tile 11 and three rewrites to tile 10. At today's
-   volume that is most of the numerator. One property on both events fixes it.
-4. **`io_path` is only on the two rewrite events.** A capture that fails before a path
-   is chosen reports no path at all, so tile 14's denominator is successful captures.
-5. **A DMG download is not an event and never will be.** Distribution is a GitHub
+2. **`io_path` is only on the rewrite events.** A capture that fails before a path is
+   chosen reports no path at all, so tile 14's denominator is successful captures.
+3. **A DMG download is not an event and never will be.** Distribution is a GitHub
    release, so PostHog's earliest sighting of anyone is `Application Installed` — the
    first launch. Downloads that never launch are only visible as the GitHub release
    asset's `download_count`, which is cumulative and lives outside this project.
+
+### Closed on 2026-08-22
+
+Three of the gaps this section used to list were closed together, because the read that
+prompted them was the same one: **6 external users had produced 4 real rewrites between
+them, and 14 of their 18 completed rewrites were the onboarding tutorial.** The numbers
+were not visible until the tutorial could be subtracted.
+
+- **~~No `desktop_checkout_completed`~~.** Now sent by `desktop-stripe-webhook` through
+  `supabase/functions/_shared/posthog.ts`. It could never have come from the client:
+  Checkout hands off to the DEFAULT BROWSER, so the app is not running when payment
+  lands, and a `success_url` redirect is not proof of payment (§3.3). Fires only for the
+  two paid Checkout types and only when `desktop_process_stripe_event` reports
+  `applied` and `plan: pro`, so a duplicate delivery cannot report a second purchase.
+  `captured_by: server` names the writer. Tile 23 is the funnel.
+- **~~The rewrite events have no `is_tutorial`~~.** All four now carry it. Measured
+  before the fix: **38 of 117 completed rewrites (32%) were practice**, and every new
+  user donated three guaranteed acceptances to tile 11, because all three lessons
+  complete *only* on a successful Insert. On `desktop_rewrite_failed` the flag reads
+  from whether a lesson is *armed* rather than from a `PendingRewrite`, because a capture
+  failure happens before one exists — a slightly wider claim, recorded in
+  `PostHogAnalytics.failed`.
+- **~~No permission-granted event~~.** `desktop_accessibility_prompted` and
+  `desktop_accessibility_granted`, plus the `accessibility_granted` super property above.
+  `granted` fires **once per person ever** — the flag is persisted, because `refresh()`
+  runs on every window activation and this would otherwise be a launch count, and a
+  revocation (every unsigned dev rebuild, per `AXPermission`) does not re-arm it. Two
+  consequences to read it with: existing users granted the permission before this
+  shipped, so their first launch on the new build sends `source: outside_app`; and
+  tile 5's 14-day window means those backfills do not join their original install.
+
+**The tiles still filter on `host_app_bundle_id`, not `is_tutorial`.** The bundle id works
+on data captured before the property existed and the property does not, and the two agree
+by construction — onboarding practice rewrites the app's OWN field, so
+`com.core7.keigobutton.mac` *is* the practice. Switch the tiles to `is_tutorial` once
+there are 30 days of it, not before.
 
 ---
 
 ## 4. The dashboard — "Desktop (macOS) Overview"
 
-Dashboard **1974822**, **21 tiles in five bands**, rebuilt 2026-08-10. The first
+Dashboard **1974822**, **23 tiles in five bands** (21 as of 2026-08-10, plus 22 and 23 on 2026-08-22). The first
 fifteen measured the rewrite loop and everything downstream of it; what they could not
 answer was how many people arrived, signed up or finished first run on a given day —
 which is the first question anyone asks of a product that has just started shipping.
 Band 1 is that question and the shape of it is taken from 465060's
 `Product KPIs — code-aligned (v2)`, deliberately: two surfaces of one product should be
 readable side by side even though their numbers must never be added together.
+
+**The tile links in this section were all wrong until 2026-08-22, and the way they were
+wrong is worth knowing.** The dashboard's insights were **recreated on 2026-08-21** — 19
+of the 21 got new `short_id`s and the originals were left saved but detached from any
+dashboard. Editing a tile by the short_id written here therefore changed nothing anyone
+could see. The links below are the ones dashboard 1974822 actually renders; **read them
+off the dashboard, not from here, before editing a tile.** The orphaned originals
+(`Rl35xXid`, `bTQAoCs7`, `bb5UPyEK`, `9cbmwXvI`, …) are still in the project and should
+be deleted once someone has confirmed nothing else points at them.
+
+The recreated set also differs in three ways the originals did not: `filterTestAccounts`
+is **`true`**, the surface filter sits on each *series* rather than at the top level, and
+`dateRange` is a fixed `2026-08-01` rather than `-30d`. Match that shape when adding a
+tile.
+
+**`filterTestAccounts: true` currently filters nothing, and this is the trap.** The rule
+on the project is a `not_in` exclusion of cohort 467436, *Internal / Test users*, which
+matches on the person property `$internal_or_test_user` — and that property is **null on
+all 10 people in the project**. So the dashboard says it excludes internal traffic and
+does not. Setting the property on the three owner accounts is all it would take; **not
+doing so is a decision** (asked and answered 2026-08-22), so every tile is "us plus them".
+For scale: the owners are 758 of 892 events (**85%**) and 75 of the 79 real rewrites.
 
 **Every tile carries `surface = macos` except 1, 2 and 5.** Those three touch
 `Application Installed`, which has no surface stamp (§3 gap 1), and filtering would
@@ -283,22 +357,26 @@ multiplies too renders 50 % as 5000 %.
 
 | # | Tile | Query |
 |---|---|---|
-| 1 | **[Installs & sign-ups per day](https://us.posthog.com/project/549465/insights/XIZ1sNHS)** | Trends, daily bars — `Application Installed`, `desktop_signed_up`, `desktop_signed_in`. No surface filter |
-| 2 | [Cumulative installs & sign-ups](https://us.posthog.com/project/549465/insights/SwT8ymDK) | Same three series, cumulative line, 90 d. No surface filter |
-| 3 | [New accounts vs existing accounts](https://us.posthog.com/project/549465/insights/U9iz5kZc) | Trends, weekly — `desktop_signed_up` against `desktop_signed_in` |
-| 4 | **[Onboarding completions per day](https://us.posthog.com/project/549465/insights/S7qSDuke)** | Trends, daily — `desktop_onboarding_completed`, count + unique users |
-| 5 | [Activation funnel](https://us.posthog.com/project/549465/insights/9cbmwXvI) | Funnel: `Application Installed` → `desktop_onboarding_completed` → `desktop_rewrite_inserted`, ordered, 14-day window. No surface filter |
-| 6 | [Where users came from](https://us.posthog.com/project/549465/insights/Ep2l1MSd) | Bar, `desktop_source_selected` broken down by `source`, 90 d |
+| 1 | **[Installs & sign-ups per day](https://us.posthog.com/project/549465/insights/nGaGKMBk)** | Trends, daily bars — `Application Installed`, `desktop_signed_up`, `desktop_signed_in`. No surface filter |
+| 2 | [Cumulative installs & sign-ups](https://us.posthog.com/project/549465/insights/VpFxoQKN) | Same three series, cumulative line, 90 d. No surface filter |
+| 3 | [New accounts vs existing accounts](https://us.posthog.com/project/549465/insights/GM3VfbYx) | Trends, weekly — `desktop_signed_up` against `desktop_signed_in` |
+| 4 | **[Onboarding completions per day](https://us.posthog.com/project/549465/insights/LvyG0Nja)** | Trends, daily — `desktop_onboarding_completed`, count + unique users |
+| 5 | [Activation funnel](https://us.posthog.com/project/549465/insights/P1JOql50) | Funnel: `Application Installed` → `desktop_onboarding_completed` → `desktop_rewrite_inserted`, ordered, 14-day window. No surface filter |
+| 6 | [Where users came from](https://us.posthog.com/project/549465/insights/2I3OFtCS) | Bar, `desktop_source_selected` broken down by `source`, 90 d |
 
 Tile 3 is the one that only exists because the projects are split. Both people on it
 are the same `auth.users` id, so in 465060 the question "is the Mac app acquiring users
 or serving the keyboard's existing ones" has no answer at all.
 
 Tile 5 is `ordered` rather than `strict`: a great many events fall between installing
-and the first accepted rewrite, and `strict` would require them to be adjacent. Ordering
-is also what keeps step 3 honest while §3 gap 3 stands — onboarding practice sends
-`desktop_rewrite_inserted` too, but it does so *before* completion, so it cannot satisfy
-a step that has to follow one.
+and the first accepted rewrite, and `strict` would require them to be adjacent.
+
+**It grew a second step and a filtered last step on 2026-08-22.** `desktop_accessibility_granted`
+sits between install and onboarding because that is the gate the funnel used to step
+straight over, and the final step now excludes `com.core7.keigobutton.mac` so it means a
+*real* rewrite. Ordering used to be the only thing keeping that step honest — practice
+sends `desktop_rewrite_inserted` too, just before completion rather than after — and the
+filter now does it directly, which is the stronger guarantee.
 
 Tile 6 counts answers, not people: 「答えない」 sends nothing at all.
 
@@ -306,9 +384,9 @@ Tile 6 counts answers, not people: 「答えない」 sends nothing at all.
 
 | # | Tile | Query |
 |---|---|---|
-| 7 | [Desktop DAU / WAU / MAU](https://us.posthog.com/project/549465/insights/qKSsc7XX) | Trends, `All events` — `dau` / `weekly_active` / `monthly_active` |
+| 7 | [Desktop DAU / WAU / MAU](https://us.posthog.com/project/549465/insights/QuMQQ8rD) | Trends, `All events` — `dau` / `weekly_active` / `monthly_active` |
 | 8 | [Lifecycle](https://us.posthog.com/project/549465/insights/QLMv4ESa) | Lifecycle on `desktop_rewrite_completed`, weekly — new / returning / resurrecting / dormant |
-| 9 | **[Version adoption](https://us.posthog.com/project/549465/insights/IZ1MTpBy)** | Trends, `Application Opened` unique users broken down by `$app_version`, percent-stacked |
+| 9 | **[Version adoption](https://us.posthog.com/project/549465/insights/0Q1HO4op)** | Trends, `Application Opened` unique users broken down by `$app_version`, percent-stacked |
 
 Tile 9 is the only read on whether a Sparkle update actually lands. `release-macos.yml`
 proves an appcast was published and stapled; it says nothing about installation, and
@@ -320,15 +398,17 @@ signature problem.
 
 | # | Tile | Query |
 |---|---|---|
-| 10 | [Rewrites per day](https://us.posthog.com/project/549465/insights/Rl35xXid) | Trends, `desktop_rewrite_completed`, count + unique users |
-| 11 | **[Acceptance rate](https://us.posthog.com/project/549465/insights/bTQAoCs7)** | Formula `B/A` over `desktop_rewrite_completed` (A) and `desktop_rewrite_inserted` (B) |
-| 12 | [Acceptance rate by `is_reply`](https://us.posthog.com/project/549465/insights/8nPuiflZ) | Tile 11 broken down by `is_reply`, weekly |
-| 13 | [Rewrites per active user](https://us.posthog.com/project/549465/insights/bb5UPyEK) | Formula, `desktop_rewrite_completed` count ÷ unique users |
+| 10 | [Rewrites per day](https://us.posthog.com/project/549465/insights/ePhDpBQ6) | Trends, `desktop_rewrite_completed`, count + unique users. Excludes practice |
+| 11 | **[Acceptance rate](https://us.posthog.com/project/549465/insights/P5f7IeMz)** | Formula `B/A` over `desktop_rewrite_completed` (A) and `desktop_rewrite_inserted` (B). Excludes practice |
+| 12 | [Acceptance rate by `is_reply`](https://us.posthog.com/project/549465/insights/JjSYGG4L) | Tile 11 broken down by `is_reply`, weekly |
+| 13 | [Rewrites per active user](https://us.posthog.com/project/549465/insights/6UA3H9NQ) | Formula, `desktop_rewrite_completed` count ÷ unique users. Excludes practice |
 
 Tile 11 is the one number to keep. A rewrite that is generated, metered and never
-inserted is a cost with no product in it. **Read it against §3 gap 3 until that is
-fixed** — three of every new user's acceptances are the onboarding lessons, which only
-complete on a successful Insert. Tile 12 is §16's stated reason for putting `is_reply`
+inserted is a cost with no product in it. **Tiles 10, 11 and 13 exclude onboarding
+practice as of 2026-08-22** — see §3's closed gaps for why the filter is on
+`host_app_bundle_id` rather than `is_tutorial`. It is still an undercount by the
+`copied[no_destination]` volume; the honest formula is
+`(inserted + copied[no_destination]) / completed`. Tile 12 is §16's stated reason for putting `is_reply`
 on both events: reply mode composes from nothing rather than editing what is there, so
 its acceptance rate is the only honest read on whether the composition works.
 
@@ -336,12 +416,12 @@ its acceptance rate is the only honest read on whether the composition works.
 
 | # | Tile | Query |
 |---|---|---|
-| 14 | **[Clipboard fallback rate](https://us.posthog.com/project/549465/insights/AJBcohZ4)** | Trends, `desktop_rewrite_completed` broken down by `io_path`, percent-stacked area |
-| 15 | **[Fallback rate by host app](https://us.posthog.com/project/549465/insights/GlRwsGfW)** | Table, `desktop_rewrite_completed` broken down by `host_app_bundle_id` × `io_path`, top 20 |
-| 16 | [Failure rate](https://us.posthog.com/project/549465/insights/nWnT70o2) | Formula, `desktop_rewrite_failed` ÷ `desktop_rewrite_completed` |
-| 17 | [Failures by message](https://us.posthog.com/project/549465/insights/lWbz9z9i) | Bar, `desktop_rewrite_failed` broken down by `message`, top 15 |
-| 18 | [Latency median / p95](https://us.posthog.com/project/549465/insights/wMYLjz07) | Trends, `latency_ms` percentiles on `desktop_rewrite_completed` |
-| 19 | [Crashes](https://us.posthog.com/project/549465/insights/uCriz4tu) | Trends, `$exception` volume + users affected |
+| 14 | **[Clipboard fallback rate](https://us.posthog.com/project/549465/insights/8A6jCNhU)** | Trends, `desktop_rewrite_completed` broken down by `io_path`, percent-stacked area |
+| 15 | **[Fallback rate by host app](https://us.posthog.com/project/549465/insights/YuKR0kmb)** | Table, `desktop_rewrite_completed` broken down by `host_app_bundle_id` × `io_path`, top 20 |
+| 16 | [Failure rate](https://us.posthog.com/project/549465/insights/mdXo7Pyz) | Formula, `desktop_rewrite_failed` ÷ `desktop_rewrite_completed` |
+| 17 | [Failures by message](https://us.posthog.com/project/549465/insights/KpJihDLt) | Bar, `desktop_rewrite_failed` broken down by `message`, top 15 |
+| 18 | [Latency median / p95](https://us.posthog.com/project/549465/insights/eWp7pSbp) | Trends, `latency_ms` percentiles on `desktop_rewrite_completed` |
+| 19 | [Crashes](https://us.posthog.com/project/549465/insights/sFEF7FG8) | Trends, `$exception` volume + users affected |
 
 Rate and diagnosis are two tiles rather than one: a formula and a breakdown cannot share
 an insight, and 16 is the number you watch while 17 is the one you act on.
@@ -360,7 +440,17 @@ model or the network, not the AX path.
 | # | Tile | Query |
 |---|---|---|
 | 20 | **[Weekly retention](https://us.posthog.com/project/549465/insights/8QhCncOr)** | Retention: acquisition `desktop_onboarding_completed`, return `desktop_rewrite_inserted`, weekly, 9 periods |
-| 21 | [Checkout intent](https://us.posthog.com/project/549465/insights/rWOWxmDc) | Trends, `desktop_checkout_started` broken down by `billing_interval` |
+| 21 | [Checkout intent](https://us.posthog.com/project/549465/insights/wtBft2H9) | Trends, `desktop_checkout_started` broken down by `billing_interval` |
+| 22 | **[Accessibility — prompted vs granted](https://us.posthog.com/project/549465/insights/IU5GESXP)** | Trends, daily bars — `desktop_accessibility_prompted` vs `desktop_accessibility_granted` |
+| 23 | **[Checkout funnel — intent to paid](https://us.posthog.com/project/549465/insights/NibQ8aa9)** | Funnel: `desktop_checkout_started` → `desktop_checkout_completed`, ordered, 3-day window |
+
+Tiles 22 and 23 are new on 2026-08-22 and both read zero until a build carrying their
+events ships. 22 is the gate tile 5's new step 2 measures, broken out so `source` and
+`method` can be read off it — the ratio between the two series says whether the
+permission page persuades anyone, and 「システム設定を開く」 vs the system dialog says which
+of its two buttons does the work. 23's window is 3 days rather than 14 because Konbini and
+bank transfer settle late and arrive as `payment_deferred`; a shorter window would read
+those as non-conversions.
 
 Tile 20 is the number this whole document exists to protect. In project 465060 it would
 count an iOS-only user as a returning desktop user, every week, forever. Return is an
@@ -377,15 +467,14 @@ onboarding assumes.
 
 ### What is deliberately not here
 
-- **A downloads tile.** See §3 gap 5 — the number does not exist inside PostHog.
-- **A permission-granted tile.** 465060 has "Keyboard enabled — first-time
-  activations", and the desktop's equivalent is the Accessibility grant in §5. Nothing
-  captures it, so the funnel steps straight from install to onboarding completion and
-  cannot tell a user who gave up at the permission page from one who never opened it.
-- **Test-account filtering.** Every tile is `filterTestAccounts: false` and the project
-  has no test-account rule configured, so the owner's own machines are in every number.
-  At two people and forty-seven launches that is most of the data; it stops being
-  harmless the moment real users arrive.
+- **A downloads tile.** See §3 gap 3 — the number does not exist inside PostHog.
+- **Working test-account filtering.** Every tile sets `filterTestAccounts: true` and it
+  filters nothing, because cohort 467436 keys on `$internal_or_test_user` and no person
+  has it. See §4's opening — **keeping the owners in is a decision**, taken 2026-08-22, so
+  every tile is "us plus them". The fix, when external volume makes the owners noise
+  rather than signal, is one person property on three accounts.
+
+Session replay is a third entry and it is not a choice: see §6.
 
 ---
 
@@ -424,3 +513,51 @@ Still unobserved, and each blocks a tile rather than the pipe:
 - **465060 receiving nothing new has not been re-checked since the pipe went live.** The
   `desktop_` prefix means a leak would show up there as a new event name rather than as
   silent extra volume on an existing one, so it is a cheap check and still worth running.
+
+---
+
+## 6. Session replay is not available on this surface
+
+Asked on 2026-08-22, and the answer is structural rather than a configuration to fix.
+
+**0 recordings in the project, all time, and that will not change.** Session replay in
+`posthog-ios` (pinned at **3.69.3** in `Package.resolved`) is iOS-only at the source
+level, not merely unsupported:
+
+- `PostHogConfig.sessionReplay` and `sessionReplayConfig` are declared **inside
+  `#if os(iOS)`** — compiling for macOS, the symbols do not exist. There is no line to
+  add.
+- Every file under `PostHog/Replay/` is `#if os(iOS)`-guarded, and
+  `PostHogReplayIntegration` is only appended to `integrations` inside an `#if os(iOS)`
+  block. The capture path is built on UIKit view-tree snapshots.
+
+**The project has the Session Replay product enabled** (`session_recording_opt_in:
+true`), which is why PostHog reports replay as an active product for 549465. That is a
+server-side switch with no client able to feed it. Leave it; it costs nothing and turning
+it off would only make the next person re-derive this.
+
+The consequence worth stating: **there is no qualitative channel on this surface.** No
+replay, no heatmaps, no `$pageview`, and the app is an accessory process with no screens
+to instrument. Everything anyone will ever know about desktop behaviour arrives as the
+events in §3 — which is the whole reason the three gaps closed on 2026-08-22 were worth
+closing, and the reason a missing property here costs more than it would on the web.
+
+## 7. Error tracking
+
+**`autocapture_exceptions_opt_in` was `null` until 2026-08-22 and tile 19 was reading
+zero for that reason, not because nothing had crashed.** `$exception` had never appeared
+in the project taxonomy across 892 events and 13 days.
+
+`PostHogErrorTrackingAutoCaptureIntegration.install` returns
+`.skipped(.disabledByRemoteConfig)` when `remoteConfig.isAutocaptureExceptionsEnabled()`
+is false, so `config.errorTrackingConfig.autoCapture = true` in
+`PostHogConfiguration.configure()` was being overruled server-side. The flag is now on.
+
+Two things to know when reading tile 19:
+
+- **It is a crash tile, not an error tile.** The integration captures Mach exceptions,
+  POSIX signals and uncaught `NSException`s — not handled Swift errors. Those reach
+  PostHog only as `desktop_rewrite_failed`.
+- **A crash is reported on the NEXT launch**, persisted to disk in between, and crash
+  reporting is disabled entirely while a debugger is attached. So a crash seen in Xcode
+  will never appear here.

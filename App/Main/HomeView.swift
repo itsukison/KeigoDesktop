@@ -386,7 +386,7 @@ struct HomeView: View {
                 }
                 Spacer()
                 ActionButton(model.isSignedIn ? tr("許可する", "Grant access", "授予权限") : tr("サインイン", "Sign in", "登录"), style: .primary) {
-                    if model.isSignedIn { model.requestAccessibility() } else { model.page = .account }
+                    if model.isSignedIn { model.requestAccessibility(source: .home) } else { model.page = .account }
                 }
             }
         }
