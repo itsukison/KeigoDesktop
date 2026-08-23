@@ -909,6 +909,7 @@ final class OverlayController: ObservableObject {
                     target: captured.target,
                     promptOrigin: promptOrigin,
                     isReply: replyTo != nil,
+                    isTutorial: pending.isTutorial,
                     candidateCount: result.candidates.count,
                     latencyMs: latencyMs
                 )
@@ -1285,6 +1286,7 @@ final class OverlayController: ObservableObject {
                 self.analytics.inserted(
                     target: pending.captured.target,
                     isReply: pending.replyTo != nil,
+                    isTutorial: pending.isTutorial,
                     selectedIndex: page.responseCandidateIndex,
                     destination: destination
                 )
@@ -1373,6 +1375,7 @@ final class OverlayController: ObservableObject {
         analytics.copied(
             target: pending.captured.target,
             isReply: pending.replyTo != nil,
+            isTutorial: pending.isTutorial,
             reason: reason
         )
         if let eventId = page.eventId {
@@ -1420,6 +1423,7 @@ final class OverlayController: ObservableObject {
             analytics.copied(
                 target: page.pending.captured.target,
                 isReply: page.pending.replyTo != nil,
+                isTutorial: page.pending.isTutorial,
                 reason: .userChose
             )
         }
@@ -1902,7 +1906,10 @@ final class OverlayController: ObservableObject {
     }
 
     private func present(message: String) {
-        analytics.failed(error: message)
+        // No `PendingRewrite` to read: the capture failures are the majority of this
+        // path and they happen before one is built. An armed lesson is the honest
+        // discriminator — see `PostHogAnalytics.failed`.
+        analytics.failed(error: message, isTutorial: tutorialMode != nil)
 
         // Deliberately not `transition(to:)`: leaving `.generating` through it would
         // dismiss the toast this call is about to raise (see the switch there). The two

@@ -744,7 +744,35 @@ short version.
   history; it stops being free the moment the token goes live.
 - Every rewrite event carries: `host_app_bundle_id`, `capture_mode`,
   `io_path` (`ax` | `clipboard`), `prompt_origin`, `latency_ms`,
-  `candidate_count`, `accepted` / `selected_index`.
+  `candidate_count`, `accepted` / `selected_index`, and since 2026-08-22
+  `is_tutorial` and `accessibility_granted`.
+- **`is_tutorial` (2026-08-22).** Onboarding practice calls the same three analytics
+  methods as a real press, and all three lessons complete *only* on a successful Insert,
+  so every new user used to donate three guaranteed acceptances to the acceptance-rate
+  tile — 38 of 117 completed rewrites were practice when this was measured. The tiles
+  filter on `host_app_bundle_id != com.core7.keigobutton.mac` rather than on the property,
+  because practice rewrites the app's OWN field and the bundle id therefore works on data
+  captured before the property existed.
+- **The Accessibility permission is measured (2026-08-22).**
+  `desktop_accessibility_prompted` (`source`, `method`) and
+  `desktop_accessibility_granted` (`source`, `seconds_since_prompt`), plus an
+  `accessibility_granted` super property re-registered by `MainModel.applyTrusted` — the
+  single writer of `isTrusted`, which is what keeps a stored super property from going
+  stale after a grant. §5 calls the app useless without this permission and nothing
+  measured it until now: the activation funnel stepped straight over the one gate that
+  can silently end the product. `granted` fires **once per person ever** (persisted flag)
+  because `refresh()` runs on every activation and this would otherwise be a launch count.
+- **`desktop_checkout_completed` is sent SERVER-side** by `desktop-stripe-webhook` via
+  `supabase/functions/_shared/posthog.ts`. It cannot come from the client: Checkout hands
+  off to the default browser, so the app is not running when payment lands. That module
+  swallows every error by design — a PostHog failure must never turn into a 5xx that makes
+  Stripe retry an already-processed event.
+- **Session replay is impossible on this surface, and it is not a setting.**
+  `PostHogConfig.sessionReplay` is declared inside `#if os(iOS)` in `posthog-ios` 3.69.3,
+  so on a macOS target the symbol does not exist and the whole `PostHog/Replay/` tree is
+  compiled out. The project has the replay product enabled server-side; it will read zero
+  forever. `docs/analytics.md` §6 is the full record. The consequence: **the events in §3
+  are the only channel there will ever be** — no replay, no heatmaps, no `$pageview`.
 - `io_path` is the one to watch. A rising clipboard-fallback rate in a specific
   bundle id is the earliest signal that an app's AX tree changed — which is why
   the dashboard breaks it down by `host_app_bundle_id` and not only over time.

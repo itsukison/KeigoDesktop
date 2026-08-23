@@ -123,10 +123,16 @@ private struct OnboardingNavigationBar: View {
                             tr("システム設定を開く", "Open System Settings", "打开系统设置"),
                             style: .secondary
                         ) {
+                            // Captured separately from the system dialog: this leg asks
+                            // just as much and otherwise leaves no trace anywhere.
+                            model.recordAccessibilityPrompt(
+                                source: .onboarding,
+                                method: .settingsLink
+                            )
                             openAccessibilitySettings()
                         }
                         ActionButton(tr("許可する", "Grant access", "授予权限")) {
-                            model.requestAccessibility()
+                            model.requestAccessibility(source: .onboarding)
                         }
                     }
 

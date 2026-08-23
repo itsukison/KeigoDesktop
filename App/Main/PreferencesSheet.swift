@@ -169,7 +169,7 @@ struct PreferencesSheet: View {
                                 .foregroundStyle(Tokens.Window.textSecondary)
                         } else {
                             ActionButton(tr("許可する", "Grant access", "授予权限"), style: .primary) {
-                                model.requestAccessibility()
+                                model.requestAccessibility(source: .preferences)
                             }
                         }
                     }

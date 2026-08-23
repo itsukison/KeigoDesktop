@@ -262,7 +262,7 @@ final class MainModel: NSObject, ObservableObject {
     /// rebuild silently revokes it. Re-checked on every activation, along with
     /// everything else that can change while the window is closed.
     func refresh() {
-        isTrusted = AXPermission.isTrusted
+        applyTrusted(AXPermission.isTrusted)
         launchAtLogin = SMAppService.mainApp.status == .enabled
         Task {
             let session = await auth.currentSession
@@ -869,7 +869,31 @@ final class MainModel: NSObject, ObservableObject {
 
     // MARK: - Preferences
 
-    func requestAccessibility() {
+    /// Where the user was standing when they were asked. `docs/analytics.md` §4's
+    /// activation funnel used to step from install straight to onboarding completion,
+    /// so a user who gave up on the permission page and one who never reached it were
+    /// indistinguishable; `source` is what separates them.
+    enum AccessibilityPromptSource: String {
+        /// §15's permission page — the gate almost everyone meets first.
+        case onboarding
+        /// The ⚙︎ sheet's Accessibility row, i.e. someone repairing a revoked grant.
+        case preferences
+        /// The home card, which only appears once the permission is already missing.
+        case home
+    }
+
+    /// Which of the two buttons on the permission page they pressed. Both are a prompt;
+    /// only one of them can be answered without leaving the app, and the ratio is the
+    /// read on whether 「システム設定を開く」 is doing any work.
+    enum AccessibilityPromptMethod: String {
+        /// `AXIsProcessTrustedWithOptions` — the system's own dialog.
+        case systemPrompt = "system_prompt"
+        /// `x-apple.systempreferences:` — we opened System Settings for them.
+        case settingsLink = "settings_link"
+    }
+
+    func requestAccessibility(source: AccessibilityPromptSource) {
+        recordAccessibilityPrompt(source: source, method: .systemPrompt)
         AXPermission.requestTrust()
         // The system dialog has no completion callback, so the card is polled rather
         // than left stale until the next activation.
@@ -877,12 +901,65 @@ final class MainModel: NSObject, ObservableObject {
             for _ in 0..<60 {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 if AXPermission.isTrusted {
-                    isTrusted = true
+                    applyTrusted(true)
                     return
                 }
             }
         }
     }
+
+    /// Captured for the 「システム設定を開く」 leg too, which asks just as much as the
+    /// system dialog does but leaves no trace anywhere else.
+    func recordAccessibilityPrompt(
+        source: AccessibilityPromptSource,
+        method: AccessibilityPromptMethod
+    ) {
+        let defaults = UserDefaults.standard
+        defaults.set(source.rawValue, forKey: Self.promptSourceKey)
+        defaults.set(Date().timeIntervalSince1970, forKey: Self.promptedAtKey)
+        PostHogSDK.shared.capture("desktop_accessibility_prompted", properties: [
+            "source": source.rawValue,
+            "method": method.rawValue,
+        ])
+    }
+
+    /// The single writer of `isTrusted`, so the grant cannot be observed without being
+    /// reported and the super property cannot go stale.
+    ///
+    /// Fires `desktop_accessibility_granted` the first time the app ever sees the
+    /// permission, and **once only** — the flag is persisted, because `refresh()` runs on
+    /// every window activation and this would otherwise be a launch count. A revocation
+    /// (every unsigned dev rebuild, per `AXPermission`) does not re-arm it: what the
+    /// funnel needs is the first crossing, and a second event on the same person would
+    /// make the tile a rebuild counter.
+    private func applyTrusted(_ trusted: Bool) {
+        let changed = isTrusted != trusted
+        isTrusted = trusted
+        // Stored, not computed. Without this the property keeps whatever it held at
+        // launch and every event after a grant still says the user has no permission.
+        if changed { PostHogConfiguration.registerSurface() }
+
+        let defaults = UserDefaults.standard
+        guard trusted, !defaults.bool(forKey: Self.grantReportedKey) else { return }
+        defaults.set(true, forKey: Self.grantReportedKey)
+
+        // `outside_app` is the honest answer when nobody pressed anything — a user who
+        // granted it from System Settings on their own, or on a launch that inherited a
+        // grant made before this build shipped. Keeping it as a value rather than
+        // omitting the property is what stops it reading as a missing measurement.
+        let source = defaults.string(forKey: Self.promptSourceKey) ?? "outside_app"
+        var properties: [String: Any] = ["source": source]
+        if let promptedAt = defaults.object(forKey: Self.promptedAtKey) as? Double {
+            properties["seconds_since_prompt"] = Int(
+                max(0, Date().timeIntervalSince1970 - promptedAt)
+            )
+        }
+        PostHogSDK.shared.capture("desktop_accessibility_granted", properties: properties)
+    }
+
+    private static let grantReportedKey = "analytics.accessibilityGrantReported"
+    private static let promptSourceKey = "analytics.accessibilityPromptSource"
+    private static let promptedAtKey = "analytics.accessibilityPromptedAt"
 
     func setLaunchAtLogin(_ enabled: Bool) {
         do {
