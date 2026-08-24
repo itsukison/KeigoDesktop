@@ -188,10 +188,17 @@ struct PendingRewrite: Equatable {
     let replyTo: String?
     /// The button's own title, or nil for the custom-input path.
     let buttonTitle: String?
-    /// Tutorial rewrites exercise the real backend and write path, but are not part
-    /// of the user's history or statistics.
-    let isTutorial: Bool
+    /// The attempt this rewrite belongs to. Held on the pending request rather than
+    /// only on the controller because Insert and Copy happen long after the generation
+    /// finished — often several pages later in the result panel — and they have to
+    /// report against the attempt that produced *that* candidate, not the newest one.
+    let attempt: RewriteAttempt
     let startedAt: Date
+
+    /// Tutorial rewrites exercise the real backend and write path, but are not part
+    /// of the user's history or statistics. Read off the attempt so there is one
+    /// source of truth for it rather than two fields that can disagree.
+    var isTutorial: Bool { attempt.isTutorial }
 }
 
 /// One selectable page in the result panel. Each backend response owns its event id

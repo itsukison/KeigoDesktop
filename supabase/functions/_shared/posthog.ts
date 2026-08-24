@@ -33,6 +33,40 @@ const CAPTURE_PATH = "/i/v0/e/";
 /// cheaper than losing the 200 that marks the Stripe event processed.
 const TIMEOUT_MS = 3_000;
 
+/// The one project this module is allowed to write to: 549465,
+/// `KeigoButton Desktop (macOS)`. Pinned in code, not merely configured, and checked
+/// against whatever the environment supplies before a single event is sent.
+///
+/// **This is layer 1 of `docs/analytics.md` §1, enforced rather than assumed.** The
+/// client gets layer 1 for free — the app is built with its own token baked in by its
+/// own release workflow. The server does not: `keyboard-rewrite` (project 465060),
+/// `web-rewrite` and every desktop function share ONE Supabase project
+/// (`eercsucvxnszqletxued`), and therefore ONE secrets namespace. A secret named
+/// `POSTHOG_PROJECT_TOKEN` cannot mean two different projects at once, so the first
+/// surface to set it silently redirects the other.
+///
+/// That is not hypothetical. Deploying `desktop-stripe-webhook` on 2026-08-23 11:55 JST
+/// set the shared `POSTHOG_PROJECT_TOKEN` to the desktop token; `keyboard-rewrite` reads
+/// the same name in preference to its own hard-coded default, so from 13:50 JST the iOS
+/// keyboard's `ai_rewrite` events (198 of them, 49 people) landed in 549465 and stopped
+/// arriving in 465060 entirely. A redirect, not a duplicate: the keyboard's own analytics
+/// went dark and nothing anywhere raised a warning.
+///
+/// Two things prevent the recurrence, and both are needed:
+///
+///   1. **A surface-specific secret name** (`DESKTOP_POSTHOG_PROJECT_TOKEN`), so the two
+///      surfaces cannot collide in the shared namespace in the first place.
+///   2. **This pin**, so that if they ever do collide again — a typo, a copied deploy
+///      script, a third surface — the write is *refused and logged* rather than landing
+///      in the wrong project. A misconfiguration that loses one event is recoverable;
+///      one that silently pollutes another surface's person store is not (§1: "the
+///      damage is to the person store, not to the event stream").
+///
+/// Safe to hard-code: a `phc_` project token is a write-only public credential that
+/// ships inside every client binary. It is not a secret, which is exactly why pinning it
+/// costs nothing and buys the guarantee.
+const EXPECTED_PROJECT_TOKEN = "phc_sJZEvNvRET7BEwCwXNnzoRofkbowJ8Ec3TuQTz9hHrG6";
+
 /// Fire-and-report. Resolves either way; never rejects.
 ///
 /// Awaited rather than detached at the call site on purpose — an Edge Function's
@@ -43,17 +77,23 @@ export async function capture(
   event: string,
   properties: Record<string, unknown>,
 ): Promise<void> {
-  const token = Deno.env.get("POSTHOG_PROJECT_TOKEN");
+  // Surface-specific name. NOT `POSTHOG_PROJECT_TOKEN` — that name is shared with
+  // `keyboard-rewrite` in the same Supabase project and setting it redirects the
+  // keyboard's analytics into this project. See `EXPECTED_PROJECT_TOKEN`.
+  const token = Deno.env.get("DESKTOP_POSTHOG_PROJECT_TOKEN") ?? EXPECTED_PROJECT_TOKEN;
   const host = Deno.env.get("POSTHOG_HOST") ?? "https://us.i.posthog.com";
 
-  if (!token) {
-    // Loud rather than silent, and non-fatal: the same posture as §1's layer 2. A
-    // deploy that forgot the secret should be visible in the function logs rather
-    // than showing up a week later as a tile that never moved.
+  // Refuse to write to any project but the desktop's. A mismatch means the secret has
+  // been pointed somewhere else, and sending anyway would put desktop events into
+  // another surface's person store — the one failure §1 says is unrecoverable.
+  if (token !== EXPECTED_PROJECT_TOKEN) {
     console.warn(JSON.stringify({
       event: "desktop_posthog_capture",
-      status: "no_project_token",
+      status: "wrong_project_token",
       posthogEvent: event,
+      // Prefix only, so the log names the mistake without reprinting a credential.
+      configuredPrefix: token.slice(0, 12),
+      expectedPrefix: EXPECTED_PROJECT_TOKEN.slice(0, 12),
     }));
     return;
   }

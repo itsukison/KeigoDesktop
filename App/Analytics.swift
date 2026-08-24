@@ -1,3 +1,4 @@
+import DesktopRewriteKit
 import Foundation
 import PostHog
 import TextIO
@@ -13,30 +14,50 @@ enum CopyReason: String, Sendable {
 }
 
 protocol Analytics: Sendable {
+    /// The attempt denominator. Emitted once per generation request, before the network
+    /// call, so that a failure or an abandonment still has something to be a fraction of.
+    func rewriteStarted(_ attempt: RewriteAttempt, target: TextTarget?)
     func rewriteCompleted(
+        _ attempt: RewriteAttempt,
         target: TextTarget,
         promptOrigin: String?,
         isReply: Bool,
-        isTutorial: Bool,
         candidateCount: Int,
         latencyMs: Int
     )
+    func rewriteFailed(
+        _ attempt: RewriteAttempt,
+        stage: FailureStage,
+        message: String,
+        target: TextTarget?
+    )
+    func rewriteAbandoned(
+        _ attempt: RewriteAttempt,
+        reason: AbandonReason,
+        target: TextTarget?
+    )
     func inserted(
+        _ attempt: RewriteAttempt,
         target: TextTarget,
         isReply: Bool,
-        isTutorial: Bool,
         selectedIndex: Int,
         destination: InsertAction
     )
-    func copied(target: TextTarget, isReply: Bool, isTutorial: Bool, reason: CopyReason)
-    func failed(error: String, isTutorial: Bool)
+    func copied(
+        _ attempt: RewriteAttempt,
+        target: TextTarget,
+        isReply: Bool,
+        reason: CopyReason
+    )
 }
 
 /// Properties every rewrite event carries for a reason that has nothing to do with the
-/// rewrite itself. Appended to each event rather than duplicated into four literals.
+/// rewrite itself. Appended to each event rather than duplicated into six literals.
 ///
+/// - `attempt_id` ties the six events of one attempt together (see `RewriteAttempt`).
+/// - `rewrite_type` is the five-way split `prompt_origin` could not provide.
 /// - `is_tutorial` closed `docs/analytics.md` §3's third gap. Onboarding practice calls the same
-///   three methods as a real press and all three lessons complete *only* on a successful
+///   methods as a real press and all three lessons complete *only* on a successful
 ///   Insert, so every new user used to donate three guaranteed acceptances to the
 ///   acceptance-rate tile. Measured on 2026-08-22: 38 of 117 completed rewrites were
 ///   practice, and 14 of the 18 belonging to users who are not the owners.
@@ -46,57 +67,110 @@ protocol Analytics: Sendable {
 ///   is a `TextIOError.notTrusted` failure, which is precisely the moment the stored
 ///   value is wrong. Registered *and* sent, deliberately: a gap between the two readings
 ///   of the same row is a permission that changed without the window ever activating.
-private func loopProperties(isTutorial: Bool) -> [String: Any] {
+private func attemptProperties(_ attempt: RewriteAttempt) -> [String: Any] {
     [
-        "is_tutorial": isTutorial,
+        "attempt_id": attempt.id.uuidString,
+        "rewrite_type": attempt.type.rawValue,
+        "is_tutorial": attempt.isTutorial,
         "accessibility_granted": AXPermission.isTrusted,
+    ]
+}
+
+/// The target-shaped properties, for the events that have a target.
+///
+/// Optional because a capture failure has none — and that is the whole reason
+/// `desktop_rewrite_failed` used to carry no `host_app_bundle_id` at all. Sending them
+/// as nulls rather than omitting the keys keeps the property present in the taxonomy, so
+/// a breakdown on it renders a "no target" bucket instead of silently dropping the row.
+private func targetProperties(_ target: TextTarget?) -> [String: Any] {
+    [
+        "host_app_bundle_id": target?.hostAppBundleId ?? "unknown",
+        "capture_mode": target?.captureMode.rawValue as Any,
+        // The one to watch: a rising clipboard rate in a specific bundle id is
+        // the earliest signal that an app's AX tree changed.
+        "io_path": target?.path.rawValue as Any,
+        // §18. `scratch` is a rewrite of nothing — a message composed from an
+        // instruction alone — and it is the case that used to be refused outright,
+        // so its share of the traffic is the measure of whether that was worth
+        // fixing.
+        "scope": target?.scope.rawValue as Any,
+        "has_destination": target?.hasDestination as Any,
     ]
 }
 
 struct PostHogAnalytics: Analytics {
 
+    func rewriteStarted(_ attempt: RewriteAttempt, target: TextTarget?) {
+        PostHogSDK.shared.capture("desktop_rewrite_started", properties:
+            targetProperties(target)
+                .merging(attemptProperties(attempt)) { own, _ in own })
+    }
+
     func rewriteCompleted(
+        _ attempt: RewriteAttempt,
         target: TextTarget,
         promptOrigin: String?,
         isReply: Bool,
-        isTutorial: Bool,
         candidateCount: Int,
         latencyMs: Int
     ) {
         PostHogSDK.shared.capture("desktop_rewrite_completed", properties: [
-            "host_app_bundle_id": target.hostAppBundleId ?? "unknown",
-            "capture_mode": target.captureMode.rawValue,
-            // The one to watch: a rising clipboard rate in a specific bundle id is
-            // the earliest signal that an app's AX tree changed.
-            "io_path": target.path.rawValue,
-            "prompt_origin": promptOrigin ?? "custom",
-            // §18. `scratch` is a rewrite of nothing — a message composed from an
-            // instruction alone — and it is the case that used to be refused outright,
-            // so its share of the traffic is the measure of whether that was worth
-            // fixing.
-            "scope": target.scope.rawValue,
-            "has_destination": target.hasDestination,
+            // Now only ever set for `savedButton`; nil elsewhere rather than defaulted
+            // to "custom", which is what made four interactions indistinguishable.
+            "prompt_origin": promptOrigin as Any,
             // §16. On both events, because the pair is the funnel: reply mode composes
             // text from nothing rather than editing what is there, so its accept rate
             // is the only honest read on whether the composition is any good.
             "is_reply": isReply,
             "latency_ms": latencyMs,
             "candidate_count": candidateCount,
-        ].merging(loopProperties(isTutorial: isTutorial)) { own, _ in own })
+        ]
+        .merging(targetProperties(target)) { own, _ in own }
+        .merging(attemptProperties(attempt)) { own, _ in own })
+    }
+
+    /// `message` is the toast the user was shown — one of the app's own Japanese strings,
+    /// never captured or rewritten text — so it is safe to send and it is the only thing
+    /// that makes the failure count diagnosable rather than a bare number. `stage` is
+    /// what makes it actionable without parsing that string.
+    func rewriteFailed(
+        _ attempt: RewriteAttempt,
+        stage: FailureStage,
+        message: String,
+        target: TextTarget?
+    ) {
+        PostHogSDK.shared.capture("desktop_rewrite_failed", properties: [
+            "failure_stage": stage.rawValue,
+            "message": message,
+        ]
+        .merging(targetProperties(target)) { own, _ in own }
+        .merging(attemptProperties(attempt)) { own, _ in own })
+    }
+
+    /// The third ending, and until now the silent one. A rewrite superseded by a second
+    /// press, or dismissed while the panel was generating, was billed by the server and
+    /// reported to nobody — so `completed + failed` did not add up to `started` and there
+    /// was no way to tell that from the data.
+    func rewriteAbandoned(
+        _ attempt: RewriteAttempt,
+        reason: AbandonReason,
+        target: TextTarget?
+    ) {
+        PostHogSDK.shared.capture("desktop_rewrite_abandoned", properties: [
+            "reason": reason.rawValue,
+        ]
+        .merging(targetProperties(target)) { own, _ in own }
+        .merging(attemptProperties(attempt)) { own, _ in own })
     }
 
     func inserted(
+        _ attempt: RewriteAttempt,
         target: TextTarget,
         isReply: Bool,
-        isTutorial: Bool,
         selectedIndex: Int,
         destination: InsertAction
     ) {
         PostHogSDK.shared.capture("desktop_rewrite_inserted", properties: [
-            "host_app_bundle_id": target.hostAppBundleId ?? "unknown",
-            "capture_mode": target.captureMode.rawValue,
-            "io_path": target.path.rawValue,
-            "scope": target.scope.rawValue,
             "is_reply": isReply,
             "accepted": true,
             "selected_index": selectedIndex,
@@ -104,34 +178,25 @@ struct PostHogAnalytics: Analytics {
             // to. A rising `insert_here` rate says people are composing first and
             // choosing the field second, which is the flow §18 opened up.
             "insert_destination": destination == .insertHere ? "insert_here" : "captured_field",
-        ].merging(loopProperties(isTutorial: isTutorial)) { own, _ in own })
+        ]
+        .merging(targetProperties(target)) { own, _ in own }
+        .merging(attemptProperties(attempt)) { own, _ in own })
     }
 
     /// The other ending. Copy is a completed rewrite, not a failure, so it must not land
     /// in `desktop_rewrite_failed` — and without its own event the destination-less path
     /// §18 introduces would look like a funnel that simply stops.
-    func copied(target: TextTarget, isReply: Bool, isTutorial: Bool, reason: CopyReason) {
+    func copied(
+        _ attempt: RewriteAttempt,
+        target: TextTarget,
+        isReply: Bool,
+        reason: CopyReason
+    ) {
         PostHogSDK.shared.capture("desktop_rewrite_copied", properties: [
-            "host_app_bundle_id": target.hostAppBundleId ?? "unknown",
-            "capture_mode": target.captureMode.rawValue,
-            "io_path": target.path.rawValue,
-            "scope": target.scope.rawValue,
             "is_reply": isReply,
             "reason": reason.rawValue,
-        ].merging(loopProperties(isTutorial: isTutorial)) { own, _ in own })
-    }
-
-    /// `error` is the toast the user was shown — one of the app's own Japanese strings,
-    /// never captured or rewritten text — so it is safe to send and it is the only thing
-    /// that makes the failure count diagnosable rather than a bare number.
-    /// `isTutorial` here is read from whether a lesson is *armed*, not from a
-    /// `PendingRewrite` — a capture failure happens before there is one. So it means
-    /// "this failure happened during onboarding practice", which is the question tile 16
-    /// needs answered and is a slightly wider claim than the same property on the other
-    /// three events.
-    func failed(error: String, isTutorial: Bool) {
-        PostHogSDK.shared.capture("desktop_rewrite_failed", properties: [
-            "message": error,
-        ].merging(loopProperties(isTutorial: isTutorial)) { own, _ in own })
+        ]
+        .merging(targetProperties(target)) { own, _ in own }
+        .merging(attemptProperties(attempt)) { own, _ in own })
     }
 }

@@ -16,6 +16,10 @@ the one thing they falsified. The dashboard was rebuilt on 2026-08-10 from 15 ti
 21: the original set measured the rewrite loop and nothing before it, so there was no
 answer to "how many people arrived today". §4 is the new set.
 
+**2026-08-24 — 32 tiles.** Band 6 rebuilt the rewrite loop around an attempt: six events
+instead of four, a five-way `rewrite_type`, and a funnel with a denominator. §3's
+"Rebuilt on 2026-08-24" has the why.
+
 **2026-08-22 — 23 tiles, and three instrumentation gaps closed.** The first read of real
 user behaviour is what prompted it: 6 external users had produced **4 real rewrites
 between them**, and 14 of their 18 completed rewrites were the onboarding tutorial. §3's
@@ -47,8 +51,32 @@ not to the event stream.
 | Layer | Mechanism | Defends against |
 |---|---|---|
 | 1. Project | Own PostHog project, own `phc_` token | Person merging; all of the above |
+| 1b. Token pin | Surface-specific secret name + expected token pinned in code, write refused on mismatch | Layer 1 failing **on the server**, where the secrets namespace is shared |
 | 2. Event stamp | `surface: macos` super property on **every** event | A misconfigured token — makes a leak visible instead of silent |
 | 3. Insight filter | Every dashboard tile filters `surface = macos` | A leaked event inflating a number on the dashboard |
+
+**Layer 1b exists because layer 1 was breached on 2026-08-23, exactly as predicted.** The
+client gets layer 1 for free — each app is built with its own token by its own release
+workflow. The server does not: `keyboard-rewrite` (465060), `web-rewrite` and every
+desktop function share the Supabase project `eercsucvxnszqletxued`, and therefore one
+secrets namespace. Deploying `desktop-stripe-webhook` at 11:55 JST set the shared
+`POSTHOG_PROJECT_TOKEN` to the desktop token; `keyboard-rewrite` read that name in
+preference to its own hard-coded default, and from 13:50 JST **198 `ai_rewrite` /
+`ai_rewrite_action` / `ai_rewrite_accepted` events from 49 people landed in 549465 while
+465060 received none.** A redirect, not a duplicate — the keyboard's rewrite analytics
+went dark for ~31 hours and no alarm existed to notice.
+
+Two changes, both required. The secret names are now `DESKTOP_POSTHOG_PROJECT_TOKEN` and
+`KEYBOARD_POSTHOG_PROJECT_TOKEN`, so the surfaces cannot collide; and each module pins
+its expected `phc_` token and **refuses the write, logging `wrong_project_token`**, if
+the resolved value disagrees. The pin is what turns the next collision from silent
+pollution into a logged no-op. Losing an event is recoverable; merging two surfaces'
+persons is not.
+
+Note what did **not** save us: layer 2. The leaked events carried no `surface` at all,
+which is precisely the signal layer 2 promises — but a signal nobody queries is not a
+control. Surface-filtered tiles were unaffected; **tile 7 (DAU/WAU/MAU) aggregates
+`All events` and was inflated by the 49 keyboard persons for the duration.**
 
 Layers 2 and 3 are redundant *by design*. Layer 1 is a single point of failure — one
 wrong CI variable — and the redundancy is what turns that failure from silent into
@@ -115,10 +143,12 @@ partner: an event without it, in the desktop project, came from somewhere it sho
 
 | Event | Where | Properties |
 |---|---|---|
-| `desktop_rewrite_completed` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `prompt_origin`, `is_reply`, `latency_ms`, `candidate_count`, `scope`, `has_destination`, `is_tutorial`, `accessibility_granted` |
-| `desktop_rewrite_inserted` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `accepted`, `selected_index`, `scope`, `insert_destination`, `is_tutorial`, `accessibility_granted` |
-| `desktop_rewrite_copied` | `Analytics.swift` | `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `scope`, `reason`, `is_tutorial`, `accessibility_granted` |
-| `desktop_rewrite_failed` | `Analytics.swift` | `message` (the app's own Japanese toast — never captured or rewritten text), `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_started` | `Analytics.swift` (0.1.9) | `attempt_id`, `rewrite_type`, `is_tutorial`, `accessibility_granted`, plus the target properties |
+| `desktop_rewrite_completed` | `Analytics.swift` | `attempt_id`, `rewrite_type`, `host_app_bundle_id`, `capture_mode`, `io_path`, `prompt_origin`, `is_reply`, `latency_ms`, `candidate_count`, `scope`, `has_destination`, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_inserted` | `Analytics.swift` | `attempt_id`, `rewrite_type`, `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `accepted`, `selected_index`, `scope`, `insert_destination`, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_copied` | `Analytics.swift` | `attempt_id`, `rewrite_type`, `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `scope`, `reason`, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_failed` | `Analytics.swift` | `attempt_id`, `rewrite_type`, **`failure_stage`** (`capture` \| `generation`), `message` (the app's own Japanese toast — never captured or rewritten text), the target properties where a target exists, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_abandoned` | `Analytics.swift` (0.1.9) | `attempt_id`, `rewrite_type`, `reason` (`superseded` \| `dismissed`), the target properties, `is_tutorial`, `accessibility_granted` |
 | `desktop_signed_up` | `MainModel.swift` | `method` (`password` \| `google`), `confirmation_required` (password only) |
 | `desktop_signed_in` | `MainModel.swift` | `method` (`password` \| `google`) |
 | `desktop_accessibility_prompted` | `MainModel.swift` | `source` (`onboarding` \| `preferences` \| `home`), `method` (`system_prompt` \| `settings_link`) |
@@ -312,7 +342,7 @@ there are 30 days of it, not before.
 
 ## 4. The dashboard — "Desktop (macOS) Overview"
 
-Dashboard **1974822**, **23 tiles in five bands** (21 as of 2026-08-10, plus 22 and 23 on 2026-08-22). The first
+Dashboard **1974822**, **32 tiles in six bands** (21 as of 2026-08-10, 22–23 on 2026-08-22, 24–32 on 2026-08-24). The first
 fifteen measured the rewrite loop and everything downstream of it; what they could not
 answer was how many people arrived, signed up or finished first run on a given day —
 which is the first question anyone asks of a product that has just started shipping.
@@ -456,6 +486,63 @@ Tile 20 is the number this whole document exists to protect. In project 465060 i
 count an iOS-only user as a returning desktop user, every week, forever. Return is an
 accepted rewrite rather than a launch, because an app that sits on the screen edge is
 "opened" by doing nothing.
+
+### Band 6 — Rewrite attempts & types (0.1.9)
+
+Nine tiles, added 2026-08-24. **Every one of them reads zero until 0.1.9 ships** —
+`desktop_rewrite_started`, `desktop_rewrite_abandoned`, `rewrite_type`, `attempt_id` and
+`failure_stage` all arrive with that build. Keep the band anyway: an empty tile whose
+event has not shipped is a different thing from an empty tile whose event is broken, and
+the descriptions say which.
+
+| # | Tile | Query |
+|---|---|---|
+| 24 | **[Rewrite attempts per day (incl. onboarding)](https://us.posthog.com/project/549465/insights/DtjYwMCL)** | Trends, `desktop_rewrite_started`, count + unique users. **No tutorial filter** |
+| 25 | [Onboarding vs real usage](https://us.posthog.com/project/549465/insights/TNqOHEh7) | Tile 24 broken down by `is_tutorial` |
+| 26 | **[Attempts by rewrite type](https://us.posthog.com/project/549465/insights/YsTp4rZs)** | `desktop_rewrite_started` × `rewrite_type` × `is_tutorial`, weekly bars |
+| 27 | [Success rate by type](https://us.posthog.com/project/549465/insights/wJ5BVQKA) | Formula `B/A` — completed ÷ started, broken down by `rewrite_type` |
+| 28 | [Acceptance rate by type](https://us.posthog.com/project/549465/insights/Vsc37M1u) | Formula `(B+C)/A` — (inserted + copied) ÷ completed, by `rewrite_type` |
+| 29 | [Attempt outcomes](https://us.posthog.com/project/549465/insights/P5yVs1NT) | completed / failed / abandoned, percent-stacked area |
+| 30 | **[Failure stage by type](https://us.posthog.com/project/549465/insights/iJYfHJZF)** | `desktop_rewrite_failed` × `failure_stage` × `rewrite_type` |
+| 31 | [Funnel — started → completed → inserted](https://us.posthog.com/project/549465/insights/IGuOzWHW) | Funnel, ordered, 1-hour window, by `rewrite_type` |
+| 32 | **[Attempt funnel by type (exact)](https://us.posthog.com/project/549465/insights/uqsAVMt0)** | HogQL table correlated on `attempt_id`. Carries the `unresolved` invariant monitor |
+
+**Tile 24 is deliberately the only unfiltered total on the dashboard.** Onboarding
+practice is a real product interaction — a user may retry a lesson many times, and
+counting one `desktop_onboarding_completed` per person would miss all of it. Tile 10
+remains the real-usage-only view; the pair is the answer, not either alone.
+
+**Tile 32 exists because 31 cannot be exact.** PostHog aggregates funnels per *person*,
+and the MCP's `funnelAggregateByHogQL` accepts only `properties.$session_id` — so a user
+who presses twice inside the conversion window has their steps interleaved. 32 groups by
+`attempt_id` in HogQL instead, which cannot blur. **Read rates off 32 and shape off 31.**
+
+**Tile 32's `unresolved` column is the live invariant monitor and must read 0.** It counts
+attempts with a `started` and no ending. `RewriteAttemptTracker` makes that structurally
+impossible and `RewriteAttemptTests` proves it under every ordering, so a non-zero value
+means a new exit path in `OverlayController` forgot to call `finishAttempt` — the one
+failure mode the type cannot prevent, since the controller needs a window server and
+cannot be unit-tested.
+
+**Tiles 10, 11 and 13 changed on 2026-08-24, and the way they changed is worth knowing.**
+Their tutorial exclusion moved off `host_app_bundle_id` — but *not* to a plain
+`is_tutorial = false`, which would have been much worse than the proxy it replaced:
+**128 of 144 completed rewrites predate the property**, so an exact-false filter reads
+those as excluded and collapses tile 10 from 96 to 9. The filter is a HogQL coalesce —
+trust the flag where present, fall back to the bundle id where it is absent:
+
+```sql
+JSONExtractRaw(properties, 'is_tutorial') != 'true'
+AND (JSONExtractRaw(properties, 'is_tutorial') != ''
+     OR properties.host_app_bundle_id != 'com.core7.keigobutton.mac')
+```
+
+The proxy was wrong in *both* directions, which only became visible once the flag had
+real data: it also excluded **3 real rewrites made with the app window frontmost**
+(`prompt_origin: onboarding_preset`, `is_tutorial: false` — an onboarding preset button
+pressed after onboarding ended). AGENTS.md used to claim the two "agree by construction";
+they do not. Total over 2026-08-01…24 goes **96 → 99**. Tile 11 also gained its missing
+`copied` term, so it is now the honest `(inserted + copied) / completed`.
 
 ### Supporting breakdowns
 

@@ -306,6 +306,61 @@ struct OnboardingStaticMailBody: View {
     }
 }
 
+/// A drafted reply that introduces the writer by name, for the page that asks for it.
+///
+/// The written text is Japanese in the Chinese interface, per §17: the interface is
+/// Chinese and the buttons still write Japanese, so translating the mail body would be
+/// showing output the buttons will not produce.
+struct OnboardingNameMailBody: View {
+    let name: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Text(tr("佐藤さん", "Sam Rivera", "佐藤さん"))
+            Text(tr(
+                "ご連絡ありがとうございます。",
+                "Thank you for your message.",
+                "ご連絡ありがとうございます。"
+            ))
+            introduction
+            Text(tr(
+                "明日の打ち合わせについて、15時からで承知いたしました。",
+                "3pm tomorrow works on my end — see you then.",
+                "明日の打ち合わせについて、15時からで承知いたしました。"
+            ))
+            .padding(.top, 5)
+            Spacer(minLength: 0)
+        }
+        .font(Tokens.Font.body(12))
+        .foregroundStyle(Tokens.Window.textPrimary)
+        .lineSpacing(4)
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(.white)
+    }
+
+    /// One concatenated `Text` rather than an `HStack`: the name lands before the
+    /// copula in Japanese and after the verb in English, and only a single `Text` wraps
+    /// the sentence correctly whichever side of it is long. An empty half costs nothing
+    /// here — unlike `PillSentence`, a concatenation has no spacing to leave behind.
+    private var introduction: Text {
+        Text(tr("", "I'm ", ""))
+            + enteredName
+            + Text(tr("です。", ".", "です。"))
+    }
+
+    /// Bold, not tinted: §8 keeps indigo for progress, selection and the primary
+    /// action, and this is neither — it is the one word on the page that is the user's.
+    private var enteredName: Text {
+        let entered = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !entered.isEmpty else {
+            return Text(tr("お名前", "your name", "お名前"))
+                .foregroundStyle(Tokens.Window.textTertiary)
+        }
+        return Text(entered).fontWeight(.medium)
+    }
+}
+
 struct OnboardingOverlayBar: View {
     let labels: [String]
     var expanded = true

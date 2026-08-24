@@ -93,7 +93,7 @@ final class OnboardingCoordinator: ObservableObject {
         if !replaying { progress.save(step: next) }
 
         switch next {
-        case .language, .welcome, .purpose, .review, .access:
+        case .language, .welcome, .name, .purpose, .review, .access:
             overlay.setVisible(false)
         case .bar, .source, .complete:
             overlay.endTutorial()
@@ -129,12 +129,14 @@ final class OnboardingCoordinator: ObservableObject {
     func advance() {
         switch step {
         case .language: move(to: .welcome)
+        case .welcome where mainModel.isSignedIn: move(to: .name)
         // The name is required from 2026-08-21: it is what reply mode resolves
         // @mentions against and what signs an email, and a blank one silently degrades
         // both (§16). Gated here as well as on the button so the state machine, not the
-        // view, is the thing that will not move.
-        case .welcome where mainModel.isSignedIn && mainModel.hasDisplayNameDraft:
-            preparePurpose()
+        // view, is the thing that will not move. Continue is also what saves the draft
+        // and loads the account's buttons, which is why this page and not `welcome`
+        // calls `preparePurpose`.
+        case .name where mainModel.hasDisplayNameDraft: preparePurpose()
         case .purpose: move(to: .review)
         case .review: confirmButtons()
         case .access where mainModel.isTrusted: move(to: .bar)

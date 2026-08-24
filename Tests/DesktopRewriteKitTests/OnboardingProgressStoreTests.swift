@@ -103,10 +103,11 @@ final class OnboardingProgressStoreTests: XCTestCase {
         XCTAssertEqual(DesktopOnboardingStep.source.rawValue, 9)
         XCTAssertEqual(DesktopOnboardingStep.language.rawValue, 10)
         XCTAssertEqual(DesktopOnboardingStep.offer.rawValue, 11)
+        XCTAssertEqual(DesktopOnboardingStep.name.rawValue, 12)
         XCTAssertEqual(
             DesktopOnboardingStep.flow,
             [
-                .language, .welcome, .purpose, .review, .access, .bar, .practice,
+                .language, .welcome, .name, .purpose, .review, .access, .bar, .practice,
                 .customPractice, .replyPractice, .source, .offer, .complete,
             ]
         )
@@ -115,13 +116,27 @@ final class OnboardingProgressStoreTests: XCTestCase {
     func testVisualFlowHasMatchingForwardAndBackNavigation() {
         let flow = DesktopOnboardingStep.flow
         XCTAssertEqual(Array(flow.dropFirst()), [
-            .welcome, .purpose, .review, .access, .bar, .practice, .customPractice,
+            .welcome, .name, .purpose, .review, .access, .bar, .practice, .customPractice,
             .replyPractice, .source, .offer, .complete,
         ])
         XCTAssertEqual(Array(flow.dropLast().reversed()), [
             .offer, .source, .replyPractice, .customPractice, .practice, .bar, .access,
-            .review, .purpose, .welcome, .language,
+            .review, .purpose, .name, .welcome, .language,
         ])
+    }
+
+    /// The name is its own page, and it is the page after the account it is stored on.
+    /// It was a second card on `welcome` until 2026-08-23; a hard gate that shares a
+    /// page with sign-in reads as one more field of the signup form.
+    func testTheNameIsAskedOnItsOwnPageRightAfterTheAccount() throws {
+        let flow = DesktopOnboardingStep.flow
+        let name = try XCTUnwrap(flow.firstIndex(of: .name))
+        XCTAssertEqual(flow[name - 1], .welcome)
+        XCTAssertEqual(flow[name + 1], .purpose)
+        // Setting the app up, so the rail counts it — unlike the language page before
+        // it and the offer at the other end of the run.
+        XCTAssertTrue(DesktopOnboardingStep.railSteps.contains(.name))
+        XCTAssertNil(DesktopOnboardingStep.name.skippingEducation)
     }
 
     /// Both questions are asked before the closing card, not after it — 完了 hands the
@@ -181,7 +196,7 @@ final class OnboardingProgressStoreTests: XCTestCase {
     func testTheRailCountsNeitherTheLanguagePageNorTheOffer() {
         XCTAssertFalse(DesktopOnboardingStep.railSteps.contains(.language))
         XCTAssertFalse(DesktopOnboardingStep.railSteps.contains(.offer))
-        XCTAssertEqual(DesktopOnboardingStep.railSteps.count, 10)
+        XCTAssertEqual(DesktopOnboardingStep.railSteps.count, 11)
     }
 
     /// A step with no segment lights the last one at or before it. Without this the

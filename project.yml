@@ -45,6 +45,10 @@ targets:
       Release: Config/Base.xcconfig
     sources:
       - path: App
+        # The keyed `.mov` is what ships; the `.mp4` beside it is the master the key was
+        # cut from (§15) and is kept out of the bundle rather than out of the repository.
+        excludes:
+          - "Resources/OnboardingMascotLoop.mp4"
     dependencies:
       - package: KeigoButtonMacCore
         product: DesktopRewriteKit
