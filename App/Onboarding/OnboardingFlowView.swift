@@ -25,6 +25,7 @@ struct OnboardingFlowView: View {
                     switch coordinator.step {
                     case .language: LanguageStep(coordinator: coordinator)
                     case .welcome: WelcomeStep(coordinator: coordinator)
+                    case .name: NameStep(coordinator: coordinator)
                     case .purpose: PurposeStep(coordinator: coordinator)
                     case .review: ButtonReviewStep(coordinator: coordinator)
                     case .access: AccessStep(coordinator: coordinator)
@@ -93,16 +94,19 @@ private struct OnboardingNavigationBar: View {
 
                 case .welcome:
                     if model.isSignedIn {
-                        primaryButton(
-                            model.isSavingName
-                                ? tr("名前を保存中…", "Saving your name…", "正在保存名字…")
-                                : coordinator.isPreparingPurpose
-                                ? tr("ボタンを読み込み中…", "Loading your buttons…", "正在加载按钮…")
-                                : tr("続ける", "Continue", "继续"),
-                            enabled: !coordinator.isPreparingPurpose && !model.isSavingName
-                                && model.hasDisplayNameDraft
-                        )
+                        primaryButton(tr("続ける", "Continue", "继续"))
                     }
+
+                case .name:
+                    primaryButton(
+                        model.isSavingName
+                            ? tr("名前を保存中…", "Saving your name…", "正在保存名字…")
+                            : coordinator.isPreparingPurpose
+                            ? tr("ボタンを読み込み中…", "Loading your buttons…", "正在加载按钮…")
+                            : tr("続ける", "Continue", "继续"),
+                        enabled: !coordinator.isPreparingPurpose && !model.isSavingName
+                            && model.hasDisplayNameDraft
+                    )
 
                 case .purpose:
                     primaryButton(tr("このセットを確認", "Review this set", "确认这组按钮"))
@@ -215,6 +219,7 @@ private struct ProgressRail: View {
     private var labels: [DesktopOnboardingStep: String] {
         [
             .welcome: tr("アカウント", "Account", "账户"),
+            .name: tr("名前", "Name", "名字"),
             .purpose: tr("用途", "Use", "用途"),
             .review: tr("ボタン", "Buttons", "按钮"),
             .access: tr("アクセス", "Access", "权限"),
@@ -255,12 +260,13 @@ private struct ProgressRail: View {
 }
 
 private struct WelcomeStep: View {
-    @ObservedObject var coordinator: OnboardingCoordinator
     @ObservedObject private var model: MainModel
     @State private var showsEmail = false
 
+    // The coordinator is not held: everything this page reads and both errors it used
+    // to print moved to 名前 with the field, and observing it would only redraw the
+    // sign-in form for changes on another page.
     init(coordinator: OnboardingCoordinator) {
-        self.coordinator = coordinator
         self.model = coordinator.mainModel
     }
 
@@ -301,11 +307,6 @@ private struct WelcomeStep: View {
             OnboardingVisualStage {
                 OnboardingMascotHero()
                     .frame(width: 344, height: 344)
-                    .mask {
-                        RoundedRectangle(cornerRadius: 44, style: .continuous)
-                            .padding(10)
-                            .blur(radius: 16)
-                    }
                     .padding(28)
             }
             .padding(.vertical, OnboardingMetrics.visualVerticalInset)
@@ -318,70 +319,17 @@ private struct WelcomeStep: View {
     }
 
     private var connectedContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Card(padding: 16, radius: 12) {
-                HStack(spacing: 12) {
-                    StatusDot(ok: true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(tr("アカウントに接続済み", "Connected to your account", "已连接账户"))
-                            .font(Tokens.Font.body(14, weight: .medium))
-                            .foregroundStyle(Tokens.Window.textPrimary)
-                        Text(model.signedInEmail ?? "")
-                            .font(Tokens.Font.body(12))
-                            .foregroundStyle(Tokens.Window.textSecondary)
-                    }
+        Card(padding: 16, radius: 12) {
+            HStack(spacing: 12) {
+                StatusDot(ok: true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tr("アカウントに接続済み", "Connected to your account", "已连接账户"))
+                        .font(Tokens.Font.body(14, weight: .medium))
+                        .foregroundStyle(Tokens.Window.textPrimary)
+                    Text(model.signedInEmail ?? "")
+                        .font(Tokens.Font.body(12))
+                        .foregroundStyle(Tokens.Window.textSecondary)
                 }
-            }
-            Card(padding: 16, radius: 12) {
-                VStack(alignment: .leading, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(tr("メッセージで使う名前", "Name you use in messages", "你在消息中使用的名字"))
-                            .font(Tokens.Font.body(13, weight: .medium))
-                            .foregroundStyle(Tokens.Window.textPrimary)
-                        Text(tr(
-                            "普段、相手に名乗る名前を入力してください。AIがあなたへの呼びかけを見分け、必要なときにメールの署名へ使います。",
-                            "Enter the name other people know you by. AI uses it to recognize when a message refers to you and, when appropriate, sign emails.",
-                            "请输入他人熟悉的称呼。AI 会用它识别消息何时在称呼你，并在适当时用于邮件署名。"
-                        ))
-                            .font(Tokens.Font.body(11))
-                            .foregroundStyle(Tokens.Window.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    HStack(spacing: 8) {
-                        SettingsField(
-                            // Each language's own filler name, not a translation of one
-                            // person: 山田太郎, John Smith and 张三 are what a form example
-                            // looks like to a reader of that language. 山田树 was the
-                            // Japanese example transliterated, which is a name no
-                            // Chinese speaker would recognise as a placeholder.
-                            placeholder: tr("例：山田 太郎", "e.g. John Smith", "例如：张三"),
-                            text: $model.displayNameDraft,
-                            onSubmit: { model.saveDisplayName() }
-                        )
-                        ActionButton(
-                            model.isSavingName
-                                ? tr("保存中…", "Saving…", "保存中…")
-                                : tr("保存", "Save", "保存"),
-                            style: .primary,
-                            enabled: model.canSaveDisplayName
-                        ) {
-                            model.saveDisplayName()
-                        }
-                    }
-                }
-            }
-            if let error = model.profileError {
-                Text(error)
-                    .font(Tokens.Font.body(12))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let error = coordinator.purposeError {
-                Text(error)
-                    .font(Tokens.Font.body(12))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -458,6 +406,100 @@ private struct WelcomeStep: View {
 
     private var canSubmit: Bool {
         !model.isAuthenticating && model.email.contains("@") && model.password.count >= 6
+    }
+}
+
+/// The name, and nothing else.
+///
+/// It was a second card on アカウント until 2026-08-23, stacked under the sign-in it
+/// shared the page with, where it read as one more field of the signup form — something
+/// to fill in because a form was asking. It is a hard gate (§15) whose answer signs
+/// every reply the app writes, and that is not a thing to explain in a caption beside a
+/// password box.
+///
+/// One field, and **no Save button beside it**: Continue saves the draft, so a second
+/// action on the same value would be the dead competing action §15 keeps off these
+/// pages. ⏎ in the field is the same action as Continue, for the same reason.
+///
+/// The stage answers "what is this for?" without a sentence: the name appears in a
+/// reply as it is typed, in the place the app would actually put it.
+private struct NameStep: View {
+    @ObservedObject var coordinator: OnboardingCoordinator
+    @ObservedObject private var model: MainModel
+
+    init(coordinator: OnboardingCoordinator) {
+        self.coordinator = coordinator
+        self.model = coordinator.mainModel
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 28) {
+            VStack(alignment: .leading, spacing: 20) {
+                StepHeading(
+                    eyebrow: tr("あなたのこと", "About you", "关于你"),
+                    // Short enough to hold one line at 20 pt in a 320 pt column: the
+                    // longer 「返信では、どの名前で名乗りますか？」 wrapped mid-verb, and
+                    // Japanese has no word boundary to break at.
+                    title: tr(
+                        "返信で名乗る名前は？",
+                        "What name should your replies use?",
+                        "回复时用哪个名字自称？"
+                    ),
+                    subtitle: tr(
+                        "普段、相手に名乗る名前です。あとから設定でいつでも変更できます。",
+                        "The name other people know you by. You can change it any time in Settings.",
+                        "他人熟悉的称呼。之后可随时在设置中更改。"
+                    )
+                )
+
+                SettingsField(
+                    // Each language's own filler name, not a translation of one person:
+                    // 山田太郎, John Smith and 张三 are what a form example looks like to
+                    // a reader of that language. 山田树 was the Japanese example
+                    // transliterated, which is a name no Chinese speaker would recognise
+                    // as a placeholder.
+                    placeholder: tr("例：山田 太郎", "e.g. John Smith", "例如：张三"),
+                    text: $model.displayNameDraft,
+                    autofocus: true,
+                    onSubmit: { coordinator.advance() }
+                )
+                .frame(maxWidth: 260)
+
+                HStack(alignment: .top, spacing: 10) {
+                    Icon(.info, size: 14)
+                        .foregroundStyle(Tokens.Window.accentText)
+                        .opticalCentre()
+                    Text(tr(
+                        "メールでは署名に、返信ではあなた宛の呼びかけを見分けるために使います。",
+                        "It signs your emails, and it is how a reply can tell a message was addressed to you.",
+                        "用于邮件署名，也用来识别消息是否在称呼你。"
+                    ))
+                        .font(Tokens.Font.body(12))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                // Both failures belong to Continue — one saving the name, one loading
+                // the account's buttons — so both are read on the page that presses it.
+                if let error = model.profileError ?? coordinator.purposeError {
+                    Text(error)
+                        .font(Tokens.Font.body(12))
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: 320, alignment: .leading)
+            .frame(maxHeight: .infinity, alignment: .leading)
+
+            NameIllustration(name: model.displayNameDraft)
+                .padding(.vertical, OnboardingMetrics.visualVerticalInset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
+        .padding(.horizontal, OnboardingMetrics.pagePadding)
+        .padding(.top, OnboardingMetrics.contentTopPadding)
+        .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
 }
 
@@ -2060,7 +2102,9 @@ private struct OnboardingMascotHero: View {
 
     var body: some View {
         Group {
-            if let url = Bundle.main.url(forResource: "OnboardingMascotLoop", withExtension: "mp4") {
+            // The bundled clip is HEVC with a premultiplied alpha channel, so it draws
+            // straight onto the lavender stage. §15 owns why it is not the source mp4.
+            if let url = Bundle.main.url(forResource: "OnboardingMascotLoop", withExtension: "mov") {
                 LoopingVideoView(url: url)
             } else {
                 Image(Icon.Name.markFilled)
@@ -2128,6 +2172,27 @@ private struct PermissionIllustration: View {
     var body: some View {
         OnboardingVisualStage {
             OnboardingSystemSettingsScene(granted: granted)
+        }
+    }
+}
+
+/// The name page's stage: a reply with the name in it, redrawn as the field is typed.
+///
+/// No bar — this page is not about the bar, and the one moving thing on the stage should
+/// be the word the user is entering. The window is **centred at a fixed height rather
+/// than filled to the stage's edges** like the practice pages' composer: nothing here
+/// is typed into it, so the height it needs is the height of the four lines it holds,
+/// and a composer stretched to 500 pt for them is mostly empty white.
+private struct NameIllustration: View {
+    let name: String
+
+    var body: some View {
+        OnboardingVisualStage {
+            OnboardingMailWindow {
+                OnboardingNameMailBody(name: name)
+            }
+            .frame(height: 268)
+            .padding(.horizontal, 36)
         }
     }
 }

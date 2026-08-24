@@ -744,8 +744,45 @@ short version.
   history; it stops being free the moment the token goes live.
 - Every rewrite event carries: `host_app_bundle_id`, `capture_mode`,
   `io_path` (`ax` | `clipboard`), `prompt_origin`, `latency_ms`,
-  `candidate_count`, `accepted` / `selected_index`, and since 2026-08-22
-  `is_tutorial` and `accessibility_granted`.
+  `candidate_count`, `accepted` / `selected_index`, `is_tutorial` and
+  `accessibility_granted` (2026-08-22), and `attempt_id` / `rewrite_type` (0.1.9).
+- **The rewrite loop is six events, not four (0.1.9).** `desktop_rewrite_started` and
+  `desktop_rewrite_abandoned` join completed / failed / inserted / copied. The reason is
+  that the loop had **no denominator**: nothing counted a press, so a failure had nothing
+  to be a fraction of, and a generation cancelled by a second press — already sent and
+  metered by `desktop-rewrite` — reported nothing at all, because the
+  `guard !Task.isCancelled` sat in front of the analytics call.
+- **`rewrite_type` replaces `prompt_origin` as "what did the user do".** Five values:
+  `saved_button`, `custom_instruction`, `reply`, `regenerate`, `refine`. Four of those
+  five used to report `prompt_origin: custom` — 45 of 96 real completed rewrites, of which
+  only the 16 carrying `is_reply` were separable — so `prompt_origin`'s own stated purpose
+  ("which buttons earn their place on the row") was unanswerable. It now means only
+  *which* button, and is nil for the other four types rather than defaulted to `custom`.
+- **`is_tutorial` stays a separate boolean and must not become a sixth `rewrite_type`.**
+  Practice is a context, not an interaction: the tutorial teaches three of the five types,
+  so folding it into the enum would make "what did they practise" unmeasurable and would
+  force every tile to remember a magic value instead of setting one filter. Pinned by
+  `RewriteAttemptTests`.
+- **One `started` ends in exactly one of completed / failed / abandoned**, enforced by
+  `RewriteAttemptTracker` (`Sources/DesktopRewriteKit/Overlay/RewriteAttempt.swift`) rather
+  than by convention: `finish()` returns nil once already closed, so every exit path can
+  call it unconditionally and a double report is a no-op; `begin()` hands back the
+  superseded attempt so it cannot be silently dropped. `OverlayController` needs a window
+  server and cannot be unit-tested, so the rule lives in the package where it can be.
+  Tile 32's `unresolved` column is the live monitor and must read 0.
+- **`desktop_rewrite_failed` now carries context.** It used to send `message` alone — no
+  host app, no type, no stage — so a failure was unattributable. It now carries
+  `failure_stage` (`capture` | `generation`), `rewrite_type`, `attempt_id` and the target
+  properties where a target exists. **All 17 failures external users hit before this were
+  capture failures**, not model or network errors, and only the Japanese toast string
+  distinguished them.
+- **Tiles 10, 11 and 13 no longer filter on `host_app_bundle_id` (2026-08-24).** That
+  proxy was wrong in *both* directions, which is only visible now that `is_tutorial` has
+  real data: it excluded 3 real rewrites made with the app window frontmost, and a naive
+  `is_tutorial = false` would have been far worse — 128 of 144 completed rewrites predate
+  the property, so it would have collapsed tile 10 from 96 to 9. The filter is a coalesce:
+  trust the flag where present, fall back to the bundle id where it is absent. Total over
+  2026-08-01…24 goes 96 → 99.
 - **`is_tutorial` (2026-08-22).** Onboarding practice calls the same three analytics
   methods as a real press, and all three lessons complete *only* on a successful Insert,
   so every new user used to donate three guaranteed acceptances to the acceptance-rate
@@ -767,6 +804,20 @@ short version.
   off to the default browser, so the app is not running when payment lands. That module
   swallows every error by design — a PostHog failure must never turn into a 5xx that makes
   Stripe retry an already-processed event.
+- **Server-side analytics must use a surface-specific secret name, and the project token
+  is pinned in code.** `keyboard-rewrite` (project 465060), `web-rewrite` and every
+  desktop function live in ONE Supabase project (`eercsucvxnszqletxued`) and therefore
+  share ONE secrets namespace. A secret called `POSTHOG_PROJECT_TOKEN` cannot mean two
+  PostHog projects at once, so **layer 1 does not hold on the server the way it holds on
+  the client** — the app is built with its own token; the functions are not. Deploying
+  `desktop-stripe-webhook` on 2026-08-23 11:55 JST set that shared name to the desktop
+  token and silently redirected the keyboard: 198 `ai_rewrite` events from 49 people
+  landed in 549465 from 13:50 JST and stopped reaching 465060 entirely. A redirect, not a
+  duplicate, and nothing warned. The names are now `DESKTOP_POSTHOG_PROJECT_TOKEN` and
+  `KEYBOARD_POSTHOG_PROJECT_TOKEN`, and each module pins its expected `phc_` token and
+  **refuses the write** on a mismatch — a `phc_` token is a public write-only credential
+  that already ships in every client binary, so pinning costs nothing. Do not add a third
+  server surface without giving it its own name and its own pin.
 - **Session replay is impossible on this surface, and it is not a setting.**
   `PostHogConfig.sessionReplay` is declared inside `#if os(iOS)` in `posthog-ios` 3.69.3,
   so on a macOS target the symbol does not exist and the whole `PostHog/Replay/` tree is
@@ -1509,8 +1560,8 @@ width went with the 460 pt column that justified it.
 ## 15. First-run onboarding
 
 `App/Onboarding/` is a dedicated, non-resizable **1080×700** window with no settings
-sidebar. Its eleven steps are アカウント → 用途 → ボタン → アクセス → the pill →
-書き換え → カスタム → 返信 → きっかけ → **オファー** → 完了 — ten of which the progress
+sidebar. Its twelve steps are アカウント → **名前** → 用途 → ボタン → アクセス → the pill →
+書き換え → カスタム → 返信 → きっかけ → **オファー** → 完了 — eleven of which the progress
 rail counts. The rail deliberately does not count the offer: it counts setting the app
 up, and paying for it is not a step of installation. The frame does not follow the intrinsic size of whichever step happens to be
 visible: `.resizable` is absent from the style mask, the `NSHostingView` has
@@ -1560,14 +1611,37 @@ authenticates, so it remains attached to the form rather than masquerading as pa
 navigation.
 
 アカウント makes Google the primary action and progressively reveals the existing
-email/password form. Its right stage keeps `OnboardingMascotLoop.mp4` as the only
-generated content; the video is multiply-composited so its white field disappears into
-the shared lavender scene instead of becoming a card behind the mark. There are no
-generated labels, particles or button chips. The source is Higgsfield
+email/password form. Its right stage keeps the mascot loop as the only generated content,
+and there are no generated labels, particles or button chips. The source is Higgsfield
 Seedance 2.0 job `101892b2-3fdc-4a81-b054-24a8b5708091`, made from
 `public/bgremoved.png` as the matching first and last frame. The prompt deliberately
 asks only for a blink, glance and restrained keypress-like bounce because video models
 are not trusted with readable text or exact interface geometry.
+
+**The clip carries its own alpha channel, and that is the third attempt at removing its
+white field.** The generated master is a keycap on flat white. `.blendMode(.multiply)`
+removed the field by also multiplying the keycap's off-white body into the lavender, so
+the mascot came out dark (0.1.1). Feathering the outer edge with a blurred mask kept the
+body's colour but only faded the field's *edges*, which is the white glow that sat behind
+the mark until 2026-08-24. Neither is fixable in a blend mode: the subject is lighter than
+the stage in some channels and the field has to vanish in all of them, so the field has to
+be alpha, not a blend. The bundled `OnboardingMascotLoop.mov` is HEVC with premultiplied
+alpha, keyed off the master and cut once, offline:
+
+```
+ffmpeg -i OnboardingMascotLoop.mp4 \
+  -vf "colorkey=color=0xFFFFFF:similarity=0.045:blend=0.015,format=yuva420p" \
+  -c:v hevc_videotoolbox -alpha_quality 0.85 -allow_sw 1 -q:v 55 -tag:v hvc1 -an \
+  OnboardingMascotLoop.mov
+```
+
+The key holds because the field is 254 and the keycap body is 235 — a 19-level margin
+that `similarity=0.045` sits inside, so nothing inside the cap is punched out. **The
+master `.mp4` stays in `App/Resources/` and is excluded from the target in `project.yml`**:
+the Higgsfield job is the only other copy of it and jobs do not last, while shipping both
+files would put 800 KB in every download for a resource nothing loads. `AVPlayerLayer`
+draws the alpha without any configuration; the view must simply not paint a background
+behind it.
 
 用途 offers five practical, four-button configurations: the general starter set, work,
 international communication, Japanese polishing, and social/chat. The starter remains
@@ -1610,7 +1684,7 @@ the only ask for money first run contains, and did for two of the first four acc
 complete onboarding — neither has a `desktop.welcome_offers` row, and nothing in the app
 will ever mint one for them, because `desktop_get_entitlement` only reads that table.
 The name gate is `MainModel.hasDisplayNameDraft` on both the Continue button and
-`advance()`'s `.welcome` case. It reads the **draft** rather than the stored value
+`advance()`'s `.name` case. It reads the **draft** rather than the stored value
 because Continue is what saves it, and it exists because reply mode resolves @mentions
 and email signatures against `profiles.display_name` (§16): `handle_new_user()` seeds it
 from `raw_user_meta_data->>'display_name'`, a key Google does not send, so every Google
@@ -1620,6 +1694,27 @@ legal row. `OnboardingProgressStore.currentVersion` is persisted in `UserDefault
 an unfinished close saves the current step, while the menu-bar item changes from
 「セットアップを続ける」 to 「使い方を見る」 after completion. A later sign-out or
 revoked permission does not reset onboarding; Home's compact recovery card handles it.
+
+**名前 is its own page**, immediately after the account it is stored on. It was a card
+stacked under アカウント's sign-in until 2026-08-23, where a hard gate read as one more
+field of the form above it — something to fill in because a form was asking, rather than
+the name every reply the app writes will be signed with. The page carries one field and
+**no Save button**: Continue is what saves the draft (`saveDisplayNameForContinuation`)
+and then loads the account's buttons, so a Save beside the field would be the second
+action on one value the shelf rule above exists to prevent, and ⏎ in the field runs
+Continue for the same reason. It is also the one page whose field is focused on
+appearance — `SettingsField(autofocus:)`, off everywhere else, because a form of several
+fields must not choose one for the user. Its stage is a Mail composer drawing a reply
+that introduces the writer by name, redrawn as the field is typed and showing 「お名前」
+in tertiary until there is a name to draw; the written text stays Japanese in the Chinese
+interface, per §17. The window is centred at a fixed height instead of filling the stage
+like the practices' composer — nothing is typed into this one, so its height is the
+height of the four lines it holds. The name itself is bold rather than tinted: §8 keeps
+indigo for progress, selection and the primary action. Both of Continue's failures —
+saving the name, loading the buttons — are read on this page, because this is the page
+that presses it. `name` is appended at raw value 12 and `currentVersion` stays 2, so an
+unfinished saved step still resolves and nobody who has already answered the question is
+asked it again.
 
 The first practice is real, not a simulation. It is the first page that drops the split layout:
 the heading runs above a large, full-width Mail composer, matching the interaction

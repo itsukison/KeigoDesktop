@@ -36,6 +36,23 @@ final class OverlayController: ObservableObject {
 
     private var collapseTask: Task<Void, Never>?
     private var rewriteTask: Task<Void, Never>?
+    /// The generation currently in flight, or nil when none is.
+    ///
+    /// **This field is what enforces the funnel's one invariant: a `desktop_rewrite_started`
+    /// is followed by exactly one of `completed`, `failed` or `abandoned`.** Every
+    /// terminal report goes through `finishAttempt`, which reads this once and clears it,
+    /// so a double report is a no-op and a dropped one is impossible as long as every
+    /// exit from `.generating` calls it. `beginAttempt` abandons whatever was still here,
+    /// which is how a second press while the first is generating gets recorded rather
+    /// than silently overwriting an attempt that was already billed by the server.
+    ///
+    /// Post-generation events (`inserted`, `copied`) deliberately do NOT read this: they
+    /// happen after the attempt is finished and report against `PendingRewrite.attempt`.
+    ///
+    /// The rule itself lives in `RewriteAttemptTracker` (and is tested there) rather than
+    /// in this file, because `OverlayController` needs a window server and cannot be
+    /// unit-tested at all.
+    private var attempts = RewriteAttemptTracker()
     private var positionTracker: Timer?
     /// §18. Polled for the same reason `DockProbe` is: AX has nothing to subscribe to,
     /// and a caret moving to another field inside the same app posts no notification of
@@ -710,10 +727,19 @@ final class OverlayController: ObservableObject {
                     buttonTitle: prompt.title,
                     commandKey: prompt.builtinKey,
                     promptOrigin: prompt.origin.rawValue,
+                    rewriteType: .savedButton,
                     isTutorial: self.tutorialMode?.marksSavedButton(id: prompt.id) == true
                 )
             } catch {
                 ClipboardWatcher.resume()
+                // The dominant failure in the wild — 17 of 17 external failures before
+                // this shipped. Reported as its own started/failed pair so it counts as
+                // an attempt of this type rather than vanishing from the funnel.
+                self.reportCaptureFailure(
+                    .savedButton,
+                    isTutorial: self.tutorialMode?.marksSavedButton(id: prompt.id) == true,
+                    message: Self.message(for: error)
+                )
                 self.present(error)
             }
         }
@@ -752,6 +778,14 @@ final class OverlayController: ObservableObject {
                 ))
             } catch {
                 ClipboardWatcher.resume()
+                // Rare by construction — `allowEmpty` and `allowScratch` mean this path
+                // does not fail for want of a target — but a `notTrusted` still lands
+                // here, and that is exactly the failure worth seeing by type.
+                self.reportCaptureFailure(
+                    .customInstruction,
+                    isTutorial: self.tutorialMode != nil,
+                    message: Self.message(for: error)
+                )
                 self.present(error)
             }
         }
@@ -812,6 +846,7 @@ final class OverlayController: ObservableObject {
                 buttonTitle: nil,
                 commandKey: nil,
                 promptOrigin: nil,
+                rewriteType: .customInstruction,
                 isTutorial: tutorialMode?.marksCustomGuidance(trimmed) == true
             )
 
@@ -828,12 +863,91 @@ final class OverlayController: ObservableObject {
                 buttonTitle: tr("返信", "Reply", "回复"),
                 commandKey: nil,
                 promptOrigin: nil,
+                rewriteType: .reply,
                 isTutorial: tutorialMode?.marksReply == true
             )
 
         case .pill, .hoverRow, .generating, .result, .replyArmed:
             return
         }
+    }
+
+    // MARK: - Attempt lifecycle
+
+    /// Opens an attempt and reports `desktop_rewrite_started`.
+    ///
+    /// Any attempt still open is abandoned as `superseded` first. That is not a tidy-up:
+    /// `startRewrite` cancels `rewriteTask`, and the cancelled request has already been
+    /// sent, metered and billed by `desktop-rewrite`. Before this, that request reported
+    /// nothing at all — the `guard !Task.isCancelled` sits in front of the analytics call
+    /// — so `completed + failed` silently failed to add up to the number of presses.
+    private func beginAttempt(_ type: RewriteType, isTutorial: Bool, target: TextTarget?) -> RewriteAttempt {
+        let attempt = RewriteAttempt(type: type, isTutorial: isTutorial)
+        if let superseded = attempts.begin(attempt) {
+            // The *outgoing* attempt's target, not the incoming one — the abandoned event
+            // describes the request being thrown away, and attributing it to the new
+            // press's host app would misfile it. `begin` hands the value back precisely
+            // so this cannot be forgotten.
+            analytics.rewriteAbandoned(
+                superseded,
+                reason: .superseded,
+                target: currentGeneratingTarget
+            )
+        }
+        analytics.rewriteStarted(attempt, target: target)
+        return attempt
+    }
+
+    /// How an attempt ended. Exactly one of these is reported per `beginAttempt`.
+    private enum AttemptOutcome {
+        case completed(target: TextTarget, promptOrigin: String?, isReply: Bool, candidateCount: Int, latencyMs: Int)
+        case failed(stage: FailureStage, message: String)
+        case abandoned(AbandonReason)
+    }
+
+    /// Reports the one terminal event for the open attempt and closes it.
+    ///
+    /// A no-op when no attempt is open, which is what makes it safe to call from every
+    /// exit path — including the ones that overlap, like a dismiss that races the
+    /// response, or `present(message:)` being reached from a state that never started
+    /// a generation at all.
+    private func finishAttempt(_ outcome: AttemptOutcome, target: TextTarget?) {
+        guard let attempt = attempts.finish() else { return }
+        switch outcome {
+        case let .completed(target, promptOrigin, isReply, candidateCount, latencyMs):
+            analytics.rewriteCompleted(
+                attempt,
+                target: target,
+                promptOrigin: promptOrigin,
+                isReply: isReply,
+                candidateCount: candidateCount,
+                latencyMs: latencyMs
+            )
+        case let .failed(stage, message):
+            analytics.rewriteFailed(attempt, stage: stage, message: message, target: target)
+        case let .abandoned(reason):
+            analytics.rewriteAbandoned(attempt, reason: reason, target: target)
+        }
+    }
+
+    /// The target of the generation in flight, for the terminal events that are raised
+    /// from outside the rewrite task and so do not have it in hand. Nil whenever the
+    /// state is not `.generating`, which is also every case where there is no attempt to
+    /// report against.
+    private var currentGeneratingTarget: TextTarget? {
+        guard case .generating(let request) = state else { return nil }
+        return request.captured.target
+    }
+
+    /// A press that never became a generation because there was nothing to read.
+    ///
+    /// Reported as a started-then-failed pair so it lands inside the funnel rather than
+    /// beside it. This is the dominant failure in the wild — every one of the 17 failures
+    /// external users hit before this shipped was a capture failure — and until now it
+    /// carried no type, no host app and no stage, only a translated toast string.
+    private func reportCaptureFailure(_ type: RewriteType, isTutorial: Bool, message: String) {
+        _ = beginAttempt(type, isTutorial: isTutorial, target: nil)
+        finishAttempt(.failed(stage: .capture, message: message), target: nil)
     }
 
     // MARK: - Rewrite
@@ -846,9 +960,11 @@ final class OverlayController: ObservableObject {
         buttonTitle: String?,
         commandKey: String?,
         promptOrigin: String?,
+        rewriteType: RewriteType,
         isTutorial: Bool,
         previousResults: ResultContext? = nil
     ) {
+        let attempt = beginAttempt(rewriteType, isTutorial: isTutorial, target: captured.target)
         resultContextBeforeRewrite = previousResults
         // A regenerate keeps the result panel's pages, so the latch has to be released
         // explicitly — the new attempt deserves a fresh reading of where it can go.
@@ -860,7 +976,7 @@ final class OverlayController: ObservableObject {
             promptText: promptText,
             replyTo: replyTo,
             buttonTitle: buttonTitle,
-            isTutorial: isTutorial,
+            attempt: attempt,
             startedAt: Date()
         )
         transition(to: .generating(request: pending))
@@ -903,15 +1019,21 @@ final class OverlayController: ObservableObject {
             guard let self else { return }
             do {
                 let result = try await self.rewriteService.rewrite(request)
+                // A cancelled task reports nothing here on purpose: whoever cancelled it
+                // already closed the attempt — `beginAttempt` as `superseded`, or
+                // `cancelRewrite`/`dismiss` as `dismissed`. Reporting again would be the
+                // second terminal event for one `started`.
                 guard !Task.isCancelled else { return }
                 let latencyMs = Int(Date().timeIntervalSince(pending.startedAt) * 1000)
-                self.analytics.rewriteCompleted(
-                    target: captured.target,
-                    promptOrigin: promptOrigin,
-                    isReply: replyTo != nil,
-                    isTutorial: pending.isTutorial,
-                    candidateCount: result.candidates.count,
-                    latencyMs: latencyMs
+                self.finishAttempt(
+                    .completed(
+                        target: captured.target,
+                        promptOrigin: promptOrigin,
+                        isReply: replyTo != nil,
+                        candidateCount: result.candidates.count,
+                        latencyMs: latencyMs
+                    ),
+                    target: captured.target
                 )
                 let historyEntryId: UUID?
                 if pending.isTutorial {
@@ -948,6 +1070,8 @@ final class OverlayController: ObservableObject {
     }
 
     func cancelRewrite() {
+        // Before the cancel, so the target is still readable off `.generating`.
+        finishAttempt(.abandoned(.dismissed), target: currentGeneratingTarget)
         rewriteTask?.cancel()
         rewriteTask = nil
         if let previous = resultContextBeforeRewrite {
@@ -1284,9 +1408,9 @@ final class OverlayController: ObservableObject {
                 // field and the one that says whether the rewrite went home or somewhere
                 // the user pointed it afterwards.
                 self.analytics.inserted(
+                    pending.attempt,
                     target: pending.captured.target,
                     isReply: pending.replyTo != nil,
-                    isTutorial: pending.isTutorial,
                     selectedIndex: page.responseCandidateIndex,
                     destination: destination
                 )
@@ -1373,9 +1497,9 @@ final class OverlayController: ObservableObject {
             SystemPasteboard().write(page.candidate.replacement)
         }
         analytics.copied(
+            pending.attempt,
             target: pending.captured.target,
             isReply: pending.replyTo != nil,
-            isTutorial: pending.isTutorial,
             reason: reason
         )
         if let eventId = page.eventId {
@@ -1421,9 +1545,9 @@ final class OverlayController: ObservableObject {
         }
         if let page = context.selectedPage {
             analytics.copied(
+                page.pending.attempt,
                 target: page.pending.captured.target,
                 isReply: page.pending.replyTo != nil,
-                isTutorial: page.pending.isTutorial,
                 reason: .userChose
             )
         }
@@ -1448,6 +1572,11 @@ final class OverlayController: ObservableObject {
             buttonTitle: pending.buttonTitle,
             commandKey: nil,
             promptOrigin: nil,
+            // A ↻ is its own attempt, not a continuation of the one that produced the
+            // page it was pressed on: it is separately generated, separately billed, and
+            // separately acceptable. It reported as `prompt_origin: custom` until now,
+            // indistinguishable from a first-time ✎ press.
+            rewriteType: .regenerate,
             isTutorial: pending.isTutorial,
             previousResults: context
         )
@@ -1472,6 +1601,7 @@ final class OverlayController: ObservableObject {
             buttonTitle: pending.buttonTitle,
             commandKey: nil,
             promptOrigin: nil,
+            rewriteType: .refine,
             isTutorial: pending.isTutorial,
             previousResults: context
         )
@@ -1496,6 +1626,10 @@ final class OverlayController: ObservableObject {
 
     func dismiss() {
         destinationLog.debug("dismiss state=\(self.state.name, privacy: .public)")
+        // Dismissing while a generation is in flight is an abandonment. A no-op in every
+        // other state, which is the common case — dismiss is also how a result panel and
+        // an idle bar are closed.
+        finishAttempt(.abandoned(.dismissed), target: currentGeneratingTarget)
         rewriteTask?.cancel()
         resultContextBeforeRewrite = nil
         transition(to: .pill)
@@ -1906,10 +2040,17 @@ final class OverlayController: ObservableObject {
     }
 
     private func present(message: String) {
-        // No `PendingRewrite` to read: the capture failures are the majority of this
-        // path and they happen before one is built. An armed lesson is the honest
-        // discriminator — see `PostHogAnalytics.failed`.
-        analytics.failed(error: message, isTutorial: tutorialMode != nil)
+        // Closes the attempt as a generation failure. A capture failure has already
+        // closed its own attempt via `reportCaptureFailure` before reaching here, so
+        // this is a no-op for those — which is the point of routing every terminal
+        // report through one idempotent call rather than emitting at each site.
+        //
+        // A message with no attempt open at all (an insert failure on an old result, a
+        // sign-in prompt) reports nothing, which is correct: those are not attempts.
+        finishAttempt(
+            .failed(stage: .generation, message: message),
+            target: currentGeneratingTarget
+        )
 
         // Deliberately not `transition(to:)`: leaving `.generating` through it would
         // dismiss the toast this call is about to raise (see the switch there). The two

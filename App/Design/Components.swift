@@ -668,6 +668,10 @@ struct SettingsField: View {
     let placeholder: String
     @Binding var text: String
     var secure = false
+    /// Off everywhere except a page whose entire content is this one field — first
+    /// run's name page. A form of several fields must not pick one of them for the
+    /// user, and a field inside a settings row must not steal the caret from the page.
+    var autofocus = false
     var onSubmit: () -> Void = {}
 
     @FocusState private var focused: Bool
@@ -688,6 +692,12 @@ struct SettingsField: View {
         .frame(height: 32)
         .background(FieldBackground(focused: focused))
         .onSubmit(onSubmit)
+        .onAppear {
+            // Deferred a turn: focus assigned while the view is still being installed
+            // lands on a responder chain that does not exist yet.
+            guard autofocus else { return }
+            DispatchQueue.main.async { focused = true }
+        }
     }
 }
 

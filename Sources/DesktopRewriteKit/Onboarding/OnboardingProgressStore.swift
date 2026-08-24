@@ -13,6 +13,7 @@ public enum DesktopOnboardingStep: Int, CaseIterable, Sendable {
     case source = 9
     case language = 10
     case offer = 11
+    case name = 12
 
     /// Raw values are append-only — a saved step from an unfinished run is read back by
     /// number — while this array owns the order the user actually sees. `source` is
@@ -30,9 +31,15 @@ public enum DesktopOnboardingStep: Int, CaseIterable, Sendable {
     /// changes every page after it, so it has to be asked before there is anything to
     /// re-render. It is also the one page with no Back button — there is nowhere behind
     /// it — and the only one that does not require a session.
+    ///
+    /// `name` follows `welcome` because it is the one question about the *user* rather
+    /// than about the app, and it belongs beside the account it is stored on. It used
+    /// to be a second card on that page, stacked under the sign-in — where it read as
+    /// one more field of the signup form rather than as the name every rewrite will be
+    /// signed with, which is the only thing it is for.
     public static let flow: [DesktopOnboardingStep] = [
-        .language, .welcome, .purpose, .review, .access, .bar, .practice, .customPractice,
-        .replyPractice, .source, .offer, .complete,
+        .language, .welcome, .name, .purpose, .review, .access, .bar, .practice,
+        .customPractice, .replyPractice, .source, .offer, .complete,
     ]
 
     /// The steps the progress rail counts, in order.
