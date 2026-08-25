@@ -705,6 +705,13 @@ final class MainModel: NSObject, ObservableObject {
                 "writing_language": self.language.writingLanguageCode,
                 "buttons": drafts.count,
             ])
+            PostHogSDK.shared.capture("desktop_preset_selected", properties: [
+                "pack": pack.rawValue,
+                "source": "language_realign",
+                "writing_language": self.language.writingLanguageCode,
+                "button_count": drafts.count,
+                "customized": false,
+            ])
         }
     }
 

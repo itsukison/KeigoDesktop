@@ -745,7 +745,8 @@ short version.
 - Every rewrite event carries: `host_app_bundle_id`, `capture_mode`,
   `io_path` (`ax` | `clipboard`), `prompt_origin`, `latency_ms`,
   `candidate_count`, `accepted` / `selected_index`, `is_tutorial` and
-  `accessibility_granted` (2026-08-22), and `attempt_id` / `rewrite_type` (0.1.9).
+  `accessibility_granted` (2026-08-22), `attempt_id` / `rewrite_type` (0.1.9), and
+  the privacy-safe saved-button purpose `button_key` where applicable.
 - **The rewrite loop is six events, not four (0.1.9).** `desktop_rewrite_started` and
   `desktop_rewrite_abandoned` join completed / failed / inserted / copied. The reason is
   that the loop had **no denominator**: nothing counted a press, so a failure had nothing
@@ -758,6 +759,17 @@ short version.
   only the 16 carrying `is_reply` were separable — so `prompt_origin`'s own stated purpose
   ("which buttons earn their place on the row") was unanswerable. It now means only
   *which* button, and is nil for the other four types rather than defaulted to `custom`.
+- **`button_key` answers which saved-button purpose was used without sending user
+  content.** Untouched stock templates carry explicit stable keys shared across packs
+  when the purpose is the same; edited non-builtin presets report `customized_preset`,
+  authored/builder buttons report `user_authored`, and legacy builtins fall back through
+  `builtin_key`. The value lives on `RewriteAttempt`, so started, terminal, inserted and
+  copied events cannot disagree. Never replace it with a title, prompt, captured text or
+  rewrite result.
+- **`desktop_preset_selected` reports successful pack saves.** It carries `pack`,
+  `source` (`onboarding` | `language_realign`), `writing_language`, `button_count` and
+  `customized`. First-run onboarding emits it only after `replaceAll` succeeds and never
+  during a replay; the language-realignment path emits the same event after its save.
 - **`is_tutorial` stays a separate boolean and must not become a sixth `rewrite_type`.**
   Practice is a context, not an interaction: the tutorial teaches three of the five types,
   so folding it into the enum would make "what did they practise" unmeasurable and would
@@ -769,20 +781,18 @@ short version.
   call it unconditionally and a double report is a no-op; `begin()` hands back the
   superseded attempt so it cannot be silently dropped. `OverlayController` needs a window
   server and cannot be unit-tested, so the rule lives in the package where it can be.
-  Tile 32's `unresolved` column is the live monitor and must read 0.
+  `RewriteAttemptTests` remain the invariant monitor after the 2026-08-25 dashboard
+  cleanup removed the diagnostic attempt table.
 - **`desktop_rewrite_failed` now carries context.** It used to send `message` alone — no
   host app, no type, no stage — so a failure was unattributable. It now carries
   `failure_stage` (`capture` | `generation`), `rewrite_type`, `attempt_id` and the target
   properties where a target exists. **All 17 failures external users hit before this were
   capture failures**, not model or network errors, and only the Japanese toast string
   distinguished them.
-- **Tiles 10, 11 and 13 no longer filter on `host_app_bundle_id` (2026-08-24).** That
-  proxy was wrong in *both* directions, which is only visible now that `is_tutorial` has
-  real data: it excluded 3 real rewrites made with the app window frontmost, and a naive
-  `is_tutorial = false` would have been far worse — 128 of 144 completed rewrites predate
-  the property, so it would have collapsed tile 10 from 96 to 9. The filter is a coalesce:
-  trust the flag where present, fall back to the bundle id where it is absent. Total over
-  2026-08-01…24 goes 96 → 99.
+- **Dashboard cards 9–13 include onboarding practice (2026-08-25).** Practice is product
+  usage and a context, not a fake rewrite: volume, type mix, exact acceptance and
+  rewrites-per-user therefore use it. `is_tutorial` remains available as card 10's second
+  breakdown so practice and real use can still be separated without distorting totals.
 - **`is_tutorial` (2026-08-22).** Onboarding practice calls the same three analytics
   methods as a real press, and all three lessons complete *only* on a successful Insert,
   so every new user used to donate three guaranteed acceptances to the acceptance-rate
@@ -824,9 +834,25 @@ short version.
   compiled out. The project has the replay product enabled server-side; it will read zero
   forever. `docs/analytics.md` §6 is the full record. The consequence: **the events in §3
   are the only channel there will ever be** — no replay, no heatmaps, no `$pageview`.
+- **`frontmost_app_bundle_id` (0.1.10)** is sent on every event that has **no target**,
+  and only those. `host_app_bundle_id` is read off the target, so a capture failure —
+  the dominant failure in the wild — reported `unknown` and the one question worth
+  asking of it was unanswerable: *did our AX read fail in this app, or was there
+  genuinely nothing focused?* First seen 2026-08-24, when an external user's 6 capture
+  failures all came back `unknown` in a session whose only successes were clipboard
+  reads out of `com.microsoft.teams2`. It is truthful only because of §4's ordering —
+  the nil-target callers are all inside the capture `catch`, before `present(error)`
+  and before any panel takes key.
+- **`io_path: ax` does not mean AX found a field.** `TextTarget.scratch` is returned
+  when AX *and* the clipboard have both failed (§18), and both `TextIOCoordinator.capture`
+  and `captureReply` set `lastPath = .ax` on that path. 35 of 149 completed rewrites
+  measured 2026-08-24 are `scope: scratch` and every one of them reports `ax`, so tiles
+  14 and 15 **understate AX failure by that share**. Read `scope: scratch` beside
+  `io_path` — or fix the coordinator to report a third path — before trusting a
+  fallback rate.
 - `io_path` is the one to watch. A rising clipboard-fallback rate in a specific
   bundle id is the earliest signal that an app's AX tree changed — which is why
-  the dashboard breaks it down by `host_app_bundle_id` and not only over time.
+  dashboard cards 16 and 17 show both the overall path split and the host-app breakdown.
 - `desktop_rewrite_failed` now carries `message`, the app's own Japanese toast.
   It used to take the string and drop it, so the failure tile could only ever
   have been a count.
@@ -2589,8 +2615,17 @@ capture. `TextIOCoordinator.write` throws `.noDestination` rather than synthesiz
 anything, and Insert never calls it in that state.
 
 A **saved button** still requires text, and that is not a regression to fix: 敬語 applied
-to nothing is not a request. What changed is the message, which now names the control
-that needs no text — 「文章を選択するか、✎ から新しい文章を書いてください」.
+to nothing is not a request. What changed is the message, which names the control that
+needs no text.
+
+**The message leads with clicking into the field (0.1.10), and that ordering is the
+point.** It used to offer selecting and ✎ only — two of the three ways out, omitting the
+one the product is built around: `.wholeInput` rewrites the focused field with *nothing
+selected* (§5), and it is the case the clipboard cannot serve. Telling someone to select
+text when clicking into their draft would have worked teaches them the slower half of the
+product, and reads as a refusal when the field is right there. Three situations reach this
+one string — nothing focused, a focused field that is blank, and a field whose text AX
+cannot read — and only `frontmost_app_bundle_id` (§7) can tell them apart after the fact.
 
 Considered and deferred: probing on hover so the *row* could dim its buttons before
 anything is pressed. It costs one cross-process AX call on the hottest interaction in

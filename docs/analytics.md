@@ -16,9 +16,11 @@ the one thing they falsified. The dashboard was rebuilt on 2026-08-10 from 15 ti
 21: the original set measured the rewrite loop and nothing before it, so there was no
 answer to "how many people arrived today". §4 is the new set.
 
-**2026-08-24 — 32 tiles.** Band 6 rebuilt the rewrite loop around an attempt: six events
-instead of four, a five-way `rewrite_type`, and a funnel with a denominator. §3's
-"Rebuilt on 2026-08-24" has the why.
+**2026-08-25 — 21 decision cards.** The dashboard was rebuilt around four questions:
+arrival, adoption, how people rewrite, and whether the loop works. Sign-up and sign-in
+are one authenticated-user series; practice is included in usage and acceptance; exact
+rates correlate on `attempt_id`; and saved-button purpose plus preset-pack choice have
+privacy-safe instrumentation. §4 is the live specification.
 
 **2026-08-22 — 23 tiles, and three instrumentation gaps closed.** The first read of real
 user behaviour is what prompted it: 6 external users had produced **4 real rewrites
@@ -143,12 +145,12 @@ partner: an event without it, in the desktop project, came from somewhere it sho
 
 | Event | Where | Properties |
 |---|---|---|
-| `desktop_rewrite_started` | `Analytics.swift` (0.1.9) | `attempt_id`, `rewrite_type`, `is_tutorial`, `accessibility_granted`, plus the target properties |
-| `desktop_rewrite_completed` | `Analytics.swift` | `attempt_id`, `rewrite_type`, `host_app_bundle_id`, `capture_mode`, `io_path`, `prompt_origin`, `is_reply`, `latency_ms`, `candidate_count`, `scope`, `has_destination`, `is_tutorial`, `accessibility_granted` |
-| `desktop_rewrite_inserted` | `Analytics.swift` | `attempt_id`, `rewrite_type`, `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `accepted`, `selected_index`, `scope`, `insert_destination`, `is_tutorial`, `accessibility_granted` |
-| `desktop_rewrite_copied` | `Analytics.swift` | `attempt_id`, `rewrite_type`, `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `scope`, `reason`, `is_tutorial`, `accessibility_granted` |
-| `desktop_rewrite_failed` | `Analytics.swift` | `attempt_id`, `rewrite_type`, **`failure_stage`** (`capture` \| `generation`), `message` (the app's own Japanese toast — never captured or rewritten text), the target properties where a target exists, `is_tutorial`, `accessibility_granted` |
-| `desktop_rewrite_abandoned` | `Analytics.swift` (0.1.9) | `attempt_id`, `rewrite_type`, `reason` (`superseded` \| `dismissed`), the target properties, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_started` | `Analytics.swift` (0.1.9) | `attempt_id`, `rewrite_type`, `button_key`, `is_tutorial`, `accessibility_granted`, plus the target properties |
+| `desktop_rewrite_completed` | `Analytics.swift` | `attempt_id`, `rewrite_type`, `button_key`, `host_app_bundle_id`, `capture_mode`, `io_path`, `prompt_origin`, `is_reply`, `latency_ms`, `candidate_count`, `scope`, `has_destination`, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_inserted` | `Analytics.swift` | `attempt_id`, `rewrite_type`, `button_key`, `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `accepted`, `selected_index`, `scope`, `insert_destination`, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_copied` | `Analytics.swift` | `attempt_id`, `rewrite_type`, `button_key`, `host_app_bundle_id`, `capture_mode`, `io_path`, `is_reply`, `scope`, `reason`, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_failed` | `Analytics.swift` | `attempt_id`, `rewrite_type`, `button_key`, **`failure_stage`** (`capture` \| `generation`), `message` (the app's own Japanese toast — never captured or rewritten text), the target properties where a target exists, `is_tutorial`, `accessibility_granted` |
+| `desktop_rewrite_abandoned` | `Analytics.swift` (0.1.9) | `attempt_id`, `rewrite_type`, `button_key`, `reason` (`superseded` \| `dismissed`), the target properties, `is_tutorial`, `accessibility_granted` |
 | `desktop_signed_up` | `MainModel.swift` | `method` (`password` \| `google`), `confirmation_required` (password only) |
 | `desktop_signed_in` | `MainModel.swift` | `method` (`password` \| `google`) |
 | `desktop_accessibility_prompted` | `MainModel.swift` | `source` (`onboarding` \| `preferences` \| `home`), `method` (`system_prompt` \| `settings_link`) |
@@ -160,6 +162,7 @@ partner: an event without it, in the desktop project, came from somewhere it sho
 | `desktop_prompt_updated` | `MainModel.swift` | `slot`, `is_enabled`, `origin` |
 | `desktop_prompt_deleted` | `MainModel.swift` | `slot`, `origin` |
 | `desktop_button_language_realigned` | `MainModel.swift` | `pack`, `writing_language`, `buttons` |
+| `desktop_preset_selected` | `OnboardingWindowController.swift`, `MainModel.swift` | `pack`, `source` (`onboarding` \| `language_realign`), `writing_language`, `button_count`, `customized` |
 | `desktop_checkout_started` | `MainModel.swift` | `billing_interval`, `currency`, `offer_expected` |
 | `desktop_welcome_offer_shown` | `OnboardingWindowController.swift` | `currency` |
 | `desktop_welcome_offer_accepted` | `OnboardingWindowController.swift` | `billing_interval`, `currency` |
@@ -341,6 +344,54 @@ there are 30 days of it, not before.
 ---
 
 ## 4. The dashboard — "Desktop (macOS) Overview"
+
+Dashboard **1974822**, **21 cards in four bands**, rebuilt and force-refreshed on
+2026-08-25. This is the current live specification. The dated material in the collapsed
+record below describes earlier dashboards and is not the card inventory to maintain.
+
+### Current card inventory
+
+| # | Decision | Live card and definition |
+|---|---|---|
+| 1 | Are installs turning into known users each day? | [Installs (download proxy) vs authenticated users](https://us.posthog.com/project/549465/insights/nGaGKMBk) — two daily lines: unique `Application Installed` people and unique people across sign-up OR sign-in |
+| 2 | Is the installed and authenticated base growing? | [Cumulative installs vs authenticated users](https://us.posthog.com/project/549465/insights/VpFxoQKN) — cumulative form of card 1 |
+| 3 | Are people finishing first run? | [Onboarding completions](https://us.posthog.com/project/549465/insights/LvyG0Nja) |
+| 4 | Where does activation break? | [Activation funnel](https://us.posthog.com/project/549465/insights/P1JOql50) — install → Accessibility → onboarding → accepted real rewrite |
+| 5 | Where did users hear about the app? | [Acquisition source](https://us.posthog.com/project/549465/insights/2I3OFtCS) |
+| 6 | How many people are active? | [Desktop DAU / WAU / MAU](https://us.posthog.com/project/549465/insights/QuMQQ8rD) |
+| 7 | Are rewriting users returning? | [Lifecycle](https://us.posthog.com/project/549465/insights/QLMv4ESa) |
+| 8 | Are Sparkle updates landing? | [Version adoption](https://us.posthog.com/project/549465/insights/0Q1HO4op) |
+| 9 | How much rewriting happens? | [Rewrites per day, including practice](https://us.posthog.com/project/549465/insights/ePhDpBQ6) — completed rewrites plus unique users; no tutorial exclusion |
+| 10 | Which interaction paths are used each day? | [Daily attempts by use case](https://us.posthog.com/project/549465/insights/UaRQIL3W) — readable labels (`Saved button`, `Free instruction`, `Reply`, `Regenerate`, `Follow-up refinement`) with an explicit `Everyday` or `Practice` suffix; no raw enum/boolean labels |
+| 11 | Does a generated result get used? | [Acceptance rate, exact](https://us.posthog.com/project/549465/insights/P5f7IeMz) — unique completed `attempt_id`s with at least one insert OR copy ÷ unique completed `attempt_id`s; copy plus insert counts once; practice included |
+| 12 | Which paths produce usable results? | [Acceptance rate by use case, exact](https://us.posthog.com/project/549465/insights/JjSYGG4L) — card 11 grouped under the same five readable use-case labels |
+| 13 | How intensely does an active person rewrite? | [Rewrites per active user, including practice](https://us.posthog.com/project/549465/insights/6UA3H9NQ) |
+| 14 | Which saved-button purposes are popular and accepted? | [Button-purpose usage and acceptance, exact](https://us.posthog.com/project/549465/insights/TdI5GKQR) — attempts, practice attempts, completions, accepted attempts and exact acceptance rate by privacy-safe `button_key` |
+| 15 | Which preset packs are chosen? | [Preset packs selected](https://us.posthog.com/project/549465/insights/oBHyll51) — successful saves by `pack` × `source` |
+| 16 | How often does AX fall back? | [Clipboard fallback rate](https://us.posthog.com/project/549465/insights/8A6jCNhU) |
+| 17 | Which host apps trigger fallback? | [Fallback rate by host app](https://us.posthog.com/project/549465/insights/YuKR0kmb) |
+| 18 | What share of attempts fail? | [Failure rate, exact](https://us.posthog.com/project/549465/insights/mdXo7Pyz) — unique failed `attempt_id`s ÷ unique started `attempt_id`s |
+| 19 | Why do attempts fail? | [Failures by message](https://us.posthog.com/project/549465/insights/KpJihDLt) |
+| 20 | Is generation slowing down? | [Latency median / p95](https://us.posthog.com/project/549465/insights/eWp7pSbp) |
+| 21 | Is the app crashing? | [Exceptions](https://us.posthog.com/project/549465/insights/sFEF7FG8) |
+
+`Application Installed` is a **first-launch proxy, not a literal download event**. DMG
+downloads live in GitHub release asset counts; PostHog cannot see a download that never
+launches. Cards 1 and 2 therefore say proxy explicitly and omit the `surface` filter on
+that series because the SDK emits it before super properties are registered.
+
+Named rows in card 14 and all of card 15 are future-facing until a build with the
+2026-08-25 telemetry ships. Pre-telemetry saved-button attempts remain visible as
+`Unclassified — app build before purpose telemetry`; they cannot be backfilled because
+the old events never contained a purpose key.
+`button_key` is a fixed catalog purpose for untouched stock buttons, `customized_preset`
+for an edited non-builtin preset, and `user_authored` for a user-created button. It is
+carried on the `RewriteAttempt`, so start, terminal, insert and copy events agree. The app
+never sends the button title, prompt, captured text or rewritten text. Preset selection
+fires only after a successful save and never during onboarding replay.
+
+<details>
+<summary>Historical dashboard record before the 2026-08-25 rebuild</summary>
 
 Dashboard **1974822**, **32 tiles in six bands** (21 as of 2026-08-10, 22–23 on 2026-08-22, 24–32 on 2026-08-24). The first
 fifteen measured the rewrite loop and everything downstream of it; what they could not
@@ -562,6 +613,8 @@ onboarding assumes.
   rather than signal, is one person property on three accounts.
 
 Session replay is a third entry and it is not a choice: see §6.
+
+</details>
 
 ---
 

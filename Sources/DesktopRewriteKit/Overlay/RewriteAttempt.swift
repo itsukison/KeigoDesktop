@@ -67,11 +67,22 @@ public struct RewriteAttempt: Sendable, Equatable, Identifiable {
     public let id: UUID
     public let type: RewriteType
     public let isTutorial: Bool
+    /// Privacy-safe purpose of a saved button. Nil for the other four rewrite types.
+    ///
+    /// This is a stable catalog key, never the user-visible title or prompt text. It
+    /// rides on the attempt so every event in the exact funnel carries the same value.
+    public let buttonAnalyticsKey: String?
 
-    public init(type: RewriteType, isTutorial: Bool, id: UUID = UUID()) {
+    public init(
+        type: RewriteType,
+        isTutorial: Bool,
+        buttonAnalyticsKey: String? = nil,
+        id: UUID = UUID()
+    ) {
         self.id = id
         self.type = type
         self.isTutorial = isTutorial
+        self.buttonAnalyticsKey = buttonAnalyticsKey
     }
 }
 

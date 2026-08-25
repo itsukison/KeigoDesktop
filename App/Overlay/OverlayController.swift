@@ -706,6 +706,7 @@ final class OverlayController: ObservableObject {
     /// which can block, still runs before anything is shown.
     func press(_ prompt: UserPrompt) {
         let frontmostPID = NSWorkspace.shared.frontmostPID
+        let buttonAnalyticsKey = OnboardingPresetPack.buttonAnalyticsKey(for: prompt)
 
         Task { [weak self] in
             guard let self else { return }
@@ -728,6 +729,7 @@ final class OverlayController: ObservableObject {
                     commandKey: prompt.builtinKey,
                     promptOrigin: prompt.origin.rawValue,
                     rewriteType: .savedButton,
+                    buttonAnalyticsKey: buttonAnalyticsKey,
                     isTutorial: self.tutorialMode?.marksSavedButton(id: prompt.id) == true
                 )
             } catch {
@@ -738,6 +740,7 @@ final class OverlayController: ObservableObject {
                 self.reportCaptureFailure(
                     .savedButton,
                     isTutorial: self.tutorialMode?.marksSavedButton(id: prompt.id) == true,
+                    buttonAnalyticsKey: buttonAnalyticsKey,
                     message: Self.message(for: error)
                 )
                 self.present(error)
@@ -881,8 +884,17 @@ final class OverlayController: ObservableObject {
     /// sent, metered and billed by `desktop-rewrite`. Before this, that request reported
     /// nothing at all — the `guard !Task.isCancelled` sits in front of the analytics call
     /// — so `completed + failed` silently failed to add up to the number of presses.
-    private func beginAttempt(_ type: RewriteType, isTutorial: Bool, target: TextTarget?) -> RewriteAttempt {
-        let attempt = RewriteAttempt(type: type, isTutorial: isTutorial)
+    private func beginAttempt(
+        _ type: RewriteType,
+        isTutorial: Bool,
+        buttonAnalyticsKey: String? = nil,
+        target: TextTarget?
+    ) -> RewriteAttempt {
+        let attempt = RewriteAttempt(
+            type: type,
+            isTutorial: isTutorial,
+            buttonAnalyticsKey: buttonAnalyticsKey
+        )
         if let superseded = attempts.begin(attempt) {
             // The *outgoing* attempt's target, not the incoming one — the abandoned event
             // describes the request being thrown away, and attributing it to the new
@@ -945,8 +957,18 @@ final class OverlayController: ObservableObject {
     /// beside it. This is the dominant failure in the wild — every one of the 17 failures
     /// external users hit before this shipped was a capture failure — and until now it
     /// carried no type, no host app and no stage, only a translated toast string.
-    private func reportCaptureFailure(_ type: RewriteType, isTutorial: Bool, message: String) {
-        _ = beginAttempt(type, isTutorial: isTutorial, target: nil)
+    private func reportCaptureFailure(
+        _ type: RewriteType,
+        isTutorial: Bool,
+        buttonAnalyticsKey: String? = nil,
+        message: String
+    ) {
+        _ = beginAttempt(
+            type,
+            isTutorial: isTutorial,
+            buttonAnalyticsKey: buttonAnalyticsKey,
+            target: nil
+        )
         finishAttempt(.failed(stage: .capture, message: message), target: nil)
     }
 
@@ -961,10 +983,16 @@ final class OverlayController: ObservableObject {
         commandKey: String?,
         promptOrigin: String?,
         rewriteType: RewriteType,
+        buttonAnalyticsKey: String? = nil,
         isTutorial: Bool,
         previousResults: ResultContext? = nil
     ) {
-        let attempt = beginAttempt(rewriteType, isTutorial: isTutorial, target: captured.target)
+        let attempt = beginAttempt(
+            rewriteType,
+            isTutorial: isTutorial,
+            buttonAnalyticsKey: buttonAnalyticsKey,
+            target: captured.target
+        )
         resultContextBeforeRewrite = previousResults
         // A regenerate keeps the result panel's pages, so the latch has to be released
         // explicitly — the new attempt deserves a fresh reading of where it can go.
@@ -2112,10 +2140,18 @@ final class OverlayController: ObservableObject {
             // having nothing to work from (§18). So the message can be specific about
             // why — a button applies to text, and there is none — and name the control
             // that does not need any.
+            //
+            // **It leads with clicking into the field, and that ordering is the fix.**
+            // The message used to offer selecting and ✎ only, which describes two of the
+            // three ways out and omits the one the product is actually built around:
+            // `.wholeInput` rewrites the focused field with nothing selected (§5), and it
+            // is the case the clipboard cannot serve. Telling someone to select text when
+            // clicking into their draft would have worked teaches them the slower half of
+            // the product, and reads as a refusal when the field is right there.
             return tr(
-                "書き換える文章がありません。文章を選択するか、✎ から新しい文章を書いてください。",
-                "There's no text to rewrite. Select some text, or use ✎ to write something new.",
-                "没有可改写的文字。请选中文字，或用 ✎ 写一段新文字。"
+                "書き換える文章がありません。書きかけの入力欄をクリックするか、文章を選択してから、もう一度お試しください。✎ なら新しい文章を書けます。",
+                "There's no text to rewrite. Click into the field you're writing in, or select some text, then try again — or use ✎ to write something new.",
+                "没有可改写的文字。请点击你正在输入的输入框，或选中文字后重试；用 ✎ 可以写一段新文字。"
             )
         case TextIOError.notEditable:
             return tr(

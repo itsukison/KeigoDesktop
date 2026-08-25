@@ -1,3 +1,4 @@
+import AppKit
 import DesktopRewriteKit
 import Foundation
 import PostHog
@@ -56,6 +57,8 @@ protocol Analytics: Sendable {
 ///
 /// - `attempt_id` ties the six events of one attempt together (see `RewriteAttempt`).
 /// - `rewrite_type` is the five-way split `prompt_origin` could not provide.
+/// - `button_key` is the privacy-safe saved-button purpose; it never contains a title,
+///   prompt, captured text or rewritten text.
 /// - `is_tutorial` closed `docs/analytics.md` §3's third gap. Onboarding practice calls the same
 ///   methods as a real press and all three lessons complete *only* on a successful
 ///   Insert, so every new user used to donate three guaranteed acceptances to the
@@ -71,9 +74,22 @@ private func attemptProperties(_ attempt: RewriteAttempt) -> [String: Any] {
     [
         "attempt_id": attempt.id.uuidString,
         "rewrite_type": attempt.type.rawValue,
+        "button_key": attempt.buttonAnalyticsKey as Any,
         "is_tutorial": attempt.isTutorial,
         "accessibility_granted": AXPermission.isTrusted,
     ]
+}
+
+/// The frontmost app, for the events that have no target to read it off.
+///
+/// `NSWorkspace` rather than AX: the question is "which app was the user in", not
+/// "where would a keystroke land", and a capture failure means the AX answer is exactly
+/// the thing that was unavailable. `TextIO.BundleIdentity` answers the same question
+/// from a pid but is internal to that module by design — §3 keeps AppKit out of
+/// `Sources/`, and this file is in `App/`, where asking AppKit directly is the shorter
+/// true answer.
+private func frontmostBundleId() -> String? {
+    NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 }
 
 /// The target-shaped properties, for the events that have a target.
@@ -85,6 +101,17 @@ private func attemptProperties(_ attempt: RewriteAttempt) -> [String: Any] {
 private func targetProperties(_ target: TextTarget?) -> [String: Any] {
     [
         "host_app_bundle_id": target?.hostAppBundleId ?? "unknown",
+        // Which app the press happened *in*, asked independently of the capture.
+        // `host_app_bundle_id` comes off the target, so a capture failure — the
+        // dominant failure in the wild — reported `unknown` and the one question worth
+        // asking of it ("is our AX read failing in this app, or was there genuinely
+        // nothing focused?") could not be answered at all. Only resolved when there is
+        // no target: with one, the two would be the same answer twice.
+        //
+        // Truthful only because of §4's ordering. Every caller reaching here with a nil
+        // target is inside the capture `catch`, before `present(error)` and before any
+        // panel takes key, so the frontmost app is still the user's.
+        "frontmost_app_bundle_id": (target == nil ? frontmostBundleId() : nil) as Any,
         "capture_mode": target?.captureMode.rawValue as Any,
         // The one to watch: a rising clipboard rate in a specific bundle id is
         // the earliest signal that an app's AX tree changed.

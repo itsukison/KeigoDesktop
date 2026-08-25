@@ -368,10 +368,24 @@ final class OnboardingCoordinator: ObservableObject {
         isSavingButtons = true
         reviewError = nil
         let drafts = buttonDrafts
+        let pack = selectedPack
+        let customized = pack?.isCustomized(drafts: drafts, writtenIn: language) ?? false
         Task {
             defer { isSavingButtons = false }
             do {
                 try await mainModel.applyOnboardingButtons(drafts)
+                // Emit only after the remote replace succeeds. A retry must not turn a
+                // failed save into a preset selection, and a tutorial replay must not
+                // overwrite first-run product-choice behaviour.
+                if !replaying {
+                    PostHogSDK.shared.capture("desktop_preset_selected", properties: [
+                        "pack": pack?.rawValue ?? "current_buttons",
+                        "source": "onboarding",
+                        "writing_language": language.writingLanguageCode,
+                        "button_count": drafts.count,
+                        "customized": customized,
+                    ])
+                }
                 move(to: .access)
             } catch {
                 reviewError = tr(
