@@ -364,10 +364,10 @@ record below describes earlier dashboards and is not the card inventory to maint
 | 9 | How much rewriting happens? | [Rewrites per day, including practice](https://us.posthog.com/project/549465/insights/ePhDpBQ6) — completed rewrites plus unique users; no tutorial exclusion |
 | 10 | Which interaction paths are used each day? | [Daily attempts by use case](https://us.posthog.com/project/549465/insights/UaRQIL3W) — readable labels (`Saved button`, `Free instruction`, `Reply`, `Regenerate`, `Follow-up refinement`) with an explicit `Everyday` or `Practice` suffix; no raw enum/boolean labels |
 | 11 | Does a generated result get used? | [Acceptance rate, exact](https://us.posthog.com/project/549465/insights/P5f7IeMz) — unique completed `attempt_id`s with at least one insert OR copy ÷ unique completed `attempt_id`s; copy plus insert counts once; practice included |
-| 12 | Which paths produce usable results? | [Acceptance rate by use case, exact](https://us.posthog.com/project/549465/insights/JjSYGG4L) — card 11 grouped under the same five readable use-case labels |
+| 12 | Which paths produce usable results over time? | [Daily acceptance rate by use case, exact](https://us.posthog.com/project/549465/insights/JjSYGG4L) — daily line chart for the same five readable use cases; each point correlates completed, inserted and copied events by `attempt_id`, and a missing day stays blank rather than becoming a false 0% |
 | 13 | How intensely does an active person rewrite? | [Rewrites per active user, including practice](https://us.posthog.com/project/549465/insights/6UA3H9NQ) |
 | 14 | Which saved-button purposes are popular and accepted? | [Button-purpose usage and acceptance, exact](https://us.posthog.com/project/549465/insights/TdI5GKQR) — attempts, practice attempts, completions, accepted attempts and exact acceptance rate by privacy-safe `button_key` |
-| 15 | Which preset packs are chosen? | [Preset packs selected](https://us.posthog.com/project/549465/insights/oBHyll51) — successful saves by `pack` × `source` |
+| 15 | Which preset packs are chosen? | [Preset packs selected](https://us.posthog.com/project/549465/insights/oBHyll51) — daily successful saves with readable combined labels such as `Starter essentials — First-run setup` and `Kept existing buttons — First-run setup`; raw `pack` / `source` enums never appear in the chart |
 | 16 | How often does AX fall back? | [Clipboard fallback rate](https://us.posthog.com/project/549465/insights/8A6jCNhU) |
 | 17 | Which host apps trigger fallback? | [Fallback rate by host app](https://us.posthog.com/project/549465/insights/YuKR0kmb) |
 | 18 | What share of attempts fail? | [Failure rate, exact](https://us.posthog.com/project/549465/insights/mdXo7Pyz) — unique failed `attempt_id`s ÷ unique started `attempt_id`s |
@@ -380,8 +380,8 @@ downloads live in GitHub release asset counts; PostHog cannot see a download tha
 launches. Cards 1 and 2 therefore say proxy explicitly and omit the `surface` filter on
 that series because the SDK emits it before super properties are registered.
 
-Named rows in card 14 and all of card 15 are future-facing until a build with the
-2026-08-25 telemetry ships. Pre-telemetry saved-button attempts remain visible as
+Cards 14 and 15 began receiving named data with macOS 0.1.10. Pre-telemetry saved-button
+attempts remain visible as
 `Unclassified — app build before purpose telemetry`; they cannot be backfilled because
 the old events never contained a purpose key.
 `button_key` is a fixed catalog purpose for untouched stock buttons, `customized_preset`
