@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "snapshotId": "quoted-zh",
+  "conversationId": "thread1",
+  "sourceBlocks": [
+    {
+      "id": "b1",
+      "conversationId": "thread1",
+      "text": "王: 请确认新的时间。",
+      "order": 0,
+      "role": "AXStaticText"
+    },
+    {
+      "id": "b2",
+      "conversationId": "thread1",
+      "text": "转发内容：李说周五可以。",
+      "order": 1,
+      "role": "AXStaticText"
+    }
+  ],
+  "participants": [
+    {
+      "id": "p1",
+      "label": "王",
+      "relationship": "other",
+      "evidence": [
+        {
+          "blockId": "b1",
+          "kind": "sender_label"
+        }
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "text": "王: 请确认新的时间。",
+      "sourceBlockIds": [
+        "b1"
+      ],
+      "order": 0,
+      "kind": "message",
+      "participantId": "p1"
+    },
+    {
+      "id": "m2",
+      "text": "转发内容：李说周五可以。",
+      "sourceBlockIds": [
+        "b2"
+      ],
+      "order": 1,
+      "kind": "quote",
+      "quotedByMessageId": "m1"
+    }
+  ],
+  "targetMessageIds": [
+    "m1"
+  ],
+  "audience": {
+    "kind": "direct",
+    "participantIds": [
+      "p1"
+    ]
+  },
+  "completeness": "partial",
+  "uncertainties": [
+    {
+      "kind": "speaker",
+      "material": false,
+      "sourceBlockIds": [
+        "b2"
+      ]
+    }
+  ]
+}

@@ -568,7 +568,7 @@ host of the URL the app hands the session, so it used to quote
 | `auth.users` | one identity across phone and laptop |
 | `profiles` | display name, subscription state. Four columns: `id`, `display_name` (NOT NULL, default `''`), `created_at`, and `platform` — see below |
 | `user_prompts` | the buttons — read and write (columns: `id, user_id, slot, builtin_key, origin, title, prompt, is_enabled, sort_order, created_at, updated_at`). **`id` is not its only unique key**: `user_prompts_user_builtin_unique (user_id, builtin_key) WHERE builtin_key IS NOT NULL` makes a builtin key an identity, and `handle_new_user()` seeds all four (`polite`, `natural`, `email`, `translateToEnglish`) at signup. Any write that mints a fresh id for an already-owned key is a 409 — see `UserPromptIdentity` |
-| `user_ai_consent` | AI-improvement consent, honored by both surfaces |
+| `user_ai_consent` | AI-improvement consent. Honored by iOS. **Not read by desktop as of 2026-09-18** — `desktop-rewrite`'s `fetchConsent` was removed along with the gate it fed; see `desktop.rewrite_events` below |
 
 #### `profiles.platform` — derived, and never written by a client
 
@@ -614,7 +614,7 @@ actually did.
 
 | Object | Purpose |
 |---|---|
-| `desktop.rewrite_events` | mirrors `ai_rewrite_events` in spirit, never in storage. `redact.ts` applies identically; text is opt-in behind the shared `user_ai_consent` |
+| `desktop.rewrite_events` | mirrors `ai_rewrite_events` in spirit, never in storage. **No consent gate** (decided 2026-09-18: no AI-consent screen exists on desktop, the data is not sold or shared, and full capture is needed for product improvement — migration `20260918211225`). `redact.ts` runs unconditionally on every text field instead, and is now the only mitigation on raw text — `consent_version` is left null going forward. Beyond `command_key` (the 4 raw builtin ids only) the row also carries `attempt_id` (joins to PostHog's `attempt_id`), `rewrite_type` (`RewriteType.rawValue` — the reliable signal `command_key IS NULL` never was; some builds, e.g. 0.1.9, logged a null `command_key` regardless of what was pressed), `button_key` (the privacy-safe saved-button label, richer than `command_key`), `instruction_text` (`RewriteRequest.prompt` — the actual instruction on every path: button prompt, typed custom text, or a refine instruction), `reply_source_text` (`RewriteRequest.replyTo`, reply mode only), and `previous_event_id` (links a regenerate/refine row back to the attempt it followed, from the client's `page.eventId`). All six are populated only by builds that include the 2026-09-18 `RewriteRequest`/`OverlayController` changes — older builds leave them null |
 | `desktop.usage_buckets` | per-user day/hour/minute counters. Shape from `web_rewrite_usage` |
 | `desktop.plan_limits` | the caps `desktop_reserve_usage` enforces and `desktop_get_entitlement` reports — **the authority, and the only place a limit changes.** `month` is the quota (free 30, Pro 1,000). `day` is **null on every plan**: there is no daily cap, and `desktop_reserve_usage` skips that arm when it is null. `hour`/`minute` (120/12) stay NOT NULL — they are burst protection against a stuck client, not a quota. `PlanPricing.freeMonthlyRewrites` / `proMonthlyRewrites` only mirror this row for copy shown before an entitlement loads |
 | `desktop.activations` | `(user_id, first_seen_at, last_seen_at, app_version)` — **how desktop counts stay honest.** `profiles` holds both platforms' users; desktop MAU comes from here and PostHog, never from counting `profiles` rows |
@@ -1858,12 +1858,16 @@ for *how* you want to reply, and the rewrite comes back as the reply. Two new
 `OverlayState` cases, one clipboard poll, and one reply-specific AX capture policy.
 Everything from the generating capsule onward is §4 unchanged.
 
-`desktop-rewrite` selects the reply branch from `replyTo`, as it always has, but reply
-prompt construction now lives in the pure, tested `prompt.ts`. The three fields mean:
+`desktop-rewrite` accepts legacy `replyTo` or desktop-only `replyContext` v1.
+The native overlay still sends the legacy form; explicit context capture is not yet
+wired. Structured requests include `draftReadStatus`, preserve participants, quotes,
+selected messages and audience separately, and reject malformed/ambiguous context
+before provider or quota work. Do not send both forms. Prompt construction lives in
+`prompt.ts`; parsing and context validation are independently testable. The legacy fields mean:
 
 | Field | Reply mode | Everywhere else |
 |---|---|---|
-| `replyTo` | the copied message. **The only thing that selects the reply branch** | nil |
+| `replyTo` | the copied message; selects the legacy reply branch | nil |
 | `text` | the user's optional existing draft in `<existing_draft>` — usually `""` | the text being rewritten |
 | `prompt` | guidance in `<reply_guidance>`: facts, stance, answers, keywords or style, not necessarily prose to repeat | the button's prompt |
 
@@ -1875,18 +1879,25 @@ The copied text is escaped inside `<received_message>` and is untrusted context,
 source of instructions. A reply must acknowledge and answer it where the user's facts
 permit, integrate fragments into coherent prose, and return a complete sendable body.
 The host app and sender tone are hints: professional and context-aware is the default,
-while an explicit style request wins. Every user-supplied fact, reason, answer, decision
-and commitment is preserved; availability, dates, reasons, names, decisions and promises
-must never be invented. When both the existing draft and guidance provide no stance, the
+while an explicit style request wins. Explicit guidance replaces conflicting draft
+facts or stance and removes commitments that depend on them; unrelated facts remain.
+Style-only guidance preserves stance. Availability, dates, reasons, names, decisions
+and promises must never be invented. When both the existing draft and guidance provide no stance, the
 fallback acknowledges the message without accepting, declining, promising action or
-choosing availability for the user. Normal rewrite prompt construction is unchanged.
+choosing availability for the user. Normal rewrite prompt construction is unchanged. Explicit language guidance wins;
+otherwise replies follow the draft or selected conversation language, not the language
+of the instruction itself. Only selected target text is projected into existing reply
+source logs, with the existing redaction; the full context is never persisted there.
 
 The author is not inferred from those three user-controlled text fields. After the
 gateway verifies the JWT, the Edge Function uses its subject to read the shared
 `profiles.display_name` row with the server credential and adds it to the internal
 `PromptRequest` as `<account_user>`; `parseRequest` never accepts that field from a
-client. Leading labels such as `Josh:` / `From: Josh` belong to the other participant,
-while a name/handle matching `<account_user>` identifies the person writing the reply.
+client. This identifies the output author, not their conversation participant ID.
+A matching display name/handle does not prove self identity, and legacy copied text
+may contain multiple speakers or quotes. Structured identity assignments require
+evidence references; unknown identities stay unknown. Structural validation does
+not establish the semantic accuracy of an interpreter.
 The system prompt forbids switching to the sender's perspective, addressing the account
 user as their own recipient, signing with the sender's name, or emitting `[name]`-style
 placeholders. Blank/missing profile rows are non-fatal and explicitly mean “write a

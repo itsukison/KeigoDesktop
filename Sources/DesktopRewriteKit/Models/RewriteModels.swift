@@ -1,7 +1,7 @@
 import Foundation
 
 // COPIED from ../Japanese/Sources/JapaneseKeyboardAI/Models/RewriteModels.swift.
-// `RewriteRequest` here is a SUPERSET (§6): the four macOS fields are additive, so
+// `RewriteRequest` here is a SUPERSET (§6): macOS fields are additive, so
 // a payload from this app is still a valid payload for the shared contract, and
 // `RewriteResult` is unchanged in both directions.
 
@@ -57,6 +57,10 @@ public struct RewriteRequest: Codable, Sendable {
 
     // MARK: macOS superset (§6)
 
+    /// Explicit context replies send this instead of replyTo. Native capture is not wired yet.
+    public let replyContext: ReplyContext?
+    public let draftReadStatus: ReplyDraftReadStatus?
+
     /// Always `"macos"` from this app. Lets one function serve both surfaces
     /// while keeping `desktop.rewrite_events` separable from `ai_rewrite_events`.
     public let surface: String
@@ -90,6 +94,27 @@ public struct RewriteRequest: Codable, Sendable {
     /// keeps its original Japanese-assistant instructions when the key is missing,
     /// so an installed build that predates this field is unaffected.
     public let writingLanguage: String?
+    /// The same UUID `RewriteAttempt.id` sends to PostHog as `attempt_id` —
+    /// carried over so `desktop.rewrite_events` can be joined to PostHog's
+    /// funnel/latency data without guessing. Optional so every existing call
+    /// site (tests, older builds) keeps compiling; only `OverlayController`
+    /// populates it on the real send path.
+    public let attemptId: String?
+    /// `RewriteType.rawValue` (`saved_button`/`custom_instruction`/`reply`/
+    /// `regenerate`/`refine`). Replaces "is `commandKey` nil" as the signal for
+    /// what kind of interaction this was — that guess turned out to be
+    /// unreliable (some builds logged a nil `commandKey` regardless of what was
+    /// pressed). A plain `String`, not `RewriteType`, to avoid a dependency from
+    /// this module onto `DesktopRewriteKit`'s Overlay code.
+    public let rewriteType: String?
+    /// The privacy-safe saved-button label already computed for PostHog's
+    /// `button_key` (e.g. "Shorten", "Client message") — richer than
+    /// `commandKey`, which only holds the 4 raw builtin ids.
+    public let buttonAnalyticsKey: String?
+    /// The server `eventId` of the attempt a regenerate/refine followed. Lets
+    /// "what was the version they didn't like" be a one-hop lookup instead of
+    /// reconstructed from timestamps.
+    public let previousEventId: String?
 
     public init(
         prompt: String,
@@ -112,11 +137,19 @@ public struct RewriteRequest: Codable, Sendable {
         browserURL: String? = nil,
         ioPath: String? = nil,
         requestId: String = UUID().uuidString,
-        writingLanguage: String? = nil
+        writingLanguage: String? = nil,
+        attemptId: String? = nil,
+        rewriteType: String? = nil,
+        buttonAnalyticsKey: String? = nil,
+        previousEventId: String? = nil,
+        replyContext: ReplyContext? = nil,
+        draftReadStatus: ReplyDraftReadStatus? = nil
     ) {
         self.prompt = prompt
         self.text = text
         self.replyTo = replyTo
+        self.replyContext = replyContext
+        self.draftReadStatus = draftReadStatus
         self.commandKey = commandKey
         self.title = title
         self.promptOrigin = promptOrigin
@@ -136,6 +169,10 @@ public struct RewriteRequest: Codable, Sendable {
         self.ioPath = ioPath
         self.requestId = requestId
         self.writingLanguage = writingLanguage
+        self.attemptId = attemptId
+        self.rewriteType = rewriteType
+        self.buttonAnalyticsKey = buttonAnalyticsKey
+        self.previousEventId = previousEventId
     }
 }
 

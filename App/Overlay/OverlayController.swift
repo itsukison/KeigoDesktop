@@ -985,7 +985,8 @@ final class OverlayController: ObservableObject {
         rewriteType: RewriteType,
         buttonAnalyticsKey: String? = nil,
         isTutorial: Bool,
-        previousResults: ResultContext? = nil
+        previousResults: ResultContext? = nil,
+        previousEventId: String? = nil
     ) {
         let attempt = beginAttempt(
             rewriteType,
@@ -1039,7 +1040,11 @@ final class OverlayController: ObservableObject {
             // The language the buttons write in, which is not the interface language:
             // a 简体中文 user reads Chinese and writes Japanese (§17). Read at send
             // time so a language changed mid-session takes effect on the next press.
-            writingLanguage: AppLanguageState.current.writingLanguageCode
+            writingLanguage: AppLanguageState.current.writingLanguageCode,
+            attemptId: attempt.id.uuidString,
+            rewriteType: rewriteType.rawValue,
+            buttonAnalyticsKey: buttonAnalyticsKey,
+            previousEventId: previousEventId
         )
 
         rewriteTask?.cancel()
@@ -1606,7 +1611,8 @@ final class OverlayController: ObservableObject {
             // indistinguishable from a first-time ✎ press.
             rewriteType: .regenerate,
             isTutorial: pending.isTutorial,
-            previousResults: context
+            previousResults: context,
+            previousEventId: page.eventId
         )
     }
 
@@ -1631,7 +1637,8 @@ final class OverlayController: ObservableObject {
             promptOrigin: nil,
             rewriteType: .refine,
             isTutorial: pending.isTutorial,
-            previousResults: context
+            previousResults: context,
+            previousEventId: page.eventId
         )
     }
 

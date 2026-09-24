@@ -43,8 +43,8 @@ Deno.test("reply prompt pins sender, addressee, and author roles", () => {
   const prompt = userPrompt(value);
 
   assert(system.includes("always authored by the authenticated <account_user>"), "account author rule missing");
-  assert(system.includes("'Josh:' or 'From: Josh' normally identifies the other participant"), "sender-label rule missing");
-  assert(system.includes("'@alex' when the account user is Alex"), "mention/addressee rule missing");
+  assert(system.includes("a leading name is not proof of another participant"), "sender-label uncertainty rule missing");
+  assert(system.includes("matching display name does not establish"), "profile name must not prove participant identity");
   assert(system.includes("Never answer from the sender's perspective"), "perspective rule missing");
   assert(prompt.includes("<account_user>\nItsuki\n</account_user>"), "account identity was not supplied");
 });
@@ -91,7 +91,7 @@ Deno.test("explicit style guidance overrides the professional default", () => {
 
 Deno.test("reply prompt preserves user facts while forbidding invention", () => {
   const system = systemInstructions(request());
-  assert(system.includes("Preserve every fact, answer, reason, decision, date, name, and commitment"), "fact preservation rule missing");
+  assert(system.includes("preserve unrelated draft facts"), "non-conflicting fact preservation rule missing");
   assert(system.includes("Never invent availability, dates, reasons, decisions, names, promises"), "no-invention rule missing");
   assert(system.includes("do not infer acceptance, refusal, availability, completion, or a promise to act"), "empty-guidance neutrality rule missing");
   assert(system.includes("Do not say the user will check, act, confirm, or reply later"), "neutral fallback still permits a future promise");

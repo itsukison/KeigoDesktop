@@ -17,51 +17,13 @@
 // runs, so the `sub` claim is trusted without a round trip to the auth service —
 // same posture as `keyboard-rewrite`. Do not set that to false.
 
+import { parseRequest, type DesktopRewriteRequest } from "./request.ts";
+import { isReplyRequest, replySourceText } from "../_shared/reply-context/request.ts";
 import { redactPII } from "./redact.ts";
 import { systemInstructions, userPrompt } from "./prompt.ts";
 
 type ProviderName = "openai" | "azure" | "cerebras" | "groq";
 const ALL_PROVIDERS: ProviderName[] = ["openai", "azure", "cerebras", "groq"];
-
-type CaptureMode = "wholeInput" | "selection" | "fullDocument";
-type RefinementIntent = "morePolite" | "moreDetailed" | "moreConcise";
-
-type DesktopRewriteRequest = {
-  prompt: string;
-  text: string;
-  replyTo?: string | null;
-  commandKey?: string | null;
-  title?: string | null;
-  promptOrigin?: string | null;
-  locale?: string;
-  appVersion?: string;
-  candidateCount: number;
-  refinement?: RefinementIntent | null;
-  selection?: boolean;
-  selectionContextBefore?: string | null;
-  selectionContextAfter?: string | null;
-  stream?: boolean;
-  // macOS superset
-  surface?: string;
-  hostAppBundleId?: string | null;
-  captureMode: CaptureMode;
-  browserURL?: string | null;
-  /// 'ja' | 'en' — the language the user's BUTTONS write in, which is not the
-  /// interface language: a 简体中文 user reads Chinese and writes Japanese, so they
-  /// send 'ja'. Absent on every build older than this field, and absent must keep
-  /// those users' output identical — `systemInstructions` treats anything but 'en'
-  /// as Japanese for exactly that reason.
-  writingLanguage?: "ja" | "en" | null;
-  /// 'ax' | 'clipboard'. Only the client knows which path it actually used, and
-  /// §7 makes this the earliest signal that an app's AX tree changed — so it has
-  /// to come over the wire or the column is permanently null.
-  ioPath?: "ax" | "clipboard" | null;
-  /// A client-generated UUID, unique per USER INTENT and carried through
-  /// reserve → commit → release. `docs/billing.md` §6 makes it the idempotency key:
-  /// a client retry of the same rewrite returns the existing reservation and
-  /// cannot consume quota twice (§9 row 29).
-  requestId: string;
-};
 
 /// Internal prompt context. `parseRequest` never reads this field from the client;
 /// it is added only after the JWT subject has been resolved to the shared profile.
@@ -72,9 +34,6 @@ type PromptReadyRequest = DesktopRewriteRequest & {
 type RewriteCandidate = { replacement: string; changed: boolean };
 type RewriteResult = { candidates: RewriteCandidate[]; language: string };
 
-const MIN_CANDIDATES = 1;
-const MAX_CANDIDATES = 5;
-const DEFAULT_CANDIDATES = 3;
 const MAX_PROMPT_CHARS = 1000;
 
 // Desktop input is a whole mail draft or document field, not a phone message, so
@@ -82,7 +41,6 @@ const MAX_PROMPT_CHARS = 1000;
 // caps prompt cost per call.
 const DEFAULT_MAX_TEXT_CHARS = 6000;
 
-const DEFAULT_CONSENT_VERSION = "2026-07-02";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -162,7 +120,7 @@ Deno.serve(async (req) => {
     return await handleSelection(userId, body);
   }
 
-  const parsed = parseRequest(body);
+  const parsed = parseRequest(body, jsonError);
   if ("error" in parsed) return parsed.error;
   const request = parsed.value;
 
@@ -187,7 +145,7 @@ Deno.serve(async (req) => {
   const usagePromise = reserveUsage(userId, request.requestId, request.candidateCount)
     .then((value) => ({ ...value, guardMs: Date.now() - guardStartedAt }));
 
-  const needsIdentity = !!request.replyTo?.trim() || (!request.replyTo?.trim() && !request.text.trim());
+  const needsIdentity = isReplyRequest(request) || !request.text.trim();
   const identityPromise = needsIdentity
     ? fetchAccountUserName(userId)
     : Promise.resolve(null);
@@ -235,7 +193,7 @@ Deno.serve(async (req) => {
       promptOrigin: request.promptOrigin,
       candidateCount: rewrite.result.candidates.length,
       inputLength: [...request.text].length,
-      replyMode: !!request.replyTo,
+      replyMode: isReplyRequest(request),
       identityAvailable: rewrite.accountUserNameAvailable,
       latencyMs,
       guardMs: usage.guardMs,
@@ -288,76 +246,6 @@ Deno.serve(async (req) => {
 // ---------------------------------------------------------------------------
 // Parsing
 // ---------------------------------------------------------------------------
-
-function parseRequest(body: unknown): { value: DesktopRewriteRequest } | { error: Response } {
-  if (!body || typeof body !== "object") {
-    return { error: jsonError("invalid_request", "Request body must be an object.", 400) };
-  }
-  const data = body as Record<string, unknown>;
-
-  if (typeof data.prompt !== "string" || data.prompt.trim().length === 0) {
-    return { error: jsonError("invalid_request", "`prompt` is required.", 400) };
-  }
-  if (typeof data.text !== "string") {
-    return { error: jsonError("invalid_request", "`text` is required.", 400) };
-  }
-
-  const captureMode = data.captureMode;
-  if (captureMode !== "wholeInput" && captureMode !== "selection" && captureMode !== "fullDocument") {
-    return { error: jsonError("invalid_request", "`captureMode` is invalid.", 400) };
-  }
-
-  const rawCount = typeof data.candidateCount === "number" ? data.candidateCount : DEFAULT_CANDIDATES;
-  const candidateCount = Math.min(MAX_CANDIDATES, Math.max(MIN_CANDIDATES, Math.floor(rawCount)));
-
-  const optionalString = (value: unknown): string | null =>
-    typeof value === "string" && value.length > 0 ? value : null;
-
-  return {
-    value: {
-      prompt: data.prompt,
-      text: data.text,
-      replyTo: optionalString(data.replyTo),
-      commandKey: optionalString(data.commandKey),
-      title: optionalString(data.title),
-      promptOrigin: optionalString(data.promptOrigin),
-      locale: typeof data.locale === "string" ? data.locale : "ja-JP",
-      appVersion: typeof data.appVersion === "string" ? data.appVersion : "unknown",
-      candidateCount,
-      refinement: (["morePolite", "moreDetailed", "moreConcise"] as const)
-        .includes(data.refinement as RefinementIntent)
-        ? data.refinement as RefinementIntent
-        : null,
-      selection: data.selection === true || captureMode === "selection",
-      selectionContextBefore: optionalString(data.selectionContextBefore),
-      selectionContextAfter: optionalString(data.selectionContextAfter),
-      stream: data.stream === true,
-      surface: typeof data.surface === "string" ? data.surface : "macos",
-      hostAppBundleId: optionalString(data.hostAppBundleId),
-      captureMode,
-      browserURL: optionalString(data.browserURL),
-      // `"ja"` is preserved rather than collapsed to null, and only because the
-      // value is logged now: null used to mean "en was not requested", which is the
-      // same thing `systemInstructions` still reads it as, but on the event row it
-      // would conflate a 简体中文 user's deliberate 'ja' with a build too old to have
-      // the field. Every consumer tests for `=== "en"` or `!== "en"`, so widening
-      // this changes no prompt.
-      writingLanguage: data.writingLanguage === "en"
-        ? "en"
-        : data.writingLanguage === "ja"
-        ? "ja"
-        : null,
-      ioPath: data.ioPath === "ax" || data.ioPath === "clipboard" ? data.ioPath : null,
-      // A generated fallback keeps a pre-billing client working, and it degrades in
-      // the only direction that is safe: without a stable id a retry reserves twice
-      // rather than reusing one reservation, so the user is protected and the
-      // duplicate is bounded by the 5-minute reservation TTL.
-      requestId: typeof data.requestId === "string" && data.requestId.length > 0
-        ? data.requestId.slice(0, 100)
-        : crypto.randomUUID(),
-    },
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Usage guard
@@ -521,11 +409,13 @@ async function logRewriteEvent(
 
   const { userId, request, result, provider, model, latencyMs } = input;
 
-  // Fail closed on text retention: it is opt-in, and the consent record is the
-  // shared `user_ai_consent` table both surfaces honour.
-  const consent = await fetchConsent(userId);
-  const storeText = consent.optIn;
-
+  // No consent gate: decided 2026-09-18. There is no AI-consent screen on
+  // desktop, this data is not sold or shared, and full capture is needed for
+  // product improvement. `redactPII` still runs unconditionally on every text
+  // field below — that's an independent hygiene pass (emails, phone numbers,
+  // addresses, labeled secrets), not a consent mechanism, and there's no reason
+  // to drop it just because the gate is gone. `consent_version` is left null
+  // going forward — there's no gate left to version.
   await desktopRPC("desktop_log_rewrite_event", {
     p_event: {
       id: eventId,
@@ -549,9 +439,23 @@ async function logRewriteEvent(
       provider,
       model,
       status: "ok",
-      input_text: storeText ? redactPII(request.text) : null,
-      output_text: storeText ? redactPII(result.candidates[0]?.replacement ?? "") : null,
-      consent_version: storeText ? (consent.version ?? DEFAULT_CONSENT_VERSION) : null,
+      input_text: redactPII(request.text),
+      output_text: redactPII(result.candidates[0]?.replacement ?? ""),
+      consent_version: null,
+      attempt_id: request.attemptId ?? null,
+      rewrite_type: request.rewriteType ?? (isReplyRequest(request) ? "reply" : null),
+      button_key: request.buttonAnalyticsKey ?? null,
+      // The actual instruction sent to the model on every path — a button's
+      // stored prompt, a typed custom instruction, or a refine instruction. Never
+      // logged before this column existed, despite being on `request` the whole
+      // time. Redacted like the other text fields.
+      instruction_text: redactPII(request.prompt),
+      // The original message being replied to (reply mode only) — distinct from
+      // `request.text`, which is the user's own draft. Redacted like the others.
+      reply_source_text: isReplyRequest(request) ? redactPII(replySourceText(request)) : null,
+      // Links a regenerate/refine row back to the attempt it followed, so "what
+      // was the version they didn't like" is a one-hop lookup.
+      previous_event_id: request.previousEventId ?? null,
     },
   });
 }
@@ -565,8 +469,8 @@ async function logRewriteEvent(
 /// cannot tell "we sold someone a plan that is too small" from "someone is hammering
 /// the endpoint" — which are opposite problems with opposite fixes.
 ///
-/// Never carries text, whatever the consent state: there is no output, and the input
-/// of an attempt that produced nothing is not worth the retention surface.
+/// Never carries text: there is no output, and the input of an attempt that
+/// produced nothing is not worth the retention surface.
 async function logBlockedEvent(
   userId: string,
   request: DesktopRewriteRequest,
@@ -589,32 +493,11 @@ async function logBlockedEvent(
       candidate_count: 0,
       input_length: [...request.text].length,
       status: reason,
+      attempt_id: request.attemptId ?? null,
+      rewrite_type: request.rewriteType ?? (isReplyRequest(request) ? "reply" : null),
+      button_key: request.buttonAnalyticsKey ?? null,
     },
   });
-}
-
-/// Reads the SHARED `user_ai_consent` table. Read-only — the desktop app never
-/// writes it, so a user's consent state is owned by whichever surface asked.
-async function fetchConsent(userId: string): Promise<{ optIn: boolean; version: string | null }> {
-  const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !key) return { optIn: false, version: null };
-
-  try {
-    const res = await fetch(
-      `${url}/rest/v1/user_ai_consent?select=opt_in,consent_version&user_id=eq.${userId}&limit=1`,
-      { headers: { apikey: key, Authorization: `Bearer ${key}` } },
-    );
-    if (!res.ok) return { optIn: false, version: null };
-    const rows = await res.json();
-    const row = Array.isArray(rows) ? rows[0] : null;
-    return {
-      optIn: row?.opt_in === true,
-      version: typeof row?.consent_version === "string" ? row.consent_version : null,
-    };
-  } catch {
-    return { optIn: false, version: null };
-  }
 }
 
 /// Reads the authenticated account's shared display name for prompt context only.

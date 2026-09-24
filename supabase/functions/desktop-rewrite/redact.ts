@@ -5,9 +5,13 @@
 // high-confidence identifiers (emails, URLs, phone numbers, postal codes,
 // long numeric IDs, labeled secrets) and makes a conservative attempt at
 // Japanese addresses and honorific-marked names. Free-form Japanese names and
-// addresses cannot be reliably caught by regex — this layer sits BEHIND
-// explicit opt-in consent, never in front of it, and is documented as
-// best-effort in the privacy policy (§7.2).
+// addresses cannot be reliably caught by regex.
+//
+// Runs unconditionally on every text field persisted to `desktop.rewrite_events`
+// (decided 2026-09-18: desktop has no consent gate on text storage — see the
+// migration note in `20260918_desktop_rewrite_events_full_tracking.sql`). This
+// pass used to sit behind that gate; it is now the only mitigation on raw text,
+// which makes its best-effort nature more load-bearing than before, not less.
 //
 // Order matters: structured tokens (email/URL) are removed before the numeric
 // passes so their embedded digits are not re-matched as phone/ID.

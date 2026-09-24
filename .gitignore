@@ -71,3 +71,6 @@ sparkle-private-key
 
 # Per-developer build settings (PostHog token). See Config/Local.example.xcconfig.
 Config/Local.xcconfig
+
+# Raw user data pulls (real rewrite text) — never commit, local analysis only
+docs/private/

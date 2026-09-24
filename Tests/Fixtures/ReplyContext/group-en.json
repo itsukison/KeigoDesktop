@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "snapshotId": "group-en",
+  "conversationId": "thread1",
+  "sourceBlocks": [
+    {
+      "id": "b1",
+      "conversationId": "thread1",
+      "text": "Alex (Design): Can you review the mockups?",
+      "order": 0,
+      "role": "AXStaticText"
+    },
+    {
+      "id": "b2",
+      "conversationId": "thread1",
+      "text": "Alex (Engineering): Build is ready.",
+      "order": 1,
+      "role": "AXStaticText"
+    },
+    {
+      "id": "b3",
+      "conversationId": "thread1",
+      "text": "Thanks, everyone.",
+      "order": 2,
+      "role": "AXStaticText"
+    }
+  ],
+  "participants": [
+    {
+      "id": "p1",
+      "label": "Alex",
+      "relationship": "unknown",
+      "evidence": [
+        {
+          "blockId": "b1",
+          "kind": "sender_label"
+        }
+      ]
+    },
+    {
+      "id": "p2",
+      "label": "Alex",
+      "relationship": "unknown",
+      "evidence": [
+        {
+          "blockId": "b2",
+          "kind": "sender_label"
+        }
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "text": "Alex (Design): Can you review the mockups?",
+      "sourceBlockIds": [
+        "b1"
+      ],
+      "order": 0,
+      "kind": "message",
+      "participantId": "p1"
+    },
+    {
+      "id": "m2",
+      "text": "Alex (Engineering): Build is ready.",
+      "sourceBlockIds": [
+        "b2"
+      ],
+      "order": 1,
+      "kind": "message",
+      "participantId": "p2"
+    },
+    {
+      "id": "m3",
+      "text": "Thanks, everyone.",
+      "sourceBlockIds": [
+        "b3"
+      ],
+      "order": 2,
+      "kind": "message"
+    }
+  ],
+  "targetMessageIds": [
+    "m1"
+  ],
+  "audience": {
+    "kind": "group",
+    "participantIds": [
+      "p1",
+      "p2"
+    ]
+  },
+  "completeness": "complete",
+  "uncertainties": []
+}

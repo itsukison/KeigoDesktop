@@ -1,0 +1,85 @@
+{
+  "prompt": "",
+  "text": "",
+  "captureMode": "wholeInput",
+  "draftReadStatus": "empty",
+  "replyTo": "old format",
+  "replyContext": {
+    "version": 1,
+    "snapshotId": "direct-ja",
+    "conversationId": "thread1",
+    "sourceBlocks": [
+      {
+        "id": "b1",
+        "conversationId": "thread1",
+        "text": "私: 明日の会議について確認です。",
+        "order": 0,
+        "role": "AXStaticText"
+      },
+      {
+        "id": "b2",
+        "conversationId": "thread1",
+        "text": "田中: 15時から参加できますか？",
+        "order": 1,
+        "role": "AXStaticText"
+      }
+    ],
+    "participants": [
+      {
+        "id": "self",
+        "label": "私",
+        "relationship": "self",
+        "evidence": [
+          {
+            "blockId": "b1",
+            "kind": "self_marker"
+          }
+        ]
+      },
+      {
+        "id": "p1",
+        "label": "田中",
+        "relationship": "other",
+        "evidence": [
+          {
+            "blockId": "b2",
+            "kind": "sender_label"
+          }
+        ]
+      }
+    ],
+    "messages": [
+      {
+        "id": "m1",
+        "text": "私: 明日の会議について確認です。",
+        "sourceBlockIds": [
+          "b1"
+        ],
+        "order": 0,
+        "kind": "message",
+        "participantId": "self"
+      },
+      {
+        "id": "m2",
+        "text": "田中: 15時から参加できますか？",
+        "sourceBlockIds": [
+          "b2"
+        ],
+        "order": 1,
+        "kind": "message",
+        "participantId": "p1"
+      }
+    ],
+    "targetMessageIds": [
+      "m2"
+    ],
+    "audience": {
+      "kind": "direct",
+      "participantIds": [
+        "p1"
+      ]
+    },
+    "completeness": "complete",
+    "uncertainties": []
+  }
+}
