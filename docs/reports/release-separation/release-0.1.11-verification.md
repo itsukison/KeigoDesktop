@@ -52,7 +52,9 @@ with the approved saved-button rules. JWT verification remains enabled. Its 24 p
 tests pass when checked against compatible v2 reply types retained in the experiment;
 the local release's older v1 type-only file is incompatible with deployed validation
 and is not substituted into the deployment. Universal/backend compatibility is retained.
-Deployment completion will be recorded below when performed.
+Deployed as **desktop-rewrite version 29**, ACTIVE with JWT verification enabled.
+Read-back matched all 11 prepared files exactly. Version 28 was rechecked immediately
+before deployment and had not changed; only the approved prompt delta was applied.
 
 ## Recovery and remaining acceptance
 
@@ -61,8 +63,8 @@ nonignored files, SHA-256 manifest, working diff, refs, stash inventory, full Gi
 deployed backend source and deployment candidate. The previous recovery tags and stash
 remain intact. Local experiment branches retain their separate earlier baseline.
 
-The user has authorized publication. Confirmation of the previously required manual
-native/browser rewrite/Reply acceptance, or an explicit decision to release with those
-checks outstanding, is pending. Physical multi-display/notch/Dock transitions and
+The user explicitly confirmed the real rewriting/insertion and copy-to-reply checks
+with “Yes, I checked them—release it” and authorized publication. These manual results
+are user acceptance, not automation results. Physical multi-display/notch/Dock transitions and
 OS accessibility settings have not been newly verified here. Signed installer and
 Sparkle update-chain checks follow publication; successful builds do not establish them.
