@@ -356,9 +356,11 @@ saved zone; results cannot be dragged freely.
 ### Side layouts
 
 Left and right use the same content in a vertical layout, mirrored at the attached
-edge. The idle tab is 24 × 56 pt. Hover opens a 144 pt-wide stack of the existing
+edge. The idle tab is 24 × 56 pt. Hover opens a content-sized stack of the existing
 mascot, saved-button scroll region, and pencil action, with 8 pt horizontal insets.
-The multiple-button stack is 144 pt wide; available Reply includes its dismiss target;
+The button region fits ordinary names within 56–108 pt, with 6 pt outer insets;
+long labels stay on one line with tail ellipsis and a full-name tooltip. Available Reply
+reserves its dismiss target;
 signed-out copy uses 176 pt so it wraps legibly. Side surfaces keep the dark
 overlay ramp, a straight attached edge,
 and 18 pt outer corners. Hover remains non-key and retains the 300 ms grace.

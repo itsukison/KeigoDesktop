@@ -273,10 +273,20 @@ final class OverlayController: ObservableObject {
     /// `onQuotaPaywall`: the overlay must not own or retain the main window.
     var onSignInRequired: (() -> Void)?
 
+    /// Fit ordinary names, cap unusually long ones, and avoid an empty gutter around
+    /// the actual hit targets. Reply keeps room for its separate dismiss control.
+    var sidebarButtonWidth: CGFloat {
+        let font = NSFont.systemFont(ofSize: Tokens.Overlay.labelMedium, weight: .medium)
+        let longest = displayedPrompts.map { ($0.title as NSString).size(withAttributes: [.font: font]).width }.max() ?? 44
+        let replyWidth = availableReplySource == nil ? CGFloat(0)
+            : (tr("返信", "Reply", "回复") as NSString).size(withAttributes: [.font: font]).width + 42
+        return max(replyWidth, min(108, max(56, ceil(longest) + 12)))
+    }
+
     var buttonViewportSize: NSSize {
         let area = OverlayPlacement.workArea(on: OverlayPlacement.screen(containing: panel.frame))
         if usesSidebarLayout {
-            return NSSize(width: 128, height: min(max(32, CGFloat(displayedPrompts.count) * 40 - 8), max(32, area.height - 180)))
+            return NSSize(width: sidebarButtonWidth, height: min(max(32, CGFloat(displayedPrompts.count) * 40 - 8), max(32, area.height - 180)))
         }
         let width = displayedPrompts.reduce(CGFloat(0)) { value, prompt in
             value + (prompt.title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: Tokens.Overlay.labelMedium)]).width + 32

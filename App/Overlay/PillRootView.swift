@@ -198,7 +198,7 @@ struct BrandMark: View {
     }
 }
 
-/// The compact row: mark, Polish, and one-off guidance.
+/// The compact row: saved buttons, available Reply, and one-off guidance.
 struct HoverRow: View {
     @ObservedObject var controller: OverlayController
 
@@ -236,7 +236,7 @@ struct HoverRow: View {
                             }
                         }
                         ForEach(controller.displayedPrompts) { prompt in
-                            RowPill(title: prompt.title, emphasised: controller.lesson?.expectedAction == .polish, isSidebar: sidebar) { controller.press(prompt) }
+                            RowPill(title: prompt.title, emphasised: controller.lesson?.expectedAction == .polish, isSidebar: sidebar, sidebarWidth: controller.sidebarButtonWidth) { controller.press(prompt) }
                                 .disabled(!controller.allowsLessonAction(.polish))
                                 .opacity(controller.lesson != nil && controller.lesson?.expectedAction != .polish ? 0.35 : 1)
                                 .background(LessonAnchorReader(anchor: .polish, controller: controller))
@@ -250,21 +250,21 @@ struct HoverRow: View {
                 if controller.availableReplySource != nil {
                     CopiedReplyAction(controller: controller)
                 } else if ReplyContextFeature.isEnabled {
-                    RowPill(title: tr("返信", "Reply", "回复"), emphasised: controller.lesson?.expectedAction == .reply, isSidebar: sidebar) { controller.pressReply() }
+                    RowPill(title: tr("返信", "Reply", "回复"), emphasised: controller.lesson?.expectedAction == .reply, isSidebar: sidebar, sidebarWidth: controller.sidebarButtonWidth) { controller.pressReply() }
                         .disabled(!controller.allowsLessonAction(.reply))
                         .opacity(controller.lesson != nil && controller.lesson?.expectedAction != .reply ? 0.35 : 1)
                         .background(LessonAnchorReader(anchor: .reply, controller: controller))
                 }
-                RowPill(systemImage: "pencil", emphasised: controller.lesson?.expectedAction == .custom, isSidebar: sidebar) { controller.pressCustomInput() }
+                RowPill(systemImage: "pencil", emphasised: controller.lesson?.expectedAction == .custom, isSidebar: sidebar, sidebarWidth: controller.sidebarButtonWidth) { controller.pressCustomInput() }
                     .disabled(!controller.allowsLessonAction(.custom))
                     .opacity(controller.lesson != nil && controller.lesson?.expectedAction != .custom ? 0.35 : 1)
                     .background(LessonAnchorReader(anchor: .custom, controller: controller))
                     .accessibilityLabel(tr("指示を書く", "Write instructions", "填写要求"))
             }
         }
-        .padding(.horizontal, sidebar ? Tokens.Geometry.sideActionsPadding : 12)
+        .padding(.horizontal, sidebar ? 6 : 12)
         .padding(.vertical, sidebar ? 12 : 0)
-        .frame(width: sidebar ? (controller.signedOut ? 176 : 144) : nil)
+        .frame(width: sidebar ? (controller.signedOut ? 176 : controller.sidebarButtonWidth + 12) : nil)
     }
 
     private var divider: some View {
@@ -287,23 +287,26 @@ struct RowPill: View {
     var systemImage: String?
     var emphasised = false
     var isSidebar = false
+    var sidebarWidth: CGFloat?
     let action: () -> Void
 
     @State private var isHovering = false
 
-    init(title: String, emphasised: Bool = false, isSidebar: Bool = false, action: @escaping () -> Void) {
+    init(title: String, emphasised: Bool = false, isSidebar: Bool = false, sidebarWidth: CGFloat? = nil, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = nil
         self.emphasised = emphasised
         self.isSidebar = isSidebar
+        self.sidebarWidth = sidebarWidth
         self.action = action
     }
 
-    init(systemImage: String, emphasised: Bool = false, isSidebar: Bool = false, action: @escaping () -> Void) {
+    init(systemImage: String, emphasised: Bool = false, isSidebar: Bool = false, sidebarWidth: CGFloat? = nil, action: @escaping () -> Void) {
         self.title = nil
         self.systemImage = systemImage
         self.emphasised = emphasised
         self.isSidebar = isSidebar
+        self.sidebarWidth = sidebarWidth
         self.action = action
     }
 
@@ -313,14 +316,16 @@ struct RowPill: View {
                 if let title {
                     Text(title)
                         .font(Tokens.Font.body(Tokens.Overlay.labelMedium, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 } else if let systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 11, weight: .medium))
                 }
             }
             .foregroundStyle(foreground)
-            .padding(.horizontal, 10)
-            .frame(width: isSidebar ? Tokens.Geometry.sideActionsWidth - 2 * Tokens.Geometry.sideActionsPadding : nil, height: isSidebar ? 32 : 24)
+            .padding(.horizontal, isSidebar ? 6 : 10)
+            .frame(width: isSidebar ? (sidebarWidth ?? Tokens.Geometry.sideActionsWidth - 2 * Tokens.Geometry.sideActionsPadding) : nil, height: isSidebar ? 32 : 24)
             .background(Capsule().fill(fill))
             .contentShape(Capsule())
         }
