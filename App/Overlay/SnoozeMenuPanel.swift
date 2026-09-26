@@ -9,11 +9,11 @@ import SwiftUI
 /// the result card, the reply pill — is a custom `NSPanel` drawn from `Tokens.Overlay`
 /// (§8: "the overlay is its own dark ramp"); a system `NSMenu` renders in the OS's own
 /// vibrant material and system font regardless of `appearance`, and would be the one
-/// piece of chrome on the bar that visibly does not belong to it. So this is built the
-/// same way the rest of the bar is, anchored **above** it rather than at the click
-/// point — macOS flips a real context menu upward near the bottom of the screen for
-/// free, but there is no such flip to inherit once this is our own window, so the
-/// anchor does the same job on purpose.
+/// piece of chrome on the bar that visibly does not belong to it. So this is built
+/// the same way the rest of the bar is, anchored to the bar rather than at the click
+/// point — macOS flips a real context menu away from the screen edge for free, but
+/// there is no such flip to inherit once this is our own window, so the placement
+/// does the same job on purpose: more room wins, above or below.
 ///
 /// **Key, unlike every other auxiliary panel here.** `PillPanel` itself must never
 /// take key (§4) — hovering it would steal the user's own field's focus mid-capture —
@@ -23,12 +23,17 @@ import SwiftUI
 /// dismiss this on resigning key.
 final class SnoozeMenuPanel: NSPanel {
 
-    /// The bottom edge, in screen coordinates — `anchor.maxY` plus the same gap
-    /// `ReplyContextPanel` uses above the bar. Recomputed into every resize rather than
-    /// read back off `frame`, for the reason `ErrorPanel.desiredBottom` documents:
-    /// `NSHostingView` re-satisfies its own constraints after `applyContentHeight` sets
-    /// the frame, and holds the window's *top* while doing it.
-    private let desiredBottom: CGFloat
+    /// Which side of the bar the menu opens on — more room wins, the same decision
+    /// every stacked panel makes through `OverlayPlacement.stackedFrame`.
+    private let side: VerticalAnchorSide
+
+    /// The anchored edge, in screen coordinates — `anchor.maxY` plus the same gap
+    /// `ReplyContextPanel` uses above the bar, or `anchor.minY` minus it below.
+    /// Recomputed into every resize rather than read back off `frame`, for the reason
+    /// `ErrorPanel.anchorEdge` documents: `NSHostingView` re-satisfies its own
+    /// constraints after `applyContentHeight` sets the frame, and holds the window's
+    /// *top* while doing it.
+    private let desiredEdge: CGFloat
 
     init(
         anchor: NSRect,
@@ -42,15 +47,15 @@ final class SnoozeMenuPanel: NSPanel {
         // A first guess only, same contract as `ErrorPanel` — `applyContentHeight`
         // measures the real thing once SwiftUI lays it out and resizes from there.
         let size = NSSize(width: Tokens.Geometry.snoozeMenuWidth, height: 120)
-        desiredBottom = anchor.maxY + Tokens.Geometry.replyContextGap
+        side = OverlayPlacement.verticalSide(anchoredTo: anchor)
+        desiredEdge = side == .above
+            ? anchor.maxY + Tokens.Geometry.replyContextGap
+            : anchor.minY - Tokens.Geometry.replyContextGap
         super.init(
-            contentRect: OverlayPlacement.clampToWorkArea(
-                NSRect(
-                    x: anchor.midX - size.width / 2,
-                    y: desiredBottom,
-                    width: size.width,
-                    height: size.height
-                )
+            contentRect: OverlayPlacement.stackedFrame(
+                size: size,
+                gap: Tokens.Geometry.replyContextGap,
+                anchoredTo: anchor
             ),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -80,13 +85,13 @@ final class SnoozeMenuPanel: NSPanel {
         )
     }
 
-    /// Grows **upward** — the bottom edge stays on `desiredBottom` so the menu never
-    /// drifts down into the bar it is anchored to, the same shape `ResultPanel` and
-    /// `ErrorPanel` use.
+    /// Grows **away from the bar** — the anchored edge stays on `desiredEdge` so the
+    /// menu never drifts into the bar it is anchored to on whichever side that is,
+    /// the same shape `ResultPanel` and `ErrorPanel` use.
     private func applyContentHeight(_ height: CGFloat) {
         var target = frame
         target.size.height = height
-        target.origin.y = desiredBottom
+        target.origin.y = side == .above ? desiredEdge : desiredEdge - height
         guard target != frame else { return }
         setFrame(OverlayPlacement.clampToWorkArea(target), display: true)
         invalidateShadow()
@@ -149,14 +154,9 @@ struct SnoozeMenu: View {
         }
         .padding(.vertical, 6)
         .frame(width: Tokens.Geometry.snoozeMenuWidth)
-        .background(
-            RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
-                .fill(Tokens.Overlay.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
-                .strokeBorder(Tokens.Overlay.hairline, lineWidth: 1)
-        )
+        .background(SmokedGlassSurface(
+            shape: RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
+        ))
         .fixedSize(horizontal: false, vertical: true)
         .background(
             GeometryReader { proxy in

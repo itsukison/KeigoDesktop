@@ -117,6 +117,18 @@ final class ClipboardTextIOTests: XCTestCase {
 
     /// The mirror image: with a real selection a ⌘A would *widen* the target and
     /// clobber text the user never selected.
+    func testChangedBrowserComposerPreventsKeystrokesAndRestoresClipboard() async throws {
+        let keys = RecordingKeystrokes()
+        let pasteboard = FakePasteboard(initial: "original")
+        let io = ClipboardTextIO(pasteboard: pasteboard, activator: FakeActivator(), keystrokes: keys.synthesizer, sleeper: { _ in })
+        do {
+            try await io.write("replacement", toFrontmost: 1, mode: .wholeInput, beforePaste: { throw BrowserReplyError.failure("target_changed") })
+            XCTFail("must reject changed destination")
+        } catch { XCTAssertEqual((error as? BrowserReplyError)?.reason, "target_changed") }
+        XCTAssertTrue(keys.sent.isEmpty)
+        XCTAssertEqual(pasteboard.readString(), "original")
+    }
+
     func testSelectionDoesNotSelectAll() async throws {
         let keys = RecordingKeystrokes()
         let io = ClipboardTextIO(

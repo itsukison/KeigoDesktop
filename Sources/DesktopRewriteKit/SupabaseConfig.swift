@@ -1,7 +1,6 @@
 import Foundation
 
-/// Shared Supabase project with the iOS app (§6): shared login, shared buttons,
-/// shared billing. Separate function, separate schema, separate analytics.
+/// Shared Supabase project with the iOS app (§6): shared login and billing. Separate function, separate schema, separate analytics.
 public struct SupabaseConfig: Sendable {
     /// The publishable key is safe to ship — it is RLS-gated, and the iOS binary
     /// already carries the same value. §2's rule is about *provider* keys: no

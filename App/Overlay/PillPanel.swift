@@ -21,6 +21,24 @@ final class PillPanel: NSPanel {
         }
     }
 
+    private(set) var dragStartLocation: NSPoint?
+    private(set) var dragStartFrame: NSRect?
+    var onDragEnded: (() -> Void)?
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown {
+            dragStartLocation = NSEvent.mouseLocation
+            dragStartFrame = frame
+        }
+        super.sendEvent(event)
+        // Native window dragging may consume mouse-up inside its tracking loop.
+        if event.type == .leftMouseUp || NSEvent.pressedMouseButtons & 1 == 0 {
+            onDragEnded?()
+            dragStartLocation = nil
+            dragStartFrame = nil
+        }
+    }
+
     override var canBecomeKey: Bool { acceptsKey }
     override var canBecomeMain: Bool { false }
 

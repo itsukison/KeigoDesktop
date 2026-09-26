@@ -4,55 +4,41 @@ import DesktopRewriteKit
 import SwiftUI
 
 struct OnboardingFlowView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var coordinator: OnboardingCoordinator
 
     var body: some View {
-        ZStack {
-            Tokens.Window.shell
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                ProgressRail(step: coordinator.step)
-                    // Hidden rather than absent on the language page: the rail owns a
-                    // fixed slice of a window that cannot resize, and removing it would
-                    // move every page down by its height for one step and back up again.
-                    .opacity(coordinator.step == .language ? 0 : 1)
-                    .padding(.horizontal, OnboardingMetrics.pagePadding)
-                    .padding(.top, 28)
-                    .padding(.bottom, 18)
-
-                Group {
-                    switch coordinator.step {
-                    case .language: LanguageStep(coordinator: coordinator)
-                    case .welcome: WelcomeStep(coordinator: coordinator)
-                    case .name: NameStep(coordinator: coordinator)
-                    case .purpose: PurposeStep(coordinator: coordinator)
-                    case .review: ButtonReviewStep(coordinator: coordinator)
-                    case .access: AccessStep(coordinator: coordinator)
-                    case .bar: BarStep(coordinator: coordinator)
-                    case .practice: PracticeStep(coordinator: coordinator)
-                    case .customPractice: CustomPracticeStep(coordinator: coordinator)
-                    case .replyPractice: ReplyPracticeStep(coordinator: coordinator)
-                    case .source: SourceStep(coordinator: coordinator)
-                    case .offer: OfferStep(coordinator: coordinator)
-                    case .complete: CompleteStep(coordinator: coordinator)
-                    }
+        VStack(spacing: 16) {
+            Group {
+                switch coordinator.step {
+                case .language: LanguageStep(coordinator: coordinator)
+                case .welcome: WelcomeStep(coordinator: coordinator)
+                case .name: NameStep(coordinator: coordinator)
+                case .purpose, .writingStyle: ButtonPurposeStep(coordinator: coordinator)
+                case .review: ButtonSetupReview(coordinator: coordinator)
+                case .access: AccessStep(coordinator: coordinator)
+                case .bar, .practice: PracticeStep(coordinator: coordinator)
+                case .customPractice: CustomPracticeStep(coordinator: coordinator)
+                case .replyPractice: ReplyPracticeStep(coordinator: coordinator)
+                case .source: SourceStep(coordinator: coordinator)
+                case .offer: OfferStep(coordinator: coordinator)
+                case .complete: CompleteStep(coordinator: coordinator)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                OnboardingNavigationBar(coordinator: coordinator)
             }
-            // `tr` reads a global, so nothing above is invalidated by a language
-            // change on its own. Re-identifying the panel rebuilds every step's body
-            // at once, which is what makes the picker's effect visible on the page
-            // that owns it.
-            .id(coordinator.language)
-            .background(Tokens.Window.canvas)
-            .clipShape(RoundedRectangle(cornerRadius: Tokens.Window.panelRadius, style: .continuous))
-            .shadow(color: .black.opacity(0.06), radius: 6, y: 1)
-            .padding(4)
+            .id(coordinator.step)
+            .transition(.opacity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: coordinator.step)
+            OnboardingNavigationBar(coordinator: coordinator)
         }
+        .padding(.horizontal, 32)
+        .padding(.top, 48)
+        .padding(.bottom, 24)
+        .background(Tokens.Window.environment)
+        .id(coordinator.language)
         .ignoresSafeArea()
+        .environment(\.onboardingPresentation, true)
         .onExitCommand {
             if coordinator.step != .language { coordinator.back() }
         }
@@ -60,12 +46,12 @@ struct OnboardingFlowView: View {
 }
 
 private enum OnboardingMetrics {
-    static let pagePadding: CGFloat = 48
-    static let contentWidth: CGFloat = 920
-    static let contentTopPadding: CGFloat = 8
-    static let bottomPadding: CGFloat = 12
+    static let pagePadding: CGFloat = 0
+    static let contentWidth: CGFloat = 1016
+    static let contentTopPadding: CGFloat = 0
+    static let bottomPadding: CGFloat = 0
     static let navigationHeight: CGFloat = 58
-    static let visualVerticalInset: CGFloat = 10
+    static let visualVerticalInset: CGFloat = 0
 }
 
 private struct OnboardingNavigationBar: View {
@@ -78,9 +64,11 @@ private struct OnboardingNavigationBar: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Hairline()
-
+        ZStack {
+            if coordinator.step != .language {
+                ProgressRail(step: coordinator.step)
+                    .allowsHitTesting(false)
+            }
             HStack(spacing: 12) {
                 if coordinator.step != .language && coordinator.step != .complete {
                     LinkButton(title: tr("戻る", "Back", "返回")) { coordinator.back() }
@@ -102,22 +90,16 @@ private struct OnboardingNavigationBar: View {
                         model.isSavingName
                             ? tr("名前を保存中…", "Saving your name…", "正在保存名字…")
                             : coordinator.isPreparingPurpose
-                            ? tr("ボタンを読み込み中…", "Loading your buttons…", "正在加载按钮…")
+                            ? tr("準備中…", "Preparing…", "准备中…")
                             : tr("続ける", "Continue", "继续"),
                         enabled: !coordinator.isPreparingPurpose && !model.isSavingName
                             && model.hasDisplayNameDraft
                     )
 
-                case .purpose:
-                    primaryButton(tr("このセットを確認", "Review this set", "确认这组按钮"))
-
+                case .purpose, .writingStyle:
+                    primaryButton(tr("続ける", "Continue", "继续"), enabled: !coordinator.buttonDrafts.isEmpty)
                 case .review:
-                    primaryButton(
-                        coordinator.isSavingButtons
-                            ? tr("保存中…", "Saving…", "保存中…")
-                            : tr("保存して続ける", "Save and continue", "保存并继续"),
-                        enabled: coordinator.canConfirmButtons && !coordinator.isSavingButtons
-                    )
+                    primaryButton(tr("保存して続ける", "Save and continue", "保存并继续"), enabled: coordinator.canConfirmButtons && !coordinator.isSavingButtons)
 
                 case .access:
                     if model.isTrusted {
@@ -140,11 +122,7 @@ private struct OnboardingNavigationBar: View {
                         }
                     }
 
-                case .bar:
-                    LinkButton(title: tr("あとで始める", "Skip for now", "稍后再说")) { coordinator.skipEducation() }
-                    primaryButton(tr("書き換えを練習", "Try a rewrite", "练习改写"))
-
-                case .practice:
+                case .bar, .practice:
                     LinkButton(title: tr("あとで始める", "Skip for now", "稍后再说")) { coordinator.skipEducation() }
                     primaryButton(tr("カスタムも練習", "Try a custom one", "练习自定义指令"), enabled: coordinator.rewritePracticeCompleted)
 
@@ -220,7 +198,7 @@ private struct ProgressRail: View {
         [
             .welcome: tr("アカウント", "Account", "账户"),
             .name: tr("名前", "Name", "名字"),
-            .purpose: tr("用途", "Use", "用途"),
+            .writingStyle: tr("スタイル", "Style", "风格"),
             .review: tr("ボタン", "Buttons", "按钮"),
             .access: tr("アクセス", "Access", "权限"),
             .practice: tr("書き換え", "Rewrite", "改写"),
@@ -232,36 +210,27 @@ private struct ProgressRail: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            ForEach(Array(Self.steps.enumerated()), id: \.element) { index, item in
-                let isCurrent = item == step
-                VStack(alignment: .leading, spacing: 7) {
-                    Group {
-                        if item == .bar {
-                            PillPreview(scale: 0.52)
-                        } else {
-                            Text(labels[item] ?? "")
-                                .font(Tokens.Font.body(11, weight: isCurrent ? .medium : .regular))
-                                .foregroundStyle(
-                                    index <= currentIndex
-                                        ? Tokens.Window.accentText
-                                        : Tokens.Window.textTertiary
-                                )
-                        }
-                    }
-                    .frame(height: 15, alignment: .leading)
-                    Capsule()
-                        .fill(index <= currentIndex ? Tokens.Window.accent : Tokens.Window.hairline)
-                        .frame(height: 3)
-                }
+        HStack(spacing: 6) {
+            ForEach(Array(Self.steps.enumerated()), id: \.element) { index, _ in
+                Capsule()
+                    .fill(index == currentIndex ? Tokens.Window.textPrimary : Tokens.Window.textPrimary.opacity(index < currentIndex ? 0.22 : 0.08))
+                    .frame(width: index == currentIndex ? 16 : 6, height: 6)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(tr("セットアップの進行状況", "Setup progress", "设置进度"))
+        .accessibilityValue("\(currentIndex + 1) / \(Self.steps.count)")
     }
 }
 
 private struct WelcomeStep: View {
     @ObservedObject private var model: MainModel
     @State private var showsEmail = false
+    #if DEBUG
+    private var emailPreview: Bool { AsideDesignPreview.state == "signup" || AsideDesignPreview.state == "error" }
+    #else
+    private let emailPreview = false
+    #endif
 
     // The coordinator is not held: everything this page reads and both errors it used
     // to print moved to 名前 with the field, and observing it would only redraw the
@@ -271,71 +240,49 @@ private struct WelcomeStep: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 40) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 9) {
-                    AppMark(size: 24)
+        OnboardingSplitPage {
+            VStack(alignment: .leading, spacing: 24) {
+                HStack(spacing: 8) {
+                    AppMark(size: 26)
                     Text(tr("敬語ボタン", "KeigoButton", "敬語ボタン"))
-                        .font(Tokens.Font.body(14, weight: .medium))
-                        .foregroundStyle(Tokens.Window.textPrimary)
+                        .font(Tokens.LightFont.body(18, weight: .medium))
                 }
-
-                Text(tr("書きたいことを、\nどこでも整える。", "Write anywhere.\nPolish it in place.", "想写的内容，\n在任何地方都能整理好。"))
-                    .font(Tokens.Font.display(26))
-                    .tracking(Tokens.Font.displayTracking(26))
-                    .foregroundStyle(Tokens.Window.textPrimary)
-                    .padding(.top, 24)
-
-                Text(tr("入力中の文章を、その場に合う言葉へ。\nボタンを選ぶだけで、同じ場所へ戻せます。", "Turn what you are typing into the right words.\nPress a button and it goes back where it came from.", "把正在输入的文字，换成合适的表达。\n只需按下按钮，就会写回原处。"))
-                    .font(Tokens.Font.body(14))
+                Text(tr("書きたいことを、\nどこでも整える。", "Write anywhere.\nPolish it in place.", "想写的内容，\n随处都能整理好。"))
+                    .font(Tokens.LightFont.body(40, weight: .medium))
+                    .tracking(-0.8)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(tr("入力中の文章を、その場に合う言葉へ。", "The right words, right where you’re writing.", "把正在输入的文字，换成合适的表达。"))
+                    .font(Tokens.LightFont.Onboarding.body)
                     .foregroundStyle(Tokens.Window.textSecondary)
-                    .lineSpacing(5)
-                    .padding(.top, 12)
-
-                Group {
-                    if model.isSignedIn {
-                        connectedContent
-                    } else {
-                        authenticationContent
-                    }
-                }
-                .padding(.top, 24)
+                if model.isSignedIn { connectedContent } else { authenticationContent }
             }
-            .frame(width: 400, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .leading)
-
-            OnboardingVisualStage {
-                OnboardingMascotHero()
-                    .frame(width: 344, height: 344)
-                    .padding(28)
+            .foregroundStyle(Tokens.Window.textPrimary)
+            .padding(.vertical, 16)
+        } visual: {
+            OnboardingVisualStage(artwork: .glow) {
+                OnboardingMascotHero().frame(width: 344, height: 344)
             }
-            .padding(.vertical, OnboardingMetrics.visualVerticalInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
 
     private var connectedContent: some View {
-        Card(padding: 16, radius: 12) {
+        Card(padding: 20, radius: 16) {
             HStack(spacing: 12) {
                 StatusDot(ok: true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tr("アカウントに接続済み", "Connected to your account", "已连接账户"))
-                        .font(Tokens.Font.body(14, weight: .medium))
+                        .font(Tokens.LightFont.body(18, weight: .medium))
                         .foregroundStyle(Tokens.Window.textPrimary)
                     Text(model.signedInEmail ?? "")
-                        .font(Tokens.Font.body(12))
-                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .font(Tokens.LightFont.body(16))
+                        .foregroundStyle(Tokens.Window.textPrimary)
                 }
             }
         }
     }
 
     private var authenticationContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             GoogleSignInButton(isLoading: model.isAuthenticating) {
                 model.signInWithGoogle()
             }
@@ -343,12 +290,12 @@ private struct WelcomeStep: View {
             HStack(spacing: 12) {
                 Hairline()
                 Text(tr("または", "or", "或"))
-                    .font(Tokens.Font.body(11))
+                    .font(Tokens.LightFont.body(13))
                     .foregroundStyle(Tokens.Window.textTertiary)
                 Hairline()
             }
 
-            if showsEmail {
+            if showsEmail || emailPreview {
                 VStack(alignment: .leading, spacing: 10) {
                     SettingsField(placeholder: tr("メールアドレス", "Email address", "邮箱地址"), text: $model.email)
                     SettingsField(placeholder: tr("パスワード", "Password", "密码"), text: $model.password, secure: true)
@@ -358,13 +305,13 @@ private struct WelcomeStep: View {
 
                     if let error = model.authError {
                         Text(error)
-                            .font(Tokens.Font.body(12))
-                            .foregroundStyle(Tokens.Window.textPrimary)
+                            .font(Tokens.LightFont.Onboarding.body)
+                            .foregroundStyle(Tokens.Window.error)
                     }
                     if let notice = model.authNotice {
                         Text(notice)
-                            .font(Tokens.Font.body(12))
-                            .foregroundStyle(Tokens.Window.textSecondary)
+                            .font(Tokens.LightFont.body(16))
+                            .foregroundStyle(Tokens.Window.textPrimary)
                     }
 
                     HStack(spacing: 12) {
@@ -385,23 +332,26 @@ private struct WelcomeStep: View {
                         }
                     }
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(.opacity)
             } else {
                 Button {
                     withAnimation(.easeOut(duration: 0.18)) { showsEmail = true }
                 } label: {
                     Text(tr("メールアドレスで続ける", "Continue with email", "使用邮箱继续"))
-                        .font(Tokens.Font.body(13, weight: .medium))
+                        .font(Tokens.LightFont.Onboarding.action)
                         .foregroundStyle(Tokens.Window.textPrimary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 40)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Tokens.Window.canvas))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Tokens.Window.hairline))
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Tokens.Window.secondaryPanel))
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Tokens.Window.hairline))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LightPressStyle())
                 .cursor(.pointingHand)
             }
         }
+        .padding(20)
+        .background(Tokens.Window.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Tokens.Window.hairline))
     }
 
     private var canSubmit: Bool {
@@ -433,7 +383,7 @@ private struct NameStep: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 28) {
+        OnboardingSplitPage {
             VStack(alignment: .leading, spacing: 20) {
                 StepHeading(
                     eyebrow: tr("あなたのこと", "About you", "关于你"),
@@ -463,7 +413,7 @@ private struct NameStep: View {
                     autofocus: true,
                     onSubmit: { coordinator.advance() }
                 )
-                .frame(maxWidth: 260)
+                .frame(maxWidth: .infinity)
 
                 HStack(alignment: .top, spacing: 10) {
                     Icon(.info, size: 14)
@@ -474,8 +424,8 @@ private struct NameStep: View {
                         "It signs your emails, and it is how a reply can tell a message was addressed to you.",
                         "用于邮件署名，也用来识别消息是否在称呼你。"
                     ))
-                        .font(Tokens.Font.body(12))
-                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .font(Tokens.LightFont.body(16))
+                        .foregroundStyle(Tokens.Window.textPrimary)
                         .lineSpacing(4)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -484,22 +434,15 @@ private struct NameStep: View {
                 // the account's buttons — so both are read on the page that presses it.
                 if let error = model.profileError ?? coordinator.purposeError {
                     Text(error)
-                        .font(Tokens.Font.body(12))
-                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .font(Tokens.LightFont.body(16))
+                        .foregroundStyle(Tokens.Window.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(width: 320, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .leading)
 
+        } visual: {
             NameIllustration(name: model.displayNameDraft)
-                .padding(.vertical, OnboardingMetrics.visualVerticalInset)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
 }
 
@@ -518,51 +461,31 @@ private struct LanguageStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
 
     var body: some View {
-        HStack(alignment: .top, spacing: 28) {
-            VStack(alignment: .leading, spacing: 22) {
-                StepHeading(
-                    eyebrow: tr("はじめに", "First", "首先"),
-                    title: tr("使う言語を選んでください", "Choose your language", "请选择使用的语言"),
-                    subtitle: tr(
-                        "アプリの表示言語です。あとから設定でいつでも変更できます。",
-                        "This sets the app's interface. You can change it any time in Settings.",
-                        "这是应用的界面语言。之后可随时在设置中更改。"
-                    )
-                )
-
-                HStack(alignment: .top, spacing: 10) {
-                    Icon(.info, size: 14)
-                        .foregroundStyle(Tokens.Window.accentText)
-                        .opticalCentre()
-                    Text(languageNote)
-                        .font(Tokens.Font.body(12))
-                        .foregroundStyle(Tokens.Window.textSecondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        OnboardingChoicePage(width: 480) {
+            VStack(spacing: 8) {
+                Image("MascotPortrait")
+                    .resizable().interpolation(.high).scaledToFit()
+                    .frame(width: 88, height: 88)
+                    .accessibilityHidden(true)
+                StepHeading(eyebrow: "", title: tr("使う言語を選んでください", "Choose your language", "请选择使用的语言"),
+                    subtitle: tr("アプリの表示言語です。あとから変更できます。", "Choose the language you’d like to use. You can change it later.", "选择应用的显示语言。之后可随时更改。"), centered: true, titleWeight: .semibold)
             }
-            .frame(width: 250, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .leading)
-
-            OnboardingVisualStage {
-                VStack(spacing: 12) {
-                    ForEach(AppLanguage.allCases, id: \.rawValue) { language in
-                        LanguageOptionCard(
-                            language: language,
-                            selected: coordinator.language == language
-                        ) {
-                            coordinator.select(language: language)
-                        }
+            VStack(spacing: 0) {
+                ForEach(Array(AppLanguage.allCases.enumerated()), id: \.element.rawValue) { index, language in
+                    if index > 0 { Color.clear.frame(height: 4) }
+                    LanguageOptionCard(language: language, selected: coordinator.language == language) {
+                        coordinator.select(language: language)
                     }
                 }
-                .padding(18)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
+            .padding(6)
+            .background(.white, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Tokens.Window.hairline))
+            Text(languageNote)
+                .font(Tokens.LightFont.Onboarding.caption)
+                .foregroundStyle(Tokens.Window.textSecondary)
+                .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
 
     /// Said only in Chinese, because it is only true there: the interface is Chinese
@@ -570,9 +493,9 @@ private struct LanguageStep: View {
     /// would be describing a choice the reader did not make.
     private var languageNote: String {
         tr(
-            "ボタンは、選んだ言語に合わせて用意します。",
-            "Your buttons will be set up for writing in English.",
-            "界面为中文，按钮仍然用于书写日语。这是为在日本工作的中文使用者准备的。"
+            "新しい文章は選んだ言語で。書き換えは元の言語を保ちます。",
+            "New messages use English. Polishing keeps the language of your draft.",
+            "界面为中文，新文章默认使用日语。润色时保留原文语言。"
         )
     }
 }
@@ -585,45 +508,47 @@ private struct LanguageOptionCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .center, spacing: 10) {
+            HStack(alignment: .center, spacing: 16) {
+                Text(language == .japanese ? "あ" : language == .english ? "A" : "文")
+                    .font(Tokens.LightFont.body(22, weight: .medium))
+                    .foregroundStyle(selected ? Tokens.Window.accentText : Tokens.Window.textSecondary)
+                    .frame(width: 40, height: 40)
+                    .background(Tokens.Window.surface, in: RoundedRectangle(cornerRadius: 10))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(language.endonym)
-                        .font(Tokens.Font.body(15, weight: .medium))
+                        .font(Tokens.LightFont.body(18, weight: .semibold))
                         .foregroundStyle(Tokens.Window.textPrimary)
                     Text(caption)
-                        .font(Tokens.Font.body(12))
+                        .font(Tokens.LightFont.Onboarding.caption)
                         .foregroundStyle(Tokens.Window.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
                 ZStack {
                     Circle()
                         .strokeBorder(
-                            selected ? Tokens.Window.accent : Tokens.Window.controlOff,
+                            selected ? Tokens.Window.accentText : Tokens.Window.textTertiary,
                             lineWidth: 1
                         )
                         .frame(width: 18, height: 18)
                     if selected {
-                        Circle().fill(Tokens.Window.accent).frame(width: 10, height: 10)
+                        Circle().fill(Tokens.Window.accentText).frame(width: 10, height: 10)
                     }
                 }
             }
-            .padding(16)
+            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(hovering && !selected ? Tokens.Window.surface : Tokens.Window.canvas)
+                    .fill(selected ? Tokens.Window.accentTint : hovering ? Tokens.Window.surfaceHover : .clear)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(
-                        selected ? Tokens.Window.accent : Tokens.Window.hairline,
-                        lineWidth: 1
-                    )
-            )
+
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LightPressStyle())
         .onHover { hovering = $0 }
         .cursor(.pointingHand)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     /// Written in the language of the row, not of the interface — the row is how a
@@ -631,378 +556,8 @@ private struct LanguageOptionCard: View {
     private var caption: String {
         switch language {
         case .japanese: return "日本語で表示し、日本語の文章を書きます"
-        case .english: return "English interface, English writing buttons"
+        case .english: return "English interface and new messages"
         case .simplifiedChinese: return "中文界面，按钮书写日语"
-        }
-    }
-}
-
-private struct PurposeStep: View {
-    @ObservedObject var coordinator: OnboardingCoordinator
-    private var model: MainModel { coordinator.mainModel }
-
-    private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14),
-    ]
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 28) {
-            VStack(alignment: .leading, spacing: 22) {
-                StepHeading(
-                    eyebrow: tr("ボタンを選ぶ", "Pick your buttons", "选择按钮"),
-                    title: tr("主にどこで使いますか？", "Where will you use it most?", "主要在哪里使用？"),
-                    subtitle: tr(
-                        "用途に合う4つを用意します。次の画面で名前も指示も変更できます。",
-                        "We'll set up four buttons for that. You can rename and reword them next.",
-                        "将为你准备合适的4个按钮。名称和指令都可在下一步修改。"
-                    )
-                )
-
-                HStack(alignment: .top, spacing: 10) {
-                    Icon(.info, size: 14)
-                        .foregroundStyle(Tokens.Window.accentText)
-                        .opticalCentre()
-                    Text(tr(
-                        "ここで選ぶのは出発点です。名前、順番、AIへの指示は次の画面で自由に調整できます。",
-                        "This is only a starting point. Names, order and the instruction behind each button are all editable on the next page.",
-                        "这只是起点。名称、顺序和给AI的指令都可以在下一步自由调整。"
-                    ))
-                        .font(Tokens.Font.body(12))
-                        .foregroundStyle(Tokens.Window.textSecondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(width: 250, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .leading)
-
-            OnboardingVisualStage {
-                GeometryReader { proxy in
-                    ScrollView {
-                        LazyVGrid(columns: columns, spacing: 12) {
-                            if !model.prompts.isEmpty {
-                                PurposeOptionCard(
-                                    title: tr("現在のボタンを使う", "Keep my current buttons", "使用现有按钮"),
-                                    caption: tr(
-                                        "iPhoneと同期している設定をそのまま確認",
-                                        "Review the set already synced from your iPhone",
-                                        "查看已与 iPhone 同步的设置"
-                                    ),
-                                    titles: model.prompts.prefix(4).map(\.title),
-                                    selected: coordinator.usesCurrentButtons
-                                ) {
-                                    coordinator.selectCurrentButtons()
-                                }
-                            }
-
-                            ForEach(OnboardingPresetPack.available(for: coordinator.language), id: \.rawValue) { pack in
-                                PurposeOptionCard(
-                                    title: pack.title,
-                                    caption: pack.caption,
-                                    titles: pack.buttonTitles,
-                                    selected: coordinator.selectedPack == pack
-                                ) {
-                                    coordinator.select(pack: pack)
-                                }
-                            }
-                        }
-                        .padding(18)
-                        .frame(minHeight: proxy.size.height, alignment: .center)
-                    }
-                    .scrollIndicators(.hidden)
-                }
-            }
-            .padding(.vertical, OnboardingMetrics.visualVerticalInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
-    }
-}
-
-private struct PurposeOptionCard: View {
-    let title: String
-    let caption: String
-    let titles: [String]
-    let selected: Bool
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 11) {
-                HStack(alignment: .top, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(title)
-                            .font(Tokens.Font.body(14, weight: .medium))
-                            .foregroundStyle(Tokens.Window.textPrimary)
-                        Text(caption)
-                            .font(Tokens.Font.body(12))
-                            .foregroundStyle(Tokens.Window.textSecondary)
-                            .lineLimit(2)
-                    }
-                    Spacer(minLength: 8)
-                    ZStack {
-                        Circle()
-                            .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1)
-                            .frame(width: 18, height: 18)
-                        if selected {
-                            Circle().fill(Tokens.Window.accent).frame(width: 10, height: 10)
-                        }
-                    }
-                }
-
-                HStack(spacing: 6) {
-                    ForEach(titles, id: \.self) { title in
-                        Text(title)
-                            .font(Tokens.Font.body(11, weight: .medium))
-                            .foregroundStyle(selected ? Tokens.Window.accentText : Tokens.Window.textSecondary)
-                            .opticalPadding(vertical: 3, horizontal: 7)
-                            .background(
-                                Capsule().fill(selected ? Tokens.Window.accentPlate : Tokens.Window.surface)
-                            )
-                    }
-                }
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(hovering && !selected ? Tokens.Window.surface : Tokens.Window.canvas)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.hairline, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .cursor(.pointingHand)
-    }
-}
-
-/// The one page whose left column is a working list rather than a paragraph, and the
-/// three rules that keep it from behaving like one.
-///
-/// 1. **The block is vertically centred**, like every other split page. That is only
-///    possible if the column has a natural height, and a `ScrollView` never does — it
-///    takes everything it is offered. So the list is capped at the height its rows
-///    occupy *collapsed* (`listViewportHeight`) and stays flexible below that, which
-///    makes it exactly as tall as its content when the set is short and lets the parent
-///    compress it when the set is long.
-/// 2. **Opening a row cannot resize anything outside the list.** The cap is computed
-///    from the row count, not measured from the content, so an expanded editor grows
-///    *inside* a viewport that does not move: the heading, the 追加 action and the whole
-///    right column stay exactly where they were. The expanded row is scrolled to the top
-///    of that viewport in the same animation, which is where the editor is legible.
-/// 3. **The preview column is a layout invariant** (§15). It spans the full height on
-///    its own terms and reads nothing about the left column. It used to flip its
-///    alignment from centre to top whenever a row opened, so pressing ✎ moved the one
-///    thing on screen the user had not touched.
-private struct ButtonReviewStep: View {
-    @ObservedObject var coordinator: OnboardingCoordinator
-    @State private var editingID: UUID?
-
-    /// Enforced on the collapsed row rather than assumed of it — `ButtonDraftRow` sets
-    /// this as an explicit height, so the arithmetic below cannot drift from what is
-    /// drawn. 74 is what the two 26 pt reorder buttons plus the row's padding measured.
-    private static let rowHeight: CGFloat = 74
-    private static let rowSpacing: CGFloat = 10
-
-    /// The list's height with every row closed. `+ 2` is the 1 pt inset the rows are
-    /// padded by so their focus rings and borders are not clipped by the scroll view.
-    private var listViewportHeight: CGFloat {
-        let count = CGFloat(coordinator.buttonDrafts.count)
-        return count * Self.rowHeight + max(0, count - 1) * Self.rowSpacing + 2
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 24) {
-            ScrollViewReader { scroll in
-                VStack(alignment: .leading, spacing: 18) {
-                    StepHeading(
-                        eyebrow: tr("ボタンを確認", "Review", "确认按钮"),
-                        title: tr("使うボタンを確認", "Check your buttons", "确认要使用的按钮"),
-                        subtitle: tr(
-                            "先頭がメインボタンです。名前、指示、順番はここで変更できます。",
-                            "The first row is your main button. Rename, reword and reorder them here.",
-                            "第一行是主按钮。可在此修改名称、指令和顺序。"
-                        )
-                    )
-
-                    ScrollView {
-                        VStack(spacing: Self.rowSpacing) {
-                            ForEach(Array(coordinator.buttonDrafts.enumerated()), id: \.element.id) { index, draft in
-                                ButtonDraftRow(
-                                    draft: draft,
-                                    index: index,
-                                    count: coordinator.buttonDrafts.count,
-                                    height: Self.rowHeight,
-                                    isEditing: editingID == draft.id,
-                                    onToggleEdit: { toggleEdit(of: draft.id, scroll: scroll) },
-                                    onChange: coordinator.updateDraft,
-                                    onMove: { coordinator.moveDraft(id: draft.id, by: $0) },
-                                    onDelete: {
-                                        if editingID == draft.id { editingID = nil }
-                                        coordinator.deleteDraft(id: draft.id)
-                                    }
-                                )
-                                .id(draft.id)
-                            }
-                        }
-                        .padding(1)
-                    }
-                    .scrollIndicators(.hidden)
-                    .frame(maxHeight: listViewportHeight)
-
-                    if coordinator.buttonDrafts.count < 7 {
-                        ActionButton(tr("ボタンを追加", "Add a button", "添加按钮"), icon: .add, style: .secondary) {
-                            coordinator.addDraft()
-                        }
-                    }
-                }
-                .frame(width: 540, alignment: .leading)
-                .frame(maxHeight: .infinity, alignment: .leading)
-            }
-
-            VStack(alignment: .leading, spacing: 16) {
-                PillCaption(prefix: tr("", "Preview of ", ""), suffix: tr("のプレビュー", "", "的预览"))
-
-                OnboardingBarPreview(titles: coordinator.buttonDrafts.map(\.title))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                Text(tr(
-                    "一番上のボタンは、iPhoneでもメインとして表示されます。",
-                    "The top button is also the main one on your iPhone.",
-                    "最上面的按钮在 iPhone 上也会显示为主按钮。"
-                ))
-                    .font(Tokens.Font.body(12))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if let error = coordinator.reviewError {
-                    Text(error)
-                        .font(Tokens.Font.body(12))
-                        .foregroundStyle(Tokens.Window.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
-    }
-
-    /// One gesture, one motion: the row grows and the list scrolls it to the top under
-    /// the same curve. The editor itself only fades — sliding it in from the top edge as
-    /// well described the same event twice, against a row that was already growing.
-    private func toggleEdit(of id: UUID, scroll: ScrollViewProxy) {
-        let opening = editingID != id
-        withAnimation(.easeOut(duration: 0.18)) {
-            editingID = opening ? id : nil
-            if opening { scroll.scrollTo(id, anchor: .top) }
-        }
-    }
-}
-
-private struct ButtonDraftRow: View {
-    let draft: OnboardingButtonDraft
-    let index: Int
-    let count: Int
-    /// The closed row's height, fixed so `ButtonReviewStep` can size the list's viewport
-    /// from the row count alone and keep it stable while a row is open.
-    let height: CGFloat
-    let isEditing: Bool
-    let onToggleEdit: () -> Void
-    let onChange: (OnboardingButtonDraft) -> Void
-    let onMove: (Int) -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                VStack(spacing: 0) {
-                    IconButton(icon: .arrowUp, help: tr("上へ", "Move up", "上移"), enabled: index > 0) { onMove(-1) }
-                    IconButton(icon: .arrowDown, help: tr("下へ", "Move down", "下移"), enabled: index < count - 1) { onMove(1) }
-                }
-                .frame(width: 26)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 8) {
-                        Text(draft.title.isEmpty ? tr("名称未設定", "Untitled", "未命名") : draft.title)
-                            .font(Tokens.Font.body(14, weight: .medium))
-                            .foregroundStyle(Tokens.Window.textPrimary)
-                        if index == 0 { Badge(tr("メイン", "Main", "主要")) }
-                    }
-                    Text(draft.prompt.isEmpty ? tr("指示を入力してください", "Write an instruction", "请输入指令") : draft.prompt)
-                        .font(Tokens.Font.body(12))
-                        .foregroundStyle(Tokens.Window.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-
-                Spacer(minLength: 10)
-                IconButton(icon: .edit, help: tr("編集", "Edit", "编辑")) { onToggleEdit() }
-                IconButton(icon: .trash, help: tr("削除", "Delete", "删除"), enabled: count > 1) { onDelete() }
-            }
-            .padding(.horizontal, 14)
-            .frame(height: height)
-
-            if isEditing {
-                Hairline()
-                VStack(alignment: .leading, spacing: 10) {
-                    SectionCaption(text: tr("ボタン名", "Button name", "按钮名称"))
-                    SettingsField(
-                        placeholder: tr("ボタン名", "Button name", "按钮名称"),
-                        text: Binding(
-                            get: { draft.title },
-                            set: { value in
-                                var next = draft
-                                next.title = String(value.prefix(12))
-                                onChange(next)
-                            }
-                        )
-                    )
-
-                    SectionCaption(text: tr("AIへの指示", "Instruction for the AI", "给AI的指令"))
-                    TextEditor(text: Binding(
-                        get: { draft.prompt },
-                        set: { value in
-                            var next = draft
-                            next.prompt = value
-                            onChange(next)
-                        }
-                    ))
-                    .font(Tokens.Font.body(13))
-                    .foregroundStyle(Tokens.Window.textPrimary)
-                    .scrollContentBackground(.hidden)
-                    .padding(10)
-                    .frame(height: 82)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Tokens.Window.group))
-                }
-                .padding(14)
-                .transition(.opacity)
-            }
-        }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Tokens.Window.canvas))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Tokens.Window.hairline))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-private struct OnboardingBarPreview: View {
-    let titles: [String]
-
-    var body: some View {
-        OnboardingVisualStage {
-            OnboardingMailScene(labels: titles.map { $0.isEmpty ? tr("未設定", "Untitled", "未设置") : $0 }) {
-                OnboardingStaticMailBody(text: tr("明日の会議を15時に変更していただけますか。", "Could we move tomorrow's meeting to 3pm?", "明日の会議を15時に変更していただけますか。"))
-            }
         }
     }
 }
@@ -1017,7 +572,7 @@ private struct AccessStep: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 32) {
+        OnboardingSplitPage {
             VStack(alignment: .leading, spacing: 24) {
                 StepHeading(
                     eyebrow: tr("必要な設定", "One permission", "必要的设置"),
@@ -1038,7 +593,7 @@ private struct AccessStep: View {
                         IconPlate(icon: .accessibility, diameter: 42)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(tr("アクセシビリティ", "Accessibility", "辅助功能"))
-                                .font(Tokens.Font.body(14, weight: .medium))
+                                .font(Tokens.LightFont.body(18, weight: .medium))
                                 .foregroundStyle(Tokens.Window.textPrimary)
                             Text(model.isTrusted
                                 ? tr("許可済みです", "Granted", "已授权")
@@ -1047,8 +602,8 @@ private struct AccessStep: View {
                                     "Turn KeigoButton on in System Settings",
                                     "请在系统设置中允许敬語ボタン"
                                 ))
-                                .font(Tokens.Font.body(12))
-                                .foregroundStyle(Tokens.Window.textSecondary)
+                                .font(Tokens.LightFont.body(16))
+                                .foregroundStyle(Tokens.Window.textPrimary)
                         }
                         Spacer()
                         StatusDot(ok: model.isTrusted)
@@ -1056,231 +611,90 @@ private struct AccessStep: View {
                 }
 
             }
-            .frame(width: 350, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .leading)
 
+        } visual: {
             PermissionIllustration(granted: model.isTrusted)
-                .padding(.vertical, OnboardingMetrics.visualVerticalInset)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
 
-}
-
-private struct BarStep: View {
-    @ObservedObject var coordinator: OnboardingCoordinator
-    @ObservedObject private var model: MainModel
-
-    init(coordinator: OnboardingCoordinator) {
-        self.coordinator = coordinator
-        self.model = coordinator.mainModel
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 32) {
-            VStack(alignment: .leading, spacing: 24) {
-                PillStepHeading()
-
-                VStack(alignment: .leading, spacing: 14) {
-                    TeachingPillRow(number: "01", prefix: tr("", "Hover ", ""), suffix: tr("にカーソルを合わせて開く", " to open it", "，光标悬停即可展开"))
-                    TeachingRow(number: "02", text: tr("ラベルを押して書き換える", "Press a button to rewrite", "点击标签进行改写"))
-                    TeachingRow(number: "03", text: tr("結果を確認して置き換え", "Check the result and insert it", "确认结果后替换"))
-                    TeachingRow(number: "04", text: tr("自由な指示をその場で入力", "Or type a one-off instruction", "也可现场输入自由指令"))
-                }
-
-            }
-            .frame(width: 350, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .leading)
-
-            BarIllustration(prompts: model.prompts.enabledForHoverRow)
-                .padding(.vertical, OnboardingMetrics.visualVerticalInset)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
-    }
 }
 
 private struct PracticeStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
-    @State private var sample: String
-    @State private var focused = true
-
-    init(coordinator: OnboardingCoordinator) {
-        self.coordinator = coordinator
-        _sample = State(initialValue: coordinator.tutorialSample)
-    }
-
     var body: some View {
-        VStack(spacing: 16) {
-            HStack(alignment: .bottom, spacing: 28) {
-                PracticeStepHeading(
-                    completed: coordinator.rewritePracticeCompleted
-                )
-                .frame(maxWidth: 560, alignment: .leading)
-
-                Spacer(minLength: 0)
-
-                PracticeStatusBadge(
-                    completed: coordinator.rewritePracticeCompleted,
-                    pendingText: tr("結果が出たら書き換える", "Insert when the result appears", "结果出来后进行改写"),
-                    completedText: tr("書き戻し完了", "Written back", "已写回")
-                )
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            OnboardingVisualStage {
-                OnboardingMailScene(labels: [], showsBar: false) {
-                    OnboardingPracticeEditor(
-                        text: $sample,
-                        isFocused: $focused,
-                        fontSize: 15,
-                        accessibilityLabel: tr("練習用メッセージ", "Practice message", "练习用消息")
-                    )
-                    .background(.white)
-                }
-            }
-            .padding(.bottom, OnboardingMetrics.visualVerticalInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
+        GuidedPracticePage(coordinator: coordinator, kind: .rewrite, initialText: coordinator.tutorialSample)
     }
 }
 
 private struct CustomPracticeStep: View {
-    private static var sourceDraft: String {
-        tr(
+    @ObservedObject var coordinator: OnboardingCoordinator
+    var body: some View {
+        GuidedPracticePage(coordinator: coordinator, kind: .custom, initialText: tr(
             "明日の15時の打ち合わせですが、資料の準備が間に合わないので、来週火曜日の同じ時間に変更したいです。",
             "About tomorrow's 3pm meeting — the materials won't be ready, so I'd like to move it to the same time next Tuesday.",
-            "明日の15時の打ち合わせですが、資料の準備が間に合わないので、来週火曜日の同じ時間に変更したいです。"
-        )
-    }
-    private static var suggestedGuidance: String {
-        tr(
-            "取引先向けに、簡潔なメールにしてください。",
-            "Make it a short client email that opens with an apology.",
-            "写成给客户的简洁邮件，开头先致歉。"
-        )
-    }
-
-    @ObservedObject var coordinator: OnboardingCoordinator
-    @State private var draft = Self.sourceDraft
-    @State private var focused = true
-
-    var body: some View {
-        VStack(spacing: 16) {
-            HStack(alignment: .bottom, spacing: 28) {
-                CustomPracticeHeading(completed: coordinator.customPracticeCompleted)
-                    .frame(maxWidth: 590, alignment: .leading)
-
-                Spacer(minLength: 0)
-
-                if coordinator.customPracticeCompleted {
-                    PracticeStatusBadge(
-                        completed: true,
-                        pendingText: "",
-                        completedText: tr("カスタム指示で書き戻しました", "Written back with your instruction", "已使用自定义指令写回")
-                    )
-                } else {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text(tr("入力例", "Example", "输入示例"))
-                            .font(Tokens.Font.body(10, weight: .medium))
-                            .foregroundStyle(Tokens.Window.textTertiary)
-                        Text(Self.suggestedGuidance)
-                            .font(Tokens.Font.body(11, weight: .medium))
-                            .foregroundStyle(Tokens.Window.accentText)
-                            .lineLimit(2)
-                    }
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 7)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Tokens.Window.accentTint))
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            OnboardingVisualStage {
-                OnboardingMailScene(labels: [], showsBar: false) {
-                    OnboardingPracticeEditor(
-                        text: $draft,
-                        isFocused: $focused,
-                        fontSize: 15,
-                        accessibilityLabel: tr("カスタム練習用メッセージ", "Custom practice message", "自定义练习用消息")
-                    )
-                    .background(.white)
-                }
-            }
-            .padding(.bottom, OnboardingMetrics.visualVerticalInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
+            "明日の15時の打ち合わせですが、資料の準備が間に合わないので、来週火曜日の同じ時間に変更したいです。"))
     }
 }
 
 private struct ReplyPracticeStep: View {
-    private static var sourceMessage: String {
-        tr(
-            "明日の15時からのプロジェクト定例、参加できそうですか？",
-            "Can you make the project sync tomorrow at 3pm?",
-            "明日の15時からのプロジェクト定例、参加できそうですか？"
-        )
+    @ObservedObject var coordinator: OnboardingCoordinator
+    var body: some View {
+        GuidedPracticePage(coordinator: coordinator, kind: .reply, initialText: "")
+    }
+}
+
+private struct GuidedPracticePage: View {
+    @ObservedObject var coordinator: OnboardingCoordinator
+    let kind: OnboardingLesson.Kind
+    let initialText: String
+    @State private var text: String
+    @State private var focusRequest: UUID?
+    @State private var selectedSource = false
+
+    init(coordinator: OnboardingCoordinator, kind: OnboardingLesson.Kind, initialText: String) {
+        self.coordinator = coordinator
+        self.kind = kind
+        self.initialText = initialText
+        _text = State(initialValue: initialText)
+        _focusRequest = State(initialValue: kind == .reply ? nil : UUID())
     }
 
-    @ObservedObject var coordinator: OnboardingCoordinator
-    @State private var reply = ""
-    @State private var copied = false
-    @State private var focused = false
+    private var source: String {
+        tr("明日の15時からのプロジェクト定例、参加できそうですか？",
+           "Can you make the project sync tomorrow at 3pm?",
+           "明日の15時からのプロジェクト定例、参加できそうですか？")
+    }
 
     var body: some View {
         VStack(spacing: 16) {
-            HStack(alignment: .bottom, spacing: 28) {
-                ReplyPracticeHeading(completed: coordinator.replyPracticeCompleted)
-                    .frame(maxWidth: 640, alignment: .leading)
-
-                Spacer(minLength: 0)
-
-                PracticeStatusBadge(
-                    completed: coordinator.replyPracticeCompleted,
-                    pendingText: tr(
-                        "例：参加できると丁寧に",
-                        "e.g. yes, politely",
-                        "例：礼貌地回答可以参加"
-                    ),
-                    completedText: tr("返信を書き戻しました", "Reply written back", "已写回回复")
-                )
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            OnboardingVisualStage {
-                OnboardingSlackScene(
-                    message: Self.sourceMessage,
-                    copied: copied,
-                    onCopy: copyMessage
-                ) {
-                    OnboardingPracticeEditor(
-                        text: $reply,
-                        isFocused: $focused,
-                        fontSize: 13,
-                        contentInset: NSSize(width: 14, height: 12),
-                        placeholder: tr("# product への返信", "Reply in #product", "回复 #product"),
-                        accessibilityLabel: tr("返信練習用メッセージ", "Reply practice message", "回复练习用消息")
-                    )
-                    .background(.white)
+            if let lesson = coordinator.lesson {
+                LessonHeading(lesson: lesson, copyOnly: coordinator.lessonCopyOnly)
+                OnboardingVisualStage {
+                    if kind == .reply {
+                        OnboardingSlackScene(message: source, copied: selectedSource, onCopy: {
+                            coordinator.copyReplyPracticeMessage(source)
+                            selectedSource = true
+                            focusRequest = UUID()
+                        }) {
+                            editor(sessionID: lesson.id)
+                        }
+                    } else {
+                        OnboardingMailScene(labels: [], showsBar: false) {
+                            VStack(spacing: 0) {
+                                if lesson.phase == .restore {
+                                    ActionButton(tr("文章を戻す", "Restore sample", "恢复示例")) {
+                                        text = initialText
+                                        focusRequest = UUID()
+                                    }
+                                    .padding(12)
+                                }
+                                editor(sessionID: lesson.id)
+                            }
+                        }
+                    }
                 }
+                .padding(.bottom, OnboardingMetrics.visualVerticalInset)
             }
-            .padding(.bottom, OnboardingMetrics.visualVerticalInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
         .padding(.horizontal, OnboardingMetrics.pagePadding)
@@ -1288,39 +702,24 @@ private struct ReplyPracticeStep: View {
         .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
 
-    private func copyMessage() {
-        coordinator.copyReplyPracticeMessage(Self.sourceMessage)
-        copied = true
-        focused = true
-    }
-}
-
-private struct PracticeStatusBadge: View {
-    let completed: Bool
-    let pendingText: String
-    let completedText: String
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Icon(completed ? .check : .info, size: 13)
-                .opticalCentre()
-            Text(completed ? completedText : pendingText)
-                .font(Tokens.Font.body(11, weight: .medium))
-        }
-        .foregroundStyle(completed ? Tokens.Window.success : Tokens.Window.accentText)
-        .padding(.horizontal, 11)
-        .frame(height: 30)
-        .background(Capsule().fill(completed ? Tokens.Window.surface : Tokens.Window.accentTint))
+    private func editor(sessionID: UUID) -> some View {
+        OnboardingPracticeEditor(text: $text, focusRequest: focusRequest, fontSize: 18,
+            accessibilityLabel: tr("練習用メッセージ", "Practice message", "练习消息"),
+            onStatus: { ready, empty in
+                coordinator.overlay.lessonEvent(.editor(ready: ready, empty: empty), sessionID: sessionID)
+            })
+            .background(.white)
     }
 }
 
 private struct OnboardingPracticeEditor: NSViewRepresentable {
     @Binding var text: String
-    @Binding var isFocused: Bool
+    let focusRequest: UUID?
     var fontSize: CGFloat
     var contentInset = NSSize(width: 14, height: 16)
     var placeholder: String?
     let accessibilityLabel: String
+    let onStatus: (Bool, Bool) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -1351,16 +750,17 @@ private struct OnboardingPracticeEditor: NSViewRepresentable {
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainerInset = contentInset
         textView.font = editorFont
-        textView.textColor = NSColor(red: 0x4e / 255, green: 0x4d / 255, blue: 0x51 / 255, alpha: 1)
-        textView.insertionPointColor = NSColor(red: 0x5a / 255, green: 0x57 / 255, blue: 0xba / 255, alpha: 1)
+        textView.textColor = NSColor(Tokens.Window.textPrimary)
+        textView.insertionPointColor = NSColor(Tokens.Window.accentText)
         textView.string = text
         textView.placeholder = placeholder
         textView.delegate = context.coordinator
+        textView.statusChanged = { [weak coordinator = context.coordinator] in coordinator?.report() }
         textView.setAccessibilityLabel(accessibilityLabel)
 
         scrollView.documentView = textView
         context.coordinator.textView = textView
-        focusIfNeeded(textView)
+        context.coordinator.requestFocus(focusRequest)
         return scrollView
     }
 
@@ -1372,36 +772,80 @@ private struct OnboardingPracticeEditor: NSViewRepresentable {
         textView.placeholder = placeholder
         textView.setAccessibilityLabel(accessibilityLabel)
         if textView.string != text { textView.string = text }
-        focusIfNeeded(textView)
+        context.coordinator.requestFocus(focusRequest)
+        context.coordinator.report()
         textView.needsDisplay = true
     }
 
     private var editorFont: NSFont {
-        NSFont(name: "Inter", size: fontSize) ?? .systemFont(ofSize: fontSize)
+        .systemFont(ofSize: fontSize)
     }
 
-    private func focusIfNeeded(_ textView: NSTextView) {
-        guard isFocused else { return }
-        DispatchQueue.main.async { [weak textView] in
-            guard let textView, textView.window?.firstResponder !== textView else { return }
-            textView.window?.makeFirstResponder(textView)
-        }
-    }
-
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: OnboardingPracticeEditor
         weak var textView: NSTextView?
+        private var lastFocusRequest: UUID?
+        private var appliedFocusRequest: UUID?
 
         init(_ parent: OnboardingPracticeEditor) { self.parent = parent }
 
         func textDidChange(_ notification: Notification) {
             guard let textView else { return }
             parent.text = textView.string
+            report()
+        }
+
+        func requestFocus(_ request: UUID?) {
+            guard let request, request != lastFocusRequest else { return }
+            lastFocusRequest = request
+            report()
+        }
+
+        func report() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let textView = self.textView else { return }
+                if let request = self.lastFocusRequest, request != self.appliedFocusRequest,
+                   let window = textView.window, window.isKeyWindow,
+                   window.makeFirstResponder(textView) {
+                    self.appliedFocusRequest = request
+                }
+                let ready = textView.window?.isKeyWindow == true && textView.window?.firstResponder === textView
+                self.parent.onStatus(ready, textView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
         }
     }
 
     final class PracticeNSTextView: NSTextView {
         var placeholder: String?
+        var statusChanged: (() -> Void)?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: nil)
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
+            if let window {
+                for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+                    NotificationCenter.default.addObserver(self, selector: #selector(windowFocusChanged), name: name, object: window)
+                }
+            }
+            statusChanged?()
+        }
+
+        override func becomeFirstResponder() -> Bool {
+            let accepted = super.becomeFirstResponder()
+            statusChanged?()
+            return accepted
+        }
+
+        override func resignFirstResponder() -> Bool {
+            let accepted = super.resignFirstResponder()
+            statusChanged?()
+            return accepted
+        }
+
+        @objc private func windowFocusChanged(_ notification: Notification) { statusChanged?() }
+
 
         override func draw(_ dirtyRect: NSRect) {
             if string.isEmpty, let placeholder, !placeholder.isEmpty {
@@ -1432,66 +876,19 @@ private struct SourceStep: View {
     ]
 
     var body: some View {
-        HStack(alignment: .top, spacing: 28) {
-            VStack(alignment: .leading, spacing: 22) {
-                StepHeading(
-                    eyebrow: tr("最後にひとつ", "One last thing", "最后一个问题"),
-                    title: tr(
-                        "敬語ボタンをどこで知りましたか？",
-                        "Where did you hear about KeigoButton?",
-                        "你是从哪里知道敬語ボタン的？"
-                    ),
-                    subtitle: tr(
-                        "どこで見つけてもらえたのかを知るためだけの質問です。近いものを1つ選んでください。",
-                        "Asked only so we know where people find us. Pick the closest one.",
-                        "只是想知道大家从哪里找到我们。请选择最接近的一项。"
-                    )
-                )
-
-                HStack(alignment: .top, spacing: 10) {
-                    Icon(.info, size: 14)
-                        .foregroundStyle(Tokens.Window.accentText)
-                        .opticalCentre()
-                    Text(tr(
-                        "送るのは選んだ項目だけです。答えずに進んでも、機能は何も変わりません。",
-                        "Only the option you pick is sent. Skipping changes nothing about the app.",
-                        "只会发送你选择的选项。跳过不会影响任何功能。"
-                    ))
-                        .font(Tokens.Font.body(12))
-                        .foregroundStyle(Tokens.Window.textSecondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(width: 250, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .leading)
-
-            OnboardingVisualStage {
-                GeometryReader { proxy in
-                    ScrollView {
-                        LazyVGrid(columns: columns, spacing: 12) {
-                            ForEach(OnboardingSource.allCases, id: \.self) { source in
-                                SourceOptionCard(
-                                    source: source,
-                                    selected: coordinator.selectedSource == source
-                                ) {
-                                    coordinator.select(source: source)
-                                }
-                            }
-                        }
-                        .padding(18)
-                        .frame(minHeight: proxy.size.height, alignment: .center)
+        OnboardingChoicePage(width: 640) {
+            StepHeading(eyebrow: "", title: tr("敬語ボタンをどこで知りましたか？", "Where did you hear about KeigoButton?", "你是从哪里知道敬語ボタン的？"),
+                subtitle: tr("近いものを1つ選んでください。送るのは選んだ項目だけです。", "Pick the closest one. Only your selection is sent.", "请选择最接近的一项。只会发送你的选项。"), centered: true)
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(OnboardingSource.allCases, id: \.self) { source in
+                    SourceOptionCard(source: source, selected: coordinator.selectedSource == source) {
+                        coordinator.select(source: source)
                     }
-                    .scrollIndicators(.hidden)
                 }
             }
-            .padding(.vertical, OnboardingMetrics.visualVerticalInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(8)
+            .background(.white, in: RoundedRectangle(cornerRadius: 16))
         }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
 }
 
@@ -1506,31 +903,31 @@ private struct SourceOptionCard: View {
             HStack(spacing: 11) {
                 SourceMark(source: source)
                 Text(source.label)
-                    .font(Tokens.Font.body(13, weight: .medium))
+                    .font(Tokens.LightFont.body(16, weight: .medium))
                     .foregroundStyle(Tokens.Window.textPrimary)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 6)
                 ZStack {
                     Circle()
-                        .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1)
+                        .strokeBorder(selected ? Tokens.Window.accentText : Tokens.Window.textTertiary, lineWidth: 1)
                         .frame(width: 18, height: 18)
                     if selected {
-                        Circle().fill(Tokens.Window.accent).frame(width: 10, height: 10)
+                        Circle().fill(Tokens.Window.accentText).frame(width: 10, height: 10)
                     }
                 }
             }
             .padding(.horizontal, 13)
-            .frame(maxWidth: .infinity, minHeight: 58)
+            .frame(maxWidth: .infinity, minHeight: 64)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(hovering && !selected ? Tokens.Window.surface : Tokens.Window.canvas)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.hairline, lineWidth: 1)
+                    .strokeBorder(selected ? Tokens.Window.accentText : Tokens.Window.hairline, lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LightPressStyle())
         .onHover { hovering = $0 }
         .cursor(.pointingHand)
     }
@@ -1598,80 +995,24 @@ private struct OfferStep: View {
     private var currency: BillingCurrency { model.billingCurrency }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 28) {
-            VStack(alignment: .leading, spacing: 22) {
-                StepHeading(
-                    eyebrow: remainingText.map {
-                        tr("はじめての方限定 · \($0)", "New customers · \($0)", "新用户限定 · \($0)")
-                    } ?? tr("はじめての方限定", "New customers", "新用户限定"),
-                    title: tr(
-                        "最初だけ、割引価格で Pro を試せます",
-                        "Try Pro at a lower price, once",
-                        "首次可以优惠价体验 Pro"
-                    ),
-                    subtitle: tr(
-                        "無料のままでも月\(PlanPricing.freeMonthlyRewrites)回まで書き換えできます。Pro は月\(PlanPricing.proMonthlyRewritesDisplay)回まで。この価格は今回の設定から\(PlanPricing.welcomeOfferWindowHours)時間だけです。",
-                        "The free plan keeps its \(PlanPricing.freeMonthlyRewrites) rewrites a month. Pro raises that to \(PlanPricing.proMonthlyRewritesDisplay). This price is available for \(PlanPricing.welcomeOfferWindowHours) hours from now.",
-                        "免费版每月仍可改写\(PlanPricing.freeMonthlyRewrites)次，Pro 可达\(PlanPricing.proMonthlyRewritesDisplay)次。此价格仅在设置后的\(PlanPricing.welcomeOfferWindowHours)小时内有效。"
-                    )
-                )
-
-                HStack(alignment: .top, spacing: 10) {
-                    Icon(.info, size: 14)
-                        .foregroundStyle(Tokens.Window.accentText)
-                        .opticalCentre()
-                    Text(tr(
-                        "あとで決めても大丈夫です。この価格はホーム画面からも受け取れます。",
-                        "Deciding later is fine — the same price is waiting on the home screen.",
-                        "稍后再决定也可以，主页同样可以使用这个价格。"
-                    ))
-                        .font(Tokens.Font.body(12))
-                        .foregroundStyle(Tokens.Window.textSecondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
+        OnboardingChoicePage(width: 560) {
+            StepHeading(eyebrow: remainingText ?? "", title: tr("Pro を、はじめやすく。", "A little more room to write.", "轻松开始使用 Pro。"),
+                subtitle: tr("無料プランは月\(PlanPricing.freeMonthlyRewrites)回。Pro は月\(PlanPricing.proMonthlyRewritesDisplay)回まで。", "Keep \(PlanPricing.freeMonthlyRewrites) rewrites a month free, or get up to \(PlanPricing.proMonthlyRewritesDisplay) with Pro.", "免费版每月\(PlanPricing.freeMonthlyRewrites)次，Pro 每月最高\(PlanPricing.proMonthlyRewritesDisplay)次。"), centered: true)
+            VStack(spacing: 0) {
+                OfferCard(interval: .year, currency: currency, selected: coordinator.offerInterval == .year) {
+                    coordinator.select(offerInterval: .year)
+                }
+                Hairline().padding(.horizontal, 16)
+                OfferCard(interval: .month, currency: currency, selected: coordinator.offerInterval == .month) {
+                    coordinator.select(offerInterval: .month)
                 }
             }
-            .frame(width: 300, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .leading)
-
-            OnboardingVisualStage {
-                VStack(spacing: 12) {
-                    Spacer(minLength: 0)
-                    OfferCard(
-                        interval: .year,
-                        currency: currency,
-                        selected: coordinator.offerInterval == .year
-                    ) { coordinator.select(offerInterval: .year) }
-                    OfferCard(
-                        interval: .month,
-                        currency: currency,
-                        selected: coordinator.offerInterval == .month
-                    ) { coordinator.select(offerInterval: .month) }
-
-                    // The honest replacement for 「税込」 — the same sentence the plan
-                    // pane carries, and for the same reason (`docs/billing.md` §10).
-                    Text(tr(
-                        "表示価格が実際にご請求される金額です。いつでもワンクリックで解約できます。",
-                        "The price shown is the amount you are charged. Cancel any time, in one click.",
-                        "所示价格即为实际收费金额。可随时一键取消。"
-                    ))
-                        .font(Tokens.Font.body(11))
-                        .foregroundStyle(Tokens.Window.textTertiary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 2)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 26)
-                .padding(.vertical, 18)
-            }
-            .padding(.vertical, OnboardingMetrics.visualVerticalInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.white, in: RoundedRectangle(cornerRadius: 16))
+            Text(tr("表示価格が実際の請求額です。いつでも解約できます。あとでホーム画面からも選べます。", "The price shown is what you pay. Cancel any time. You can also decide later from Home.", "所示价格即为实际收费金额，可随时取消。也可稍后在主页选择。"))
+                .font(Tokens.LightFont.Onboarding.caption)
+                .foregroundStyle(Tokens.Window.textSecondary)
+                .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
 
     private var remainingText: String? {
@@ -1696,64 +1037,59 @@ private struct OfferCard: View {
                     Text(interval == .year
                          ? tr("年払い", "Yearly", "年付")
                          : tr("月払い", "Monthly", "月付"))
-                        .font(Tokens.Font.body(13, weight: .medium))
+                        .font(Tokens.LightFont.body(16, weight: .medium))
                         .foregroundStyle(Tokens.Window.textPrimary)
                     if interval == .year {
                         let months = PlanPricing.monthsFree(in: currency)
                         Text(tr("\(months)ヶ月分お得", "\(months) months free", "省\(months)个月"))
-                            .font(Tokens.Font.body(11, weight: .medium))
+                            .font(Tokens.LightFont.body(13, weight: .medium))
                             .foregroundStyle(Tokens.Window.accentText)
                     }
                     Spacer(minLength: 6)
                     ZStack {
                         Circle()
-                            .strokeBorder(selected ? Tokens.Window.accent : Tokens.Window.controlOff, lineWidth: 1)
+                            .strokeBorder(selected ? Tokens.Window.accentText : Tokens.Window.textTertiary, lineWidth: 1)
                             .frame(width: 18, height: 18)
                         if selected {
-                            Circle().fill(Tokens.Window.accent).frame(width: 10, height: 10)
+                            Circle().fill(Tokens.Window.accentText).frame(width: 10, height: 10)
                         }
                     }
                 }
 
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(offer.display)
-                        .font(Tokens.Font.display(22))
+                        .font(Tokens.LightFont.display(22))
                         .foregroundStyle(Tokens.Window.textPrimary)
                     Text(unit)
-                        .font(Tokens.Font.body(12))
-                        .foregroundStyle(Tokens.Window.textSecondary)
+                        .font(Tokens.LightFont.body(13))
+                        .foregroundStyle(Tokens.Window.textPrimary)
                     // The list price beside it, struck through. 二重価格表示 is only
                     // defensible when the "before" price is one actually being charged
                     // — ¥1,480 / ¥14,400 are the live catalog, and they are what this
                     // same account pays from the second period onward.
                     Text(list.display)
-                        .font(Tokens.Font.body(12))
+                        .font(Tokens.LightFont.body(13))
                         .strikethrough()
                         .foregroundStyle(Tokens.Window.textTertiary)
                 }
 
                 Text(renewal)
-                    .font(Tokens.Font.body(11))
-                    .foregroundStyle(Tokens.Window.textTertiary)
+                    .font(Tokens.LightFont.body(13))
+                    .foregroundStyle(Tokens.Window.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(hovering && !selected ? Tokens.Window.surface : Tokens.Window.canvas)
+                    .fill(hovering && !selected ? Tokens.Window.surfaceHover : .clear)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(
-                        selected ? Tokens.Window.accent : Tokens.Window.hairline,
-                        lineWidth: 1
-                    )
-            )
+
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LightPressStyle())
         .onHover { hovering = $0 }
         .cursor(.pointingHand)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var unit: String {
@@ -1786,40 +1122,20 @@ private struct CompleteStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
 
     var body: some View {
-        HStack(alignment: .top, spacing: 40) {
+        OnboardingSplitPage {
             VStack(alignment: .leading, spacing: 24) {
-                IconPlate(icon: .check, diameter: 48)
-                CompleteStepHeading()
-                VStack(alignment: .leading, spacing: 10) {
-                    CompletionRow(text: tr("アカウントとボタンを同期", "Account and buttons synced", "账户与按钮已同步"))
-                    CompletionRow(text: tr("アクセシビリティを許可", "Accessibility granted", "已授予辅助功能权限"))
-                    CompletionRow(text: tr("書き換えの操作を確認", "Rewriting learned", "已了解改写操作"))
-                    CompletionRow(text: tr("一度だけのカスタム指示を確認", "One-off instructions learned", "已了解一次性自定义指令"))
-                    CompletionRow(text: tr("コピーから返信する操作を確認", "Replying from a copy learned", "已了解从复制内容回复"))
-                }
+                AppMark(size: 40)
+                StepHeading(eyebrow: "", title: tr("準備ができました。", "Make yourself understood.", "一切准备就绪。"),
+                    subtitle: tr("いつものアプリで文章を書いたら、バーにカーソルを合わせてみましょう。", "Write in your usual app, then move your pointer onto the bar.", "在常用应用中输入文字，然后将光标移到工具条上。"))
+                Text(tr("文章スタイルは、設定からいつでも変更できます。", "Your writing style is always yours to adjust in Settings.", "你可以随时在设置中调整写作风格。"))
+                    .font(Tokens.LightFont.Onboarding.body)
+                    .foregroundStyle(Tokens.Window.textSecondary)
             }
-            .frame(width: 380, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .leading)
-
-            OnboardingVisualStage {
-                OnboardingMailScene(labels: coordinator.mainModel.prompts.enabledForHoverRow.map(\.title)) {
-                    OnboardingStaticMailBody(
-                        text: tr(
-                            "恐れ入りますが、明日の会議を15時に変更していただけますでしょうか。",
-                            "Would it be possible to move tomorrow's meeting to 3pm?",
-                            "恐れ入りますが、明日の会議を15時に変更していただけますでしょうか。"
-                        ),
-                        focused: false
-                    )
-                }
+        } visual: {
+            OnboardingVisualStage(artwork: .glow) {
+                OnboardingMascotHero().frame(width: 344, height: 344)
             }
-            .padding(.vertical, OnboardingMetrics.visualVerticalInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: OnboardingMetrics.contentWidth, maxHeight: .infinity)
-        .padding(.horizontal, OnboardingMetrics.pagePadding)
-        .padding(.top, OnboardingMetrics.contentTopPadding)
-        .padding(.bottom, OnboardingMetrics.bottomPadding)
     }
 }
 
@@ -1827,22 +1143,23 @@ private struct StepHeading: View {
     let eyebrow: String
     let title: String
     let subtitle: String
+    var centered = false
+    var titleWeight: Font.Weight = .medium
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(eyebrow)
-                .font(Tokens.Font.body(12, weight: .medium))
-                .foregroundStyle(Tokens.Window.accentText)
-            Text(title)
-                .font(Tokens.Font.display(20))
-                .tracking(Tokens.Font.displayTracking(20))
-                .foregroundStyle(Tokens.Window.textPrimary)
-            Text(subtitle)
-                .font(Tokens.Font.body(14))
-                .foregroundStyle(Tokens.Window.textSecondary)
-                .lineSpacing(5)
+        VStack(alignment: centered ? .center : .leading, spacing: 12) {
+            if !eyebrow.isEmpty {
+                Text(eyebrow).font(Tokens.LightFont.Onboarding.caption)
+                    .foregroundStyle(Tokens.Window.textSecondary)
+            }
+            Text(title).font(Tokens.LightFont.body(32, weight: titleWeight))
+                .tracking(-0.5).foregroundStyle(Tokens.Window.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
+            Text(subtitle).font(Tokens.LightFont.Onboarding.body)
+                .foregroundStyle(Tokens.Window.textSecondary)
+                .lineSpacing(4).fixedSize(horizontal: false, vertical: true)
         }
+        .multilineTextAlignment(centered ? .center : .leading)
     }
 }
 
@@ -1852,7 +1169,7 @@ private struct PillCaption: View {
 
     var body: some View {
         PillSentence(before: prefix, after: suffix, scale: 0.52, spacing: 6)
-            .font(Tokens.Font.body(12, weight: .medium))
+            .font(Tokens.LightFont.body(16, weight: .medium))
             .foregroundStyle(Tokens.Window.textTertiary)
     }
 }
@@ -1878,174 +1195,31 @@ private struct PillSentence: View {
     }
 }
 
-private struct PillStepHeading: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(tr("いつもの使い方", "How you'll use it", "日常用法"))
-                .font(Tokens.Font.body(12, weight: .medium))
-                .foregroundStyle(Tokens.Window.accentText)
-            PillSentence(
-                before: tr("画面下の", "", "画面下方的"),
-                after: tr("が待っています", " lives at the bottom.", "在等着你"),
-                scale: 0.72,
-                spacing: 8
-            )
-            .font(Tokens.Font.display(20))
-            .tracking(Tokens.Font.displayTracking(20))
-            .foregroundStyle(Tokens.Window.textPrimary)
-            .lineLimit(1)
-            PillSentence(
-                before: tr("入力欄に文章を置いたまま、", "Leave the field focused and hover ", "让文字留在输入框中，将光标移到"),
-                after: tr("へカーソルを移動。", ".", "上。")
-            )
-            .font(Tokens.Font.body(14))
-            .foregroundStyle(Tokens.Window.textSecondary)
-            Text(tr("入力欄のフォーカスは失われません。", "The field never loses focus.", "输入框不会失去焦点。"))
-                .font(Tokens.Font.body(14))
-                .foregroundStyle(Tokens.Window.textSecondary)
-        }
-    }
-}
-
-private struct PracticeStepHeading: View {
-    let completed: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(tr("実際に試す", "Try it", "实际试用"))
-                .font(Tokens.Font.body(12, weight: .medium))
-                .foregroundStyle(Tokens.Window.accentText)
-            Text(completed
-                ? tr("書き戻せました", "It went back in", "已写回")
-                : tr("選んだボタンで試してみましょう", "Try one of your buttons", "用选好的按钮试试看"))
-                .font(Tokens.Font.display(20))
-                .tracking(Tokens.Font.displayTracking(20))
-                .foregroundStyle(Tokens.Window.textPrimary)
-            if completed {
-                Text(tr(
-                    "いまの操作が、ほかのアプリでも同じように使えます。",
-                    "That same move works in every other app.",
-                    "同样的操作在其他应用中也能使用。"
-                ))
-                    .font(Tokens.Font.body(14))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-            } else {
-                PillSentence(
-                    before: tr("本文にフォーカスを残し、", "Leave the body focused, open ", "保持正文处于焦点状态，展开"),
-                    after: tr("を開いて、好きなボタンを押します。", " and press any button.", "，然后点击任意按钮。")
-                )
-                .font(Tokens.Font.body(14))
-                .foregroundStyle(Tokens.Window.textSecondary)
-            }
-        }
-    }
-}
-
-private struct ReplyPracticeHeading: View {
-    let completed: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(tr("返信を試す", "Try a reply", "试试回复"))
-                .font(Tokens.Font.body(12, weight: .medium))
-                .foregroundStyle(Tokens.Window.accentText)
-            Text(completed
-                ? tr("返信を書き戻せました", "The reply went back in", "回复已写回")
-                : tr("コピーしたメッセージに返信してみましょう", "Reply to the message you copied", "试着回复你复制的消息"))
-                .font(Tokens.Font.display(20))
-                .tracking(Tokens.Font.displayTracking(20))
-                .foregroundStyle(Tokens.Window.textPrimary)
-            if completed {
-                Text(tr(
-                    "コピーから返信まで、実際の操作で完了しました。",
-                    "Copy to reply, done for real.",
-                    "从复制到回复，已用真实操作完成。"
-                ))
-                    .font(Tokens.Font.body(14))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-            } else {
-                PillSentence(
-                    before: tr(
-                        "メッセージをコピーし、返信欄にフォーカスしたまま",
-                        "Copy the message, focus the reply box, then open ",
-                        "复制消息，将焦点留在回复框中，然后展开"
-                    ),
-                    after: tr("を開きます。", ".", "。")
-                )
-                .font(Tokens.Font.body(14))
-                .foregroundStyle(Tokens.Window.textSecondary)
-            }
-        }
-    }
-}
-
-private struct CustomPracticeHeading: View {
-    let completed: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(tr("カスタム指示を試す", "Try a one-off", "试试自定义指令"))
-                .font(Tokens.Font.body(12, weight: .medium))
-                .foregroundStyle(Tokens.Window.accentText)
-            Text(completed
-                ? tr("一度だけの指示で書き戻せました", "Your one-off instruction went in", "已用一次性指令写回")
-                : tr("このメールだけの仕上げ方を伝えましょう", "Say how this one email should land", "告诉它这封邮件该怎么写"))
-                .font(Tokens.Font.display(20))
-                .tracking(Tokens.Font.displayTracking(20))
-                .foregroundStyle(Tokens.Window.textPrimary)
-            if completed {
-                Text(tr(
-                    "保存済みのボタンを変えずに、その場だけの指示を使えます。",
-                    "A one-off instruction, without touching your saved buttons.",
-                    "无需修改已保存的按钮，也能使用一次性指令。"
-                ))
-                    .font(Tokens.Font.body(14))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-            } else {
-                PillSentence(
-                    before: tr("本文にフォーカスを残し、", "Leave the body focused, open ", "保持正文处于焦点状态，展开"),
-                    after: tr("を開いて右端の ✎ を押します。", " and press ✎ on the right.", "，然后点击最右侧的 ✎。")
-                )
-                .font(Tokens.Font.body(14))
-                .foregroundStyle(Tokens.Window.textSecondary)
-                Text(tr(
-                    "✎ は、その書き換えに一度だけ使う指示を入力するボタンです。入力後に生成し、結果を入れ替えてください。",
-                    "✎ takes an instruction used for this rewrite only. Type it, generate, then insert the result.",
-                    "✎ 用于输入仅本次改写使用的指令。输入后生成，再替换结果。"
-                ))
-                    .font(Tokens.Font.body(13))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-}
-
 private struct CompleteStepHeading: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             Text(tr("セットアップ完了", "All set", "设置完成"))
-                .font(Tokens.Font.body(12, weight: .medium))
+                .font(Tokens.LightFont.body(16, weight: .medium))
                 .foregroundStyle(Tokens.Window.accentText)
             Text(tr("準備できました", "You're ready", "准备就绪"))
-                .font(Tokens.Font.display(20))
-                .tracking(Tokens.Font.displayTracking(20))
+                .font(Tokens.LightFont.display(28))
+                .tracking(Tokens.LightFont.displayTracking(28))
                 .foregroundStyle(Tokens.Window.textPrimary)
-            PillSentence(
-                before: tr("文章にフォーカスを置き、画面下の", "Focus your text and open ", "让焦点停在文字上，展开画面下方的"),
-                after: tr("を開くだけです。", " at the bottom. That's it.", "即可。")
-            )
-            .font(Tokens.Font.body(14))
-            .foregroundStyle(Tokens.Window.textSecondary)
             Text(tr(
-                "ウインドウを閉じても、敬語ボタンはメニューバーと画面下に残ります。",
-                "Closing this window doesn't quit — KeigoButton stays in the menu bar and at the bottom of your screen.",
-                "关闭窗口后，敬語ボタン仍会保留在菜单栏和画面下方。"
+                "文章の入力欄をクリックして、バーから整えましょう。",
+                "Click inside your message, then use the bar to polish it.",
+                "点击消息输入框，然后使用工具条润色。"
             ))
-                .font(Tokens.Font.body(14))
-                .foregroundStyle(Tokens.Window.textSecondary)
-                .lineSpacing(5)
+                .font(Tokens.LightFont.Onboarding.body)
+                .foregroundStyle(Tokens.Window.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(tr(
+                "このウインドウを閉じても、バーはそのまま使えます。",
+                "You can close this window. The bar stays available.",
+                "可以关闭此窗口。工具条仍可继续使用。"
+            ))
+                .font(Tokens.LightFont.Onboarding.body)
+                .foregroundStyle(Tokens.Window.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -2057,10 +1231,10 @@ private struct TeachingRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(number)
-                .font(Tokens.Font.mono(12))
+                .font(Tokens.LightFont.mono(12))
                 .foregroundStyle(Tokens.Window.accentText)
                 .frame(width: 22, alignment: .leading)
-            Text(text).font(Tokens.Font.body(14)).foregroundStyle(Tokens.Window.textPrimary)
+            Text(text).font(Tokens.LightFont.Onboarding.body).foregroundStyle(Tokens.Window.textPrimary)
         }
     }
 }
@@ -2073,11 +1247,11 @@ private struct TeachingPillRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(number)
-                .font(Tokens.Font.mono(12))
+                .font(Tokens.LightFont.mono(12))
                 .foregroundStyle(Tokens.Window.accentText)
                 .frame(width: 22, alignment: .leading)
             PillSentence(before: prefix, after: suffix)
-                .font(Tokens.Font.body(14))
+                .font(Tokens.LightFont.Onboarding.body)
                 .foregroundStyle(Tokens.Window.textPrimary)
         }
     }
@@ -2091,20 +1265,28 @@ private struct CompletionRow: View {
                 .foregroundStyle(Tokens.Window.success)
                 .opticalCentre()
             Text(text)
-                .font(Tokens.Font.body(14))
+                .font(Tokens.LightFont.Onboarding.body)
                 .foregroundStyle(Tokens.Window.textPrimary)
         }
     }
 }
 
 private struct OnboardingMascotHero: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var compact = false
+    private var usesStaticPortrait: Bool {
+        #if DEBUG
+        reduceMotion || AsideDesignPreview.isRunning
+        #else
+        reduceMotion
+        #endif
+    }
 
     var body: some View {
         Group {
             // The bundled clip is HEVC with a premultiplied alpha channel, so it draws
-            // straight onto the lavender stage. §15 owns why it is not the source mp4.
-            if let url = Bundle.main.url(forResource: "OnboardingMascotLoop", withExtension: "mov") {
+            // straight onto the scenic stage. §15 owns why it is not the source mp4.
+            if !usesStaticPortrait, let url = Bundle.main.url(forResource: "OnboardingMascotLoop", withExtension: "mov") {
                 LoopingVideoView(url: url)
             } else {
                 Image(Icon.Name.markFilled)
@@ -2191,7 +1373,7 @@ private struct NameIllustration: View {
             OnboardingMailWindow {
                 OnboardingNameMailBody(name: name)
             }
-            .frame(height: 268)
+            .frame(height: 320)
             .padding(.horizontal, 36)
         }
     }
@@ -2226,3 +1408,99 @@ private extension Array where Element == UserPrompt {
         return main + sub
     }
 }
+
+#if DEBUG
+/// Run the built executable with --render-aside-previews. No production startup,
+/// credentials, network requests, analytics initialization, or preference writes.
+@MainActor enum AsideDesignPreview {
+    static var isRunning: Bool { ProcessInfo.processInfo.arguments.contains("--render-aside-previews") }
+    static var state = "ready"
+    private struct EmptySession: SessionStoring {
+        func read() -> AuthSession? { nil }
+        func write(_ session: AuthSession) {}
+        func clear() {}
+    }
+    static func render() async throws {
+        let output = URL(fileURLWithPath: "/private/tmp/aside-previews", isDirectory: true)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        let config = SupabaseConfig(supabaseURL: URL(string: "http://127.0.0.1:1")!, authURL: URL(string: "http://127.0.0.1:1")!, publishableKey: "preview", appVersion: "preview")
+        let auth = AuthService(config: config, store: EmptySession())
+        let history = RewriteHistoryStore(directory: output.appendingPathComponent("isolated-history"))
+        let model = MainModel(auth: auth, promptStore: UserPromptRemoteStore(config: config, auth: auth),
+            profileStore: ProfileRemoteStore(config: config, auth: auth),
+            billingStore: BillingRemoteStore(config: config, auth: auth),
+            history: history, appVersion: "preview", onPromptsChanged: {})
+        let overlay = OverlayController(rewriteService: DesktopRewriteService(config: config, auth: auth),
+            auth: auth, promptStore: UserPromptRemoteStore(config: config, auth: auth), analytics: PostHogAnalytics(), history: history, appVersion: "preview")
+        let defaults = UserDefaults(suiteName: "AsideDesignPreview")!
+        var manifest: [String] = []
+        for language in AppLanguage.allCases {
+            AppLanguageState.current = language
+            // Volatile domain: even the language fixture never writes a preference.
+            let coordinator = OnboardingCoordinator(mainModel: model, overlay: overlay,
+                progress: OnboardingProgressStore(defaults: defaults, persistsChanges: false),
+                languageStore: AppLanguageStore(defaults: defaults), onFinish: {})
+            for step in DesktopOnboardingStep.flow {
+                state = "ready"
+                model.configureDesignPreview(signedIn: step != .welcome, state: step == .access ? "permission" : state)
+                coordinator.configureDesignPreview(step: step)
+                let name = "\(language.rawValue)-onboarding-\(step)"
+                try await capture(OnboardingFlowView(coordinator: coordinator), size: NSSize(width: 1080, height: 700), name: name, output: output)
+                manifest.append(name)
+            }
+            for fixture in ["signup", "error", "loading"] {
+                state = fixture
+                model.configureDesignPreview(signedIn: false, state: fixture)
+                coordinator.configureDesignPreview(step: .welcome)
+                let name = "\(language.rawValue)-account-\(fixture)"
+                try await capture(OnboardingFlowView(coordinator: coordinator), size: NSSize(width: 1080, height: 700), name: name, output: output)
+                manifest.append(name)
+            }
+            state = "ready"
+            model.configureDesignPreview()
+            for size in [NSSize(width: 1000, height: 700), NSSize(width: 920, height: 640)] {
+                for page in [MainModel.Page.home, .buttons, .account] {
+                    model.page = page
+                    model.showsPreferences = false
+                    let name = "\(language.rawValue)-dashboard-\(page)-\(Int(size.width))"
+                    try await capture(MainWindowView(model: model), size: size, name: name, output: output)
+                    manifest.append(name)
+                }
+                for section in PreferencesSheet.Section.allCases {
+                    model.showsPreferences = true
+                    model.preferencesSection = section
+                    let name = "\(language.rawValue)-settings-\(section)-\(Int(size.width))"
+                    try await capture(MainWindowView(model: model), size: size, name: name, output: output)
+                    manifest.append(name)
+                }
+            }
+            model.showsPreferences = false
+        }
+        try manifest.joined(separator: "\n").write(to: output.appendingPathComponent("manifest.txt"), atomically: true, encoding: .utf8)
+        NSLog("Rendered %d Aside design fixtures", manifest.count)
+    }
+
+    private static func capture<V: View>(_ view: V, size: NSSize, name: String, output: URL) async throws {
+        let host = NSHostingView(rootView: view
+            .allowsHitTesting(false)
+            .frame(width: size.width, height: size.height))
+        host.sizingOptions = []
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .aqua)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        host.frame = NSRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        bitmap.size = size
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        if let png = bitmap.representation(using: .png, properties: [:]) {
+            try png.write(to: output.appendingPathComponent(name + ".png"))
+        }
+        window.contentView = nil
+        window.close()
+    }
+}
+#endif

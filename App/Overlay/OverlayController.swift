@@ -11,17 +11,104 @@ import TextIO
 final class OverlayController: ObservableObject {
 
     @Published private(set) var state: OverlayState = .pill
+    @Published private(set) var introPresentation: IntroPillPresentation?
+    @Published private(set) var onboardingPassive = false
+    @Published private(set) var introDragCue = 0
+    private(set) var introDimmerVisible = false
+    private var visibilityRequested = false
+    private var introPlacementOverride: SnapZone?
+    private var debugIntroPlacement = false
+    var introDragInProgress: Bool { isDraggingBar || isAnimatingSnapLanding }
+
+    @Published private(set) var lesson: OnboardingLesson?
+    weak var onboardingWindow: NSWindow?
+    private var lessonGuide: OnboardingGuidePanel?
+    var lessonAnchors: [LessonAnchor: WeakLessonAnchor] = [:]
+
+    func beginLesson(_ kind: OnboardingLesson.Kind, discovered: Bool = false) {
+        lesson = OnboardingLesson(kind: kind, discovered: discovered)
+        lessonGuide = OnboardingGuidePanel(controller: self)
+        if let window = onboardingWindow, window.screen != panel.screen {
+            let screen = OverlayPlacement.screen(containing: panel.frame)
+            let area = screen.visibleFrame
+            window.setFrameOrigin(NSPoint(x: area.midX - window.frame.width / 2,
+                                          y: area.midY - window.frame.height / 2))
+        }
+        syncLessonGuide()
+    }
+
+    func lessonEvent(_ event: OnboardingLesson.Event, sessionID: UUID) {
+        guard var current = lesson, current.id == sessionID else { return }
+        current.receive(event, sessionID: sessionID)
+        if current != lesson { lesson = current }
+        syncLessonGuide()
+    }
+
+    private func lessonEvent(_ event: OnboardingLesson.Event) {
+        guard let id = lesson?.id else { return }
+        lessonEvent(event, sessionID: id)
+    }
+
+    func allowsLessonAction(_ action: OnboardingLesson.Action) -> Bool {
+        !onboardingPassive && introPresentation == nil && (lesson?.allows(action) ?? true)
+    }
+
+    func guidanceChanged(_ text: String, sessionID: UUID?) {
+        guard let sessionID else { return }
+        lessonEvent(.guidanceChanged(nonempty: !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty), sessionID: sessionID)
+    }
+
+    func syncLessonGuide() { lessonGuide?.refresh() }
+
+    var lessonGuideCanShow: Bool {
+        lesson != nil && NSApp.isActive && onboardingWindow?.isVisible == true
+            && onboardingWindow?.isOnActiveSpace == true
+            && onboardingWindow?.isMiniaturized == false && !isDraggingBar
+            && !isAnimatingSnapLanding && errorPanel == nil && !insertInFlight
+    }
+
+    var lessonBarFrame: NSRect { panel.frame }
+    var lessonGuideObstacles: [NSRect] {
+        [replyContextPanel, resultPanel, generatingPanel, errorPanel].compactMap {
+            guard let window = $0, window.isVisible else { return nil }
+            return window.frame
+        }
+    }
+
+    func lessonAnchorFrame(_ anchor: LessonAnchor) -> NSRect? {
+        if anchor == .bar { return panel.isVisible ? panel.frame : nil }
+        guard let view = lessonAnchors[anchor]?.view, let window = view.window,
+              window.isVisible else { return nil }
+        return window.convertToScreen(view.convert(view.bounds, to: nil))
+    }
+    private var activeAccount: String?
+    private var accountRevision: UInt64 = 0
     @Published private(set) var prompts: [UserPrompt] = []
-    @Published private(set) var tutorialPrompts: [UserPrompt] = []
-    /// Set only when the fetch failed **and** left nothing to show — see `refreshPrompts`.
     @Published private(set) var promptsFailed = false
+    private var promptRefreshID = UUID()
+    private let promptStore: UserPromptRemoteStore
+    private let auth: AuthService
+
+    @Published private(set) var tutorialPrompts: [UserPrompt] = []
     /// Set when there is no usable session at all. The hover row answers this with a
-    /// sign-in button rather than an apology — see `refreshPrompts`.
+    /// sign-in button rather than an apology.
     @Published private(set) var signedOut = false
     /// What Insert would do if it were pressed right now (§18). Re-read on a timer while
     /// the result panel is up, so the button is labelled with the truth rather than with
     /// what was true when the rewrite started.
     @Published private(set) var insertAction: InsertAction = .insert
+
+    @Published private(set) var replySession: ReplySession?
+    private var replyContextTask: Task<Void, Never>?
+    private lazy var replyCapture = ReplyCaptureCoordinator()
+    private var replyCaptureSource = "ax"
+    private var replyFallbackReason: String?
+    private var replyCaptureID: UUID?
+    private var replyDiagnosticData: Data?
+    private var replyLocalObservations: [ReplyNodeObservation] = []
+    private var exportingReplyDiagnostics = false
+    private var replyAppCategory = "other"
+    private var tutorialReplySource: String?
 
     private let panel: PillPanel
     private var generatingPanel: GeneratingPanel?
@@ -29,7 +116,6 @@ final class OverlayController: ObservableObject {
 
     private let textIO: TextIOCoordinator
     private let rewriteService: DesktopRewriteService
-    private let promptStore: UserPromptRemoteStore
     private let analytics: Analytics
     private let history: RewriteHistoryStore
     private let appVersion: String
@@ -90,6 +176,24 @@ final class OverlayController: ObservableObject {
     private var errorDismissTask: Task<Void, Never>?
     private var lastWorkArea: NSRect = .zero
 
+    // MARK: Bar dragging (§4, docs/bar-positioning.md)
+
+    private var barDragObserver: NSObjectProtocol?
+    /// True from the first observed move with the button down until the drag ends.
+    /// Everything else that moves the panel — resize animations, the snap landing —
+    /// posts `didMove` too, and must not be read as the user's hand.
+    @Published private(set) var isDraggingBar = false
+    @Published private(set) var parkedZone = OverlayPlacement.savedZone() {
+        didSet { errorPanel?.reanchor(zone: parkedZone) }
+    }
+    @Published private(set) var notchWidth: CGFloat = 0
+    private var dragOriginScreen: NSScreen?
+    private var dragEndTimer: Timer?
+    /// The snap landing's own animation moves the panel; those moves are ours.
+    private var isAnimatingSnapLanding = false
+    private var activeSnapZone: SnapZone?
+    private var snapOverlay: SnapOverlayPanel?
+
     // MARK: Right-click snooze
 
     /// The right-click menu's "非表示にする" — stored as an absolute deadline, not driven
@@ -134,9 +238,9 @@ final class OverlayController: ObservableObject {
     private var clipboardWatcher: ClipboardWatcher?
     private var replyContextPanel: ReplyContextPanel?
     private var replyExpiryTask: Task<Void, Never>?
-    /// Hover fires on re-entry and the capture is a cross-process AX call, so a
-    /// cursor jittering on the bar's edge could otherwise start several.
-    private var replyCaptureInFlight = false
+    /// Invalidates a late AX response after dismissal or a different action.
+    private var clipboardReplyCaptureID: UUID?
+    @Published private(set) var availableReplySource: ReplySource?
 
     /// Stands in for the prompt when the user submits an empty reply instruction.
     /// "Just write me a reply" is the strongest case for this feature, and the backend
@@ -153,7 +257,7 @@ final class OverlayController: ObservableObject {
     /// capsule. Success appends to it; cancel or failure restores it so trying another
     /// version never destroys the pages the user was comparing.
     private var resultContextBeforeRewrite: ResultContext?
-    private var tutorialInserted: (() -> Void)?
+    private var tutorialInserted: ((OnboardingLesson.Completion) -> Void)?
     private var tutorialMode: OnboardingTutorialMode?
 
     /// Opens the paywall when a **free** user hits the monthly cap (§9 row 41).
@@ -169,8 +273,19 @@ final class OverlayController: ObservableObject {
     /// `onQuotaPaywall`: the overlay must not own or retain the main window.
     var onSignInRequired: (() -> Void)?
 
+    var buttonViewportSize: NSSize {
+        let area = OverlayPlacement.workArea(on: OverlayPlacement.screen(containing: panel.frame))
+        if usesSidebarLayout {
+            return NSSize(width: 128, height: min(max(32, CGFloat(displayedPrompts.count) * 40 - 8), max(32, area.height - 180)))
+        }
+        let width = displayedPrompts.reduce(CGFloat(0)) { value, prompt in
+            value + (prompt.title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: Tokens.Overlay.labelMedium)]).width + 32
+        }
+        return NSSize(width: min(max(100, width), max(100, area.width - 240)), height: 34)
+    }
+
     var displayedPrompts: [UserPrompt] {
-        tutorialPrompts.isEmpty ? prompts : tutorialPrompts
+        tutorialPrompts.isEmpty ? prompts.enabledForHoverRow : tutorialPrompts.enabledForHoverRow
     }
 
     /// Sparkle's gate, decided by the state alone — see `OverlayState.allowsUpdateCheck`
@@ -181,12 +296,14 @@ final class OverlayController: ObservableObject {
 
     init(
         rewriteService: DesktopRewriteService,
+        auth: AuthService,
         promptStore: UserPromptRemoteStore,
         analytics: Analytics,
         history: RewriteHistoryStore,
         appVersion: String
     ) {
         self.rewriteService = rewriteService
+        self.auth = auth
         self.promptStore = promptStore
         self.analytics = analytics
         self.history = history
@@ -204,6 +321,8 @@ final class OverlayController: ObservableObject {
             height: Tokens.Geometry.pillHeight
         )
         panel = PillPanel(contentRect: OverlayPlacement.frame(for: size, on: screen))
+        notchWidth = OverlayPlacement.notchFrame(on: screen)?.width ?? 0
+        panel.onDragEnded = { [weak self] in self?.endBarDrag() }
 
         NotificationCenter.default.addObserver(
             self,
@@ -237,6 +356,24 @@ final class OverlayController: ObservableObject {
             name: NSWindow.didResignKeyNotification,
             object: panel
         )
+        // A drag is the one move of the panel that is not ours. `isMovableByWindowBackground`
+        // does the moving and posts `didMove` for every step of it — the live signal the
+        // snap overlay and the mid-drag re-anchoring both ride on. The mouse-up itself
+        // lands on the bar's own background (`HoverTracker`), which is what ends it.
+        barDragObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] note in
+            guard let self, note.object as? NSWindow === self.panel else { return }
+            MainActor.assumeIsolated { self.barDidMove() }
+        }
+    }
+
+    deinit {
+        if let barDragObserver {
+            NotificationCenter.default.removeObserver(barDragObserver)
+        }
     }
 
     /// `transition` sets `state` before it touches `acceptsKey`, so the resign it
@@ -247,14 +384,14 @@ final class OverlayController: ObservableObject {
         // non-activating panel can bounce once as focus settles, and cancelling on
         // that would make the input bar close the instant it opened.
         Task { @MainActor [weak self] in
-            guard let self, !self.panel.isKeyWindow else { return }
+            guard let self, !self.panel.isKeyWindow, !self.exportingReplyDiagnostics else { return }
             self.cancelInput()
         }
     }
 
     // MARK: - Lifecycle
 
-    func show() {
+    func show(initiallyVisible: Bool = true) {
         // First line of any log capture: which build is talking, and whether the one
         // permission everything depends on is actually granted.
         destinationLog.debug(
@@ -281,11 +418,90 @@ final class OverlayController: ObservableObject {
             setVisible(false)
         } else {
             Self.hiddenUntil = nil // clears a deadline that had already passed
-            panel.orderFrontRegardless()
-            startClipboardWatching()
-            syncUpdateNoticePanel(for: state)
+            setVisible(initiallyVisible)
         }
-        Task { await refreshPrompts() }
+        Task { await refreshAccount() }
+    }
+
+    // MARK: - Onboarding presentation
+
+    func setOnboardingPassive(_ passive: Bool) {
+        onboardingPassive = passive
+        collapseTask?.cancel()
+        collapseTask = nil
+        if passive {
+            clearAvailableReply()
+            clipboardWatcher?.stop()
+            clipboardWatcher = nil
+            dismissSnoozeMenu()
+            if introPresentation == nil { dismiss() }
+        } else if visibilityRequested {
+            startClipboardWatching()
+        }
+    }
+
+    func beginIntro(_ presentation: IntroPillPresentation, on screen: NSScreen, debugReplay: Bool) {
+        setOnboardingPassive(true)
+        debugIntroPlacement = debugReplay
+        introPlacementOverride = .bottomCenter
+        parkedZone = .bottomCenter
+        introDimmerVisible = true
+        introPresentation = presentation
+        visibilityRequested = true
+        panel.acceptsKey = false
+        panel.ignoresMouseEvents = true
+        panel.isMovableByWindowBackground = false
+        panel.hasShadow = false
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+        panel.setFrame(screen.frame, display: false)
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.orderFrontRegardless()
+    }
+
+    func introLandingFrame(on screen: NSScreen) -> NSRect {
+        OverlayPlacement.zoneFrame(.bottomCenter,
+            barSize: NSSize(width: Tokens.Geometry.pillCollapsedWidth, height: Tokens.Geometry.pillHeight),
+            on: screen)
+    }
+
+    func settleIntro(on screen: NSScreen) {
+        guard introPresentation != nil else { return }
+        let target = introLandingFrame(on: screen)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            introPresentation = nil
+            panel.setFrame(target, display: false)
+            panel.contentView?.layoutSubtreeIfNeeded()
+            panel.displayIfNeeded()
+        }
+        panel.hasShadow = true
+        panel.invalidateShadow()
+        panel.ignoresMouseEvents = false
+        panel.isMovableByWindowBackground = true
+        lastAppliedSize = target.size
+        lastWorkArea = OverlayPlacement.workArea(on: screen)
+    }
+
+    func cueIntroDrag() {
+        guard !introDragInProgress else { return }
+        introDragCue += 1
+    }
+
+    func finishIntroPresentation() {
+        introDimmerVisible = false
+        panel.level = .statusBar
+        panel.ignoresMouseEvents = false
+        panel.isMovableByWindowBackground = true
+        panel.hasShadow = true
+    }
+
+    func endOnboardingPresentation() {
+        finishIntroPresentation()
+        introPlacementOverride = nil
+        debugIntroPlacement = false
+        setOnboardingPassive(false)
+        reanchor()
     }
 
     // MARK: - Right-click snooze
@@ -333,11 +549,10 @@ final class OverlayController: ObservableObject {
         return OverlaySnooze.remainingMinutes(until: until)
     }
 
-    /// The right-click menu's "コピー機能を無効にする" rows. This does not touch the bar at
-    /// all — `ClipboardWatcher` keeps polling, it just stops arming reply mode — so there
-    /// is nothing here for `OverlayController` to own beyond forwarding the call.
+    /// Snoozing the copy trigger also dismisses unused reply availability.
     func disableCopyTrigger(for duration: OverlaySnooze.Duration) {
         ClipboardWatcher.copyDisabledUntil = OverlaySnooze.until(duration)
+        clearAvailableReply()
     }
 
     /// Its counterpart, "コピー機能を有効にする", in both menus.
@@ -356,6 +571,7 @@ final class OverlayController: ObservableObject {
     /// `SnoozeMenuPanel`'s doc comment for why. A second right-click while it is open
     /// closes it, the same as clicking any other control twice would toggle it.
     func toggleSnoozeMenu() {
+        guard !onboardingPassive, introPresentation == nil else { return }
         if snoozeMenuPanel != nil {
             dismissSnoozeMenu()
         } else {
@@ -423,6 +639,8 @@ final class OverlayController: ObservableObject {
     }
 
     func setVisible(_ visible: Bool) {
+        visibilityRequested = visible
+        if !visible { cancelReplySession(); clearAvailableReply() }
         if visible {
             // Any deliberate show outranks a timed hide, and onboarding is the caller
             // that makes this load-bearing: it puts the real bar on screen for its own
@@ -474,45 +692,115 @@ final class OverlayController: ObservableObject {
         objectWillChange.send()
     }
 
-    func refreshPrompts() async {
-        do {
-            prompts = try await promptStore.fetch().enabledForHoverRow
-            promptsFailed = false
-            signedOut = false
-        } catch RewriteError.notSignedIn {
-            // **Not the stale-data case below.** These buttons belong to an account
-            // that is no longer attached, so keeping them would leave a row of pills
-            // whose only possible outcome is a failed rewrite. The row shows the way
-            // back in instead, which is the one thing the user can act on.
+    func refreshAccount(reloadButtons: Bool = true) async {
+        let account = await auth.currentSession?.userId
+        if activeAccount != account {
+            accountRevision &+= 1
+            activeAccount = account
             prompts = []
-            signedOut = true
+            clearAvailableReply()
+            replyDiagnosticData = nil
+            replyLocalObservations = []
+            dismiss()
+        }
+        signedOut = account == nil
+        guard let account, reloadButtons else { return }
+        let requestID = UUID()
+        promptRefreshID = requestID
+        do {
+            let loaded = try await promptStore.scoped(to: account).fetch()
+            guard await auth.currentSession?.userId == account,
+                  activeAccount == account, promptRefreshID == requestID else { return }
+            prompts = UserPromptOrder.sortedForEditing(loaded)
             promptsFailed = false
         } catch {
-            // A stale button list is better than an empty row, so whatever we had
-            // stays. But an empty row after a *failure* is not the same as an empty
-            // row because the user has no buttons — telling someone to go and make
-            // buttons they already have is worse than saying nothing, so the row
-            // needs to be able to tell the two apart.
-            signedOut = false
-            promptsFailed = prompts.isEmpty
+            guard activeAccount == account, promptRefreshID == requestID else { return }
+            promptsFailed = true
         }
     }
 
-    func beginTutorial(prompts: [UserPrompt], onInserted: @escaping () -> Void) {
+    private func capturedTarget(_ target: TextTarget, pid: pid_t?) -> CapturedTarget {
+        CapturedTarget(target: target, frontmostPID: pid)
+    }
+
+    func press(_ prompt: UserPrompt) {
+        guard allowsLessonAction(.polish) else { return }
+        let buttonKey = OnboardingPresetPack.buttonAnalyticsKey(for: prompt)
+        clipboardReplyCaptureID = nil
+        let lessonID = lesson?.id
+        let frontmostPID = NSWorkspace.shared.frontmostPID
+        Task { [weak self] in
+            guard let self, self.lesson?.id == lessonID else { return }
+            await self.refreshAccount(reloadButtons: false)
+            guard self.lesson?.id == lessonID else { return }
+            guard !self.signedOut else { self.pressSignIn(); return }
+            let revision = self.accountRevision
+            do {
+                ClipboardWatcher.suspend()
+                let target = try await self.captureWritingTarget(frontmostPID: frontmostPID)
+                ClipboardWatcher.resume()
+                guard self.accountRevision == revision else { return }
+                guard self.lesson?.id == lessonID else { return }
+                guard self.acceptsButtonTarget(target, buttonKey: buttonKey) else { return }
+                await self.snapshotUserFocus()
+                guard self.lesson?.id == lessonID else { return }
+                let captured = self.capturedTarget(target, pid: frontmostPID)
+                self.startRewrite(captured: captured, promptText: prompt.prompt, replyTo: nil,
+                    buttonTitle: prompt.title, commandKey: prompt.builtinKey, promptOrigin: prompt.origin.rawValue,
+                    rewriteType: .savedButton, buttonAnalyticsKey: buttonKey, isTutorial: self.lesson?.kind == .rewrite)
+            } catch {
+                guard self.lesson?.id == lessonID else { return }
+                ClipboardWatcher.resume()
+                self.reportCaptureFailure(.savedButton, isTutorial: self.lesson?.kind == .rewrite, buttonAnalyticsKey: buttonKey, message: Self.message(for: error))
+                self.present(error)
+            }
+        }
+    }
+
+    private func captureWritingTarget(frontmostPID: pid_t?) async throws -> TextTarget {
+        #if DEBUG
+        if let previewWritingCapture { return try previewWritingCapture.get() }
+        #endif
+        return try await textIO.capture(frontmostPID: frontmostPID, allowEmpty: true, allowScratch: true)
+    }
+
+    private func acceptsButtonTarget(_ target: TextTarget, buttonKey: String?) -> Bool {
+        let message: String
+        if target.writingSurfaceHint == .excluded {
+            message = tr("文章の入力欄でお使いください。", "Use a button in a writing field.", "请在正文输入框中使用润色。")
+        } else if target.isEmpty {
+            message = target.hasDestination ? tr(
+                "ボタンを使う前に文章を入力してください。新しい文章を書くには、鉛筆ボタンをお使いください。",
+                "Type some text before using a button, or use the pencil to write something new.",
+                "请先输入文字再使用润色，或点击铅笔按钮撰写新内容。"
+            ) : tr(
+                "入力欄をクリックするか文章を選択してから、もう一度ボタンを押してください。",
+                "Click into a writing field or select some text, then try the button again.",
+                "请点击输入框或选中文字，然后再次点击润色。"
+            )
+        } else {
+            return true
+        }
+        reportCaptureFailure(.savedButton, isTutorial: lesson?.kind == .rewrite, buttonAnalyticsKey: buttonKey, message: message)
+        present(message: message)
+        return false
+    }
+
+    func beginTutorial(prompts: [UserPrompt], onInserted: @escaping (OnboardingLesson.Completion) -> Void) {
         tutorialMode = .savedButtons(Set(prompts.map(\.id)))
         tutorialPrompts = prompts
         tutorialInserted = onInserted
         transition(to: .pill)
     }
 
-    func beginCustomTutorial(onInserted: @escaping () -> Void) {
+    func beginCustomTutorial(onInserted: @escaping (OnboardingLesson.Completion) -> Void) {
         tutorialMode = .custom
         tutorialPrompts = []
         tutorialInserted = onInserted
         transition(to: .pill)
     }
 
-    func beginReplyTutorial(onInserted: @escaping () -> Void) {
+    func beginReplyTutorial(onInserted: @escaping (OnboardingLesson.Completion) -> Void) {
         tutorialPrompts = []
         tutorialMode = .reply
         tutorialInserted = onInserted
@@ -525,20 +813,42 @@ final class OverlayController: ObservableObject {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
         }
-        armReply(source)
+        lessonEvent(.sourceSelected)
+        if ReplyContextFeature.isEnabled {
+            tutorialReplySource = text
+        } else {
+            armReply(source)
+        }
     }
 
     func endTutorial() {
+        lessonGuide?.close()
+        lessonGuide = nil
+        lesson = nil
+        cancelReplySession()
+        clearAvailableReply()
+        insertInFlight = false
+        finishAttempt(.abandoned(.dismissed), target: currentGeneratingTarget)
+        rewriteTask?.cancel()
+        rewriteTask = nil
+        resultContextBeforeRewrite = nil
         tutorialPrompts = []
         tutorialInserted = nil
         tutorialMode = nil
+        tutorialReplySource = nil
         if case .pill = state { return }
         transition(to: .pill)
     }
 
     @objc private func reanchor() {
+        guard introPresentation == nil, !isDraggingBar, !isAnimatingSnapLanding else { return }
+        parkedZone = introPlacementOverride ?? OverlayPlacement.savedZone()
+        notchWidth = OverlayPlacement.notchFrame(on: OverlayPlacement.screen(containing: panel.frame))?.width ?? 0
         lastWorkArea = OverlayPlacement.workArea(on: OverlayPlacement.screen(containing: panel.frame))
         resize(to: currentSize(), animated: false)
+        generatingPanel?.reanchor(companionGeometry)
+        resultPanel?.reanchor(companionGeometry)
+        errorPanel?.reanchor(zone: parkedZone)
     }
 
     /// The poll is not a belt-and-braces addition to the notifications above — for
@@ -556,8 +866,13 @@ final class OverlayController: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 self.checkHiddenExpiry()
+                if self.isDraggingBar {
+                    if NSEvent.pressedMouseButtons & 1 == 0 { self.endBarDrag() }
+                    return
+                }
+                guard self.introPresentation == nil, !self.isAnimatingSnapLanding else { return }
                 let area = OverlayPlacement.workArea(on: OverlayPlacement.screen(containing: self.panel.frame))
-                guard area != self.lastWorkArea else { return }
+                guard area != self.lastWorkArea || self.parkedZone != (self.introPlacementOverride ?? OverlayPlacement.savedZone()) else { return }
                 self.reanchor()
             }
         }
@@ -566,109 +881,295 @@ final class OverlayController: ObservableObject {
     // MARK: - Reply mode (§16)
 
     private func startClipboardWatching() {
+        guard !onboardingPassive, introPresentation == nil, visibilityRequested else { return }
+        guard !ReplyContextFeature.isEnabled else { return }
         guard clipboardWatcher == nil else { return }
         let watcher = ClipboardWatcher { [weak self] source in self?.armReply(source) }
         watcher.start()
         clipboardWatcher = watcher
     }
 
-    /// A copy arrived. The bar widens to show it and hovering now opens the input box
-    /// rather than the button row.
-    private func armReply(_ source: ReplySource) {
-        // Only from a resting bar. Arming over an open input bar, a running rewrite or
-        // a result card would replace something the user is in the middle of — and a
-        // copy during a result is very often our own 結果 copy button, which is why
-        // `copyToClipboard` also suspends the watcher.
-        switch state {
-        case .pill, .replyArmed:
-            break
-        case .hoverRow, .inputBar, .generating, .result, .replyInput:
+    private func armReply(_ source: ReplySource?) {
+        guard !onboardingPassive, introPresentation == nil else { return }
+        guard lesson == nil || lesson?.kind == .reply else { return }
+        guard clipboardReplyCaptureID == nil else { return }
+        if source == nil {
+            clearAvailableReply()
+            lessonEvent(.sourceCleared)
             return
         }
-
-        transition(to: .replyArmed(source))
+        guard state == .pill || state == .hoverRow else { return }
+        clearAvailableReply()
+        guard let source, !source.isExpired() else { return }
+        availableReplySource = source
         scheduleReplyExpiry(source)
     }
 
-    /// The ✕ on the armed bar.
-    func dismissReply() {
+    private func clearAvailableReply() {
+        availableReplySource = nil
+        clipboardReplyCaptureID = nil
         replyExpiryTask?.cancel()
         replyExpiryTask = nil
-        guard state.isReply else { return }
-        transition(to: .pill)
     }
 
-    /// Only ever disarms from `.replyArmed`. If the user has since opened the input box
-    /// or started a rewrite, the copy is in use and the clock stops mattering.
+    func dismissReply() {
+        clearAvailableReply()
+        cancelReplySession()
+        if state.isReply {
+            transition(to: panel.frame.contains(NSEvent.mouseLocation) ? .hoverRow : .pill)
+        }
+        lessonEvent(.sourceCleared)
+    }
+
     private func scheduleReplyExpiry(_ source: ReplySource) {
         replyExpiryTask?.cancel()
+        let remaining = max(0, ReplySource.lifetime - Date().timeIntervalSince(source.copiedAt))
         replyExpiryTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(ReplySource.lifetime * 1_000_000_000))
-            guard !Task.isCancelled, let self,
-                  case .replyArmed(let armed) = self.state, armed == source
-            else { return }
-            self.transition(to: .pill)
+            try? await Task.sleep(for: .seconds(remaining))
+            guard !Task.isCancelled, let self, self.availableReplySource == source else { return }
+            self.clearAvailableReply()
+            self.lessonEvent(.sourceCleared)
         }
     }
 
-    /// §4's capture ordering, moved to hover.
-    ///
-    /// The input bar takes key, so by the time the user has typed anything
-    /// `AXFocusedUIElement` is our own field — the same reason `pressCustomInput`
-    /// captures on the press rather than on submit. Hover is the last moment the
-    /// user's own app still owns focus, so the read has to happen here.
-    private func beginReplyInput(_ source: ReplySource) {
-        guard !replyCaptureInFlight else { return }
-        replyCaptureInFlight = true
+    func pressCopiedReply() {
+        guard allowsLessonAction(.reply), state == .hoverRow,
+              clipboardReplyCaptureID == nil, let source = availableReplySource else { return }
+        guard !source.isExpired() else { dismissReply(); return }
+        guard !signedOut else { pressSignIn(); return }
+        let captureID = UUID()
+        clipboardReplyCaptureID = captureID
+        replyExpiryTask?.cancel()
+        collapseTask?.cancel()
+        let lessonID = lesson?.id
+        let revision = accountRevision
         let frontmostPID = NSWorkspace.shared.frontmostPID
 
         Task { [weak self] in
             guard let self else { return }
-            defer { self.replyCaptureInFlight = false }
+            defer {
+                if self.clipboardReplyCaptureID == captureID { self.clipboardReplyCaptureID = nil }
+                if self.availableReplySource == source { self.scheduleReplyExpiry(source) }
+                if self.state == .hoverRow, !self.panel.frame.contains(NSEvent.mouseLocation) {
+                    self.mouseExited()
+                }
+            }
             do {
-                // Reply capture is intentionally not normal rewrite capture. If the
-                // user copied by selecting the incoming message and has not clicked a
-                // reply field yet, that selection is context — never their draft and
-                // never an Insert destination. A selection inside an actual draft uses
-                // the whole field because the backend returns a complete reply body.
                 let target = try await self.textIO.captureReply(
-                    frontmostPID: frontmostPID,
-                    copiedMessage: source.text
+                    frontmostPID: frontmostPID, copiedMessage: source.text
                 )
+                guard self.clipboardReplyCaptureID == captureID,
+                      self.accountRevision == revision,
+                      self.lesson?.id == lessonID, self.state == .hoverRow,
+                      NSWorkspace.shared.frontmostPID == frontmostPID else { return }
                 await self.snapshotUserFocus()
-                // The copy can expire, or be dismissed, while a slow AX call is out.
-                guard case .replyArmed(let armed) = self.state, armed == source else { return }
+                guard self.clipboardReplyCaptureID == captureID,
+                      self.accountRevision == revision,
+                      self.lesson?.id == lessonID, self.state == .hoverRow,
+                      NSWorkspace.shared.frontmostPID == frontmostPID else { return }
+                self.clearAvailableReply()
                 self.transition(to: .replyInput(
-                    reply: source,
-                    target: CapturedTarget(target: target, frontmostPID: frontmostPID)
+                    reply: source, target: self.capturedTarget(target, pid: frontmostPID)
                 ))
             } catch {
-                // Reply capture returns scratch for missing/non-text focus, leaving only
-                // the permission failure here. That is not
-                // hover-frequency noise — it is the one thing the user has to act on.
+                guard self.clipboardReplyCaptureID == captureID else { return }
                 self.present(error)
             }
         }
     }
 
+    func pressReply() {
+        guard allowsLessonAction(.reply) else { return }
+        let lessonID = lesson?.id
+        guard ReplyContextFeature.isEnabled, replyCaptureID == nil else { return }
+        let captureID = UUID()
+        replyCaptureID = captureID
+        collapseTask?.cancel()
+        let pid = NSWorkspace.shared.frontmostPID
+        replyContextTask = Task { [weak self] in
+            guard let self, self.lesson?.id == lessonID else { return }
+            do {
+                let anchor = try await self.textIO.captureReplyAnchor(frontmostPID: pid)
+                guard self.lesson?.id == lessonID else { return }
+                await self.snapshotUserFocus()
+                guard self.lesson?.id == lessonID else { return }
+                guard !Task.isCancelled, self.replyCaptureID == captureID, NSWorkspace.shared.frontmostPID == pid else {
+                    self.replyCaptureID = nil
+                    return
+                }
+                let session = ReplySession(draftStatus: anchor.draftStatus)
+                let bundle = pid.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier } ?? ""
+                // Freeze DOM and native destination together before any overlay can take key.
+                let capture = try await self.replyCapture.capture(anchor, snapshotId: session.id, bundle: bundle, pid: pid)
+                guard !Task.isCancelled, self.replyCaptureID == captureID, NSWorkspace.shared.frontmostPID == pid else {
+                    self.replyCaptureID = nil
+                    return
+                }
+                if capture.binding != nil, anchor.target.hasDestination,
+                   !(await self.textIO.replyTargetStillFocused(anchor.target, frontmostPID: pid)) {
+                    throw BrowserReplyError.failure("target_changed")
+                }
+                self.replyCaptureID = nil
+                self.replySession = session
+                self.replyDiagnosticData = nil
+                self.replyCaptureSource = capture.source
+                self.replyFallbackReason = capture.fallbackReason
+                self.replyLocalObservations = capture.observations
+                self.replyAppCategory = ["com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac", "org.mozilla.firefox"].contains(bundle) ? "browser" : "other"
+                var captured = self.capturedTarget(anchor.target, pid: pid)
+                captured.browserReplyBinding = capture.binding
+                self.transition(to: .explicitReply(target: captured))
+                if self.tutorialMode?.marksReply == true, let source = self.tutorialReplySource {
+                    self.chooseReplySource([ReplySourceBlock(id: "tutorial", conversationId: "tutorial", text: source, order: 0)], audience: .group)
+                    return
+                }
+                let evidence = capture.evidence
+                self.replySession?.captured(evidence)
+                self.updateReplyDiagnostics()
+                guard !evidence.blocks.isEmpty, capture.failureReason == nil else {
+                    self.replySession?.fail(unavailable: true, reason: capture.failureReason ?? "no_readable_context")
+                    self.updateReplyDiagnostics()
+                    return
+                }
+                let outcome = try await self.rewriteService.replyContext(evidence, attemptId: session.attemptId, appCategory: self.replyAppCategory, appVersion: self.appVersion)
+                guard !Task.isCancelled, self.replySession?.id == session.id else { return }
+                let queued = self.replySession?.accept(outcome)
+                self.updateReplyDiagnostics()
+                self.recordReplyWorkflow(self.replySession?.context, stage: "context_ready")
+                if let queued { self.submitInput(queued) }
+            } catch {
+                guard self.lesson?.id == lessonID else { return }
+                guard !Task.isCancelled else { return }
+                self.replyCaptureID = nil
+                if self.replySession != nil { self.replySession?.fail(error); self.updateReplyDiagnostics() }
+                else { self.present(error) }
+            }
+        }
+    }
+
+    func retryReplyContext() {
+        guard let session = replySession, let evidence = session.analysisEvidence, session.canRetryAnalysis else { return }
+        replyContextTask?.cancel()
+        replySession?.retry()
+        let attemptId = replySession?.attemptId ?? UUID().uuidString
+        replyContextTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let outcome = try await self.rewriteService.replyContext(evidence, attemptId: attemptId, appCategory: self.replyAppCategory, appVersion: self.appVersion)
+                guard !Task.isCancelled, self.replySession?.id == session.id else { return }
+                let queued = self.replySession?.accept(outcome)
+                self.updateReplyDiagnostics()
+                self.recordReplyWorkflow(self.replySession?.context, stage: "context_ready")
+                if let queued { self.submitInput(queued) }
+            } catch {
+                guard !Task.isCancelled, self.replySession?.id == session.id else { return }
+                self.replySession?.fail(error)
+                self.updateReplyDiagnostics()
+            }
+        }
+    }
+
+    private func updateReplyDiagnostics() {
+        #if DEBUG
+        guard let session = replySession, let evidence = session.evidence else { return }
+        struct Export: Encodable {
+            let format = "keigo-reply-diagnostics-v2"
+            let captureSource: String
+            let fallbackReason: String?
+            let appVersion: String
+            let appCategory: String
+            let attemptId: String
+            let evidence: CapturedReplyEvidence
+            let analysisEvidence: CapturedReplyEvidence?
+            let observations: [ReplyNodeObservation]
+            let diagnostics: ReplyInterpretationDiagnostics?
+            let candidates: [ReplyCandidate]
+            let context: ReplyContext?
+            let phase: String
+            let failureReason: String?
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        replyDiagnosticData = try? encoder.encode(Export(captureSource: replyCaptureSource, fallbackReason: replyFallbackReason, appVersion: appVersion, appCategory: replyAppCategory,
+            attemptId: session.attemptId, evidence: evidence, analysisEvidence: session.analysisEvidence,
+            observations: replyLocalObservations, diagnostics: session.diagnostics, candidates: session.candidates,
+            context: session.context, phase: String(describing: session.phase), failureReason: session.failureReason))
+        #endif
+    }
+
+    /// Survives ReplySession dismissal during generation; tied to the original snapshot.
+    private func recordReplyWorkflow(_ context: ReplyContext?, stage: String, reason: String? = nil) {
+        #if DEBUG
+        guard let context, let data = replyDiagnosticData,
+              var export = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let evidence = export["evidence"] as? [String: Any], evidence["snapshotId"] as? String == context.snapshotId else { return }
+        var stages = export["workflow"] as? [[String: String]] ?? []
+        var event = ["stage": stage]
+        if let reason { event["reason"] = reason }
+        stages.append(event)
+        export["workflow"] = stages
+        replyDiagnosticData = try? JSONSerialization.data(withJSONObject: export, options: [.prettyPrinted, .sortedKeys])
+        #endif
+    }
+
+    func exportReplyDiagnostics() {
+        #if DEBUG
+        guard let data = replyDiagnosticData else {
+            present(message: tr("返信の会話を確認してから書き出してください", "Analyze a Reply conversation before exporting", "请先分析回复对话再导出"))
+            return
+        }
+        exportingReplyDiagnostics = true
+        let save = NSSavePanel()
+        save.title = "Export Reply Diagnostics"
+        save.message = tr("会話の本文を含みます。共有前に個人情報を削除してください。", "Includes conversation source text. Review and redact personal information before sharing.", "包含对话原文。分享前请检查并删除个人信息。")
+        save.nameFieldStringValue = "reply-diagnostics.json"
+        save.begin { [weak self] response in
+            guard let self else { return }
+            if response == .OK, let url = save.url {
+                do { try data.write(to: url, options: .atomic) }
+                catch { self.present(message: tr("書き出しに失敗しました", "Could not export diagnostics", "导出失败")) }
+            }
+            if case .explicitReply = self.state { self.panel.makeKeyAndOrderFront(nil) }
+            self.exportingReplyDiagnostics = false
+        }
+        #endif
+    }
+
+    func chooseReplyRegion(_ id: String) {
+        replySession?.scope(to: id)
+        retryReplyContext()
+    }
+
+    private func cancelReplySession() {
+        replyContextTask?.cancel()
+        replyContextTask = nil
+        replyCaptureID = nil
+        replySession = nil
+    }
+
+    func chooseReplySource(_ blocks: [ReplySourceBlock], audience: ReplyAudienceKind) {
+        guard case .explicitReply = state else { return }
+        replyContextTask?.cancel()
+        replySession?.choose(blocks: blocks, audience: audience)
+    }
+
+    func pasteReplySource(audience: ReplyAudienceKind) {
+        guard let text = NSPasteboard.general.string(forType: .string),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              text.utf16.count <= 12000 else { return }
+        chooseReplySource([ReplySourceBlock(id: "pasted", conversationId: "pasted", text: text, order: 0)], audience: audience)
+    }
+
     // MARK: - Hover
 
     func mouseEntered() {
+        guard !onboardingPassive, introPresentation == nil else { return }
+        guard introPresentation == nil, !isDraggingBar, !isAnimatingSnapLanding else { return }
         collapseTask?.cancel()
         collapseTask = nil
-        // A live copy replaces the button row with the input box — the whole point of
-        // reply mode is that the instruction is free text, not one of the saved buttons.
-        if case .replyArmed(let source) = state {
-            beginReplyInput(source)
-            return
-        }
+        lessonEvent(.hovered)
         guard case .pill = state else { return }
-        // The only retry there is. `refreshPrompts` otherwise runs once at launch, so
-        // being offline at that moment left the row permanently empty. `signedOut` is
-        // retried for the same reason: signing in elsewhere pushes a refresh through
-        // `MainModel.onPromptsChanged`, but a session restored any other way would
-        // otherwise leave the sign-in button up for the rest of the session.
-        if promptsFailed || signedOut { Task { await refreshPrompts() } }
+        Task { await refreshAccount() }
         transition(to: .hoverRow)
     }
 
@@ -685,68 +1186,20 @@ final class OverlayController: ObservableObject {
     /// `anchorY` instead of carrying it over. `dismissSnoozeMenu` is what asks this
     /// question again once the menu is gone.
     func mouseExited() {
-        guard case .hoverRow = state else { return }
+        guard !onboardingPassive, introPresentation == nil else { return }
+        guard introPresentation == nil, !isDraggingBar, !isAnimatingSnapLanding else { return }
+        guard case .hoverRow = state, clipboardReplyCaptureID == nil else { return }
         collapseTask?.cancel()
         collapseTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Tokens.Geometry.collapseGrace * 1_000_000_000))
             guard !Task.isCancelled, let self, case .hoverRow = self.state,
-                  self.snoozeMenuPanel == nil
+                  self.snoozeMenuPanel == nil, !self.isDraggingBar, !self.isAnimatingSnapLanding
             else { return }
             self.transition(to: .pill)
         }
     }
 
     // MARK: - The capture ordering (§4)
-
-    /// Pressing one of the user's buttons.
-    ///
-    /// The read happens while the user's app is still frontmost and before any UI
-    /// change — that ordering is the whole reason this works. The pid snapshot comes
-    /// first only because it is a local read that cannot disturb focus; the AX call,
-    /// which can block, still runs before anything is shown.
-    func press(_ prompt: UserPrompt) {
-        let frontmostPID = NSWorkspace.shared.frontmostPID
-        let buttonAnalyticsKey = OnboardingPresetPack.buttonAnalyticsKey(for: prompt)
-
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                // The fallback capture clears and restores the pasteboard around a
-                // synthesized ⌘C — three `changeCount` bumps that are ours, not a copy.
-                ClipboardWatcher.suspend()
-                let target = try await self.textIO.capture(frontmostPID: frontmostPID)
-                ClipboardWatcher.resume()
-                // Still the user's keyboard at this point, which is the only moment the
-                // question can be asked at all (§18) — the result panel that will need
-                // the answer is the thing that makes it unaskable.
-                await self.snapshotUserFocus()
-                let captured = CapturedTarget(target: target, frontmostPID: frontmostPID)
-                self.startRewrite(
-                    captured: captured,
-                    promptText: prompt.prompt,
-                    replyTo: nil,
-                    buttonTitle: prompt.title,
-                    commandKey: prompt.builtinKey,
-                    promptOrigin: prompt.origin.rawValue,
-                    rewriteType: .savedButton,
-                    buttonAnalyticsKey: buttonAnalyticsKey,
-                    isTutorial: self.tutorialMode?.marksSavedButton(id: prompt.id) == true
-                )
-            } catch {
-                ClipboardWatcher.resume()
-                // The dominant failure in the wild — 17 of 17 external failures before
-                // this shipped. Reported as its own started/failed pair so it counts as
-                // an attempt of this type rather than vanishing from the funnel.
-                self.reportCaptureFailure(
-                    .savedButton,
-                    isTutorial: self.tutorialMode?.marksSavedButton(id: prompt.id) == true,
-                    buttonAnalyticsKey: buttonAnalyticsKey,
-                    message: Self.message(for: error)
-                )
-                self.present(error)
-            }
-        }
-    }
 
     /// Pressing ✎.
     ///
@@ -761,25 +1214,32 @@ final class OverlayController: ObservableObject {
     /// one thing the user reads before typing: an instruction like 「もっと丁寧に」 needs
     /// something to apply to, and only the field can say whether there is any.
     func pressCustomInput() {
+        guard allowsLessonAction(.custom) else { return }
+        clipboardReplyCaptureID = nil
+        let lessonID = lesson?.id
         let frontmostPID = NSWorkspace.shared.frontmostPID
 
         Task { [weak self] in
-            guard let self else { return }
+            guard let self, self.lesson?.id == lessonID else { return }
+            await self.refreshAccount(reloadButtons: false)
+            guard self.lesson?.id == lessonID else { return }
+            guard !self.signedOut else { self.pressSignIn(); return }
+            let revision = self.accountRevision
             do {
                 ClipboardWatcher.suspend()
-                let target = try await self.textIO.capture(
-                    frontmostPID: frontmostPID,
-                    allowEmpty: true,
-                    allowScratch: true
-                )
+                let target = try await self.captureWritingTarget(frontmostPID: frontmostPID)
                 ClipboardWatcher.resume()
+                guard self.accountRevision == revision else { return }
                 // Before the transition: the input bar takes key, and from then on a
                 // focus read answers about us (§18).
+                guard self.lesson?.id == lessonID else { return }
                 await self.snapshotUserFocus()
+                guard self.lesson?.id == lessonID else { return }
                 self.transition(to: .inputBar(
-                    target: CapturedTarget(target: target, frontmostPID: frontmostPID)
+                    target: self.capturedTarget(target, pid: frontmostPID)
                 ))
             } catch {
+                guard self.lesson?.id == lessonID else { return }
                 ClipboardWatcher.resume()
                 // Rare by construction — `allowEmpty` and `allowScratch` mean this path
                 // does not fail for want of a target — but a `notTrusted` still lands
@@ -802,6 +1262,7 @@ final class OverlayController: ObservableObject {
     /// a rewrite raises when it discovers a missing session, so both routes land on
     /// アカウント in sign-in mode.
     func pressSignIn() {
+        guard !onboardingPassive, introPresentation == nil else { return }
         transition(to: .pill)
         onSignInRequired?()
     }
@@ -818,20 +1279,18 @@ final class OverlayController: ObservableObject {
     /// unreachable until the pointer leaves and comes back.
     func cancelInput() {
         switch state {
+        case .explicitReply:
+            cancelReplySession()
+            transition(to: .pill)
+
         case .inputBar:
             transition(to: panel.frame.contains(NSEvent.mouseLocation) ? .hoverRow : .pill)
 
         case .replyInput(let source, _):
-            // Back to the armed bar, not the pill: the copy is still live and throwing
-            // it away because someone pressed Escape means copying it again.
-            //
-            // Unlike the custom-input case above this deliberately does *not* care
-            // whether the cursor is still over the bar. `.replyArmed` is the state
-            // hovering opens the input box from, so re-opening it under a stationary
-            // cursor is not a courtesy — it is a loop that Escape cannot break.
-            transition(to: .replyArmed(source))
+            transition(to: panel.frame.contains(NSEvent.mouseLocation) ? .hoverRow : .pill)
+            armReply(ReplySource(copied: source.text))
 
-        case .pill, .hoverRow, .generating, .result, .replyArmed:
+        case .pill, .hoverRow, .generating, .result:
             return
         }
     }
@@ -840,11 +1299,24 @@ final class OverlayController: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         switch state {
+        case .explicitReply(let captured):
+            guard var session = replySession else { return }
+            if session.phase == .loading {
+                session.queue(trimmed)
+                replySession = session
+                return
+            }
+            guard let context = session.context, session.phase == .ready else { return }
+            startRewrite(captured: captured, promptText: trimmed, instruction: .input(trimmed), replyTo: nil,
+                buttonTitle: tr("返信", "Reply", "回复"), commandKey: nil, promptOrigin: nil,
+                rewriteType: .reply, isTutorial: tutorialMode?.marksReply == true,
+                replyContext: context, draftReadStatus: session.draftStatus)
         case .inputBar(let captured):
             guard !trimmed.isEmpty else { return }
             startRewrite(
                 captured: captured,
                 promptText: trimmed,
+                instruction: .input(trimmed),
                 replyTo: nil,
                 buttonTitle: nil,
                 commandKey: nil,
@@ -860,6 +1332,7 @@ final class OverlayController: ObservableObject {
             startRewrite(
                 captured: captured,
                 promptText: trimmed.isEmpty ? Self.defaultReplyInstruction : trimmed,
+                instruction: .input(trimmed),
                 replyTo: source.text,
                 // Labels the ホーム history row. A reply has no button behind it and
                 // 「カスタム」 would file it with the ✎ rewrites it is not.
@@ -870,7 +1343,7 @@ final class OverlayController: ObservableObject {
                 isTutorial: tutorialMode?.marksReply == true
             )
 
-        case .pill, .hoverRow, .generating, .result, .replyArmed:
+        case .pill, .hoverRow, .generating, .result:
             return
         }
     }
@@ -977,6 +1450,7 @@ final class OverlayController: ObservableObject {
     private func startRewrite(
         captured: CapturedTarget,
         promptText: String,
+        instruction: ResultInstruction = .hidden,
         requestText: String? = nil,
         replyTo: String?,
         buttonTitle: String?,
@@ -986,7 +1460,9 @@ final class OverlayController: ObservableObject {
         buttonAnalyticsKey: String? = nil,
         isTutorial: Bool,
         previousResults: ResultContext? = nil,
-        previousEventId: String? = nil
+        previousEventId: String? = nil,
+        replyContext: ReplyContext? = nil,
+        draftReadStatus: ReplyDraftReadStatus? = nil
     ) {
         let attempt = beginAttempt(
             rewriteType,
@@ -994,6 +1470,9 @@ final class OverlayController: ObservableObject {
             buttonAnalyticsKey: buttonAnalyticsKey,
             target: captured.target
         )
+        if let style = captured.writingStyle {
+            analytics.styleApplied(style, attemptID: attempt.id, isTutorial: isTutorial)
+        }
         resultContextBeforeRewrite = previousResults
         // A regenerate keeps the result panel's pages, so the latch has to be released
         // explicitly — the new attempt deserves a fresh reading of where it can go.
@@ -1003,10 +1482,14 @@ final class OverlayController: ObservableObject {
             captured: captured,
             requestText: requestText,
             promptText: promptText,
+            instruction: instruction,
             replyTo: replyTo,
+            replyContext: replyContext,
+            draftReadStatus: draftReadStatus,
             buttonTitle: buttonTitle,
             attempt: attempt,
-            startedAt: Date()
+            startedAt: Date(),
+            lessonID: lesson?.id
         )
         transition(to: .generating(request: pending))
 
@@ -1035,16 +1518,17 @@ final class OverlayController: ObservableObject {
             selectionContextAfter: captured.target.contextAfter,
             hostAppBundleId: captured.target.hostAppBundleId,
             captureMode: captured.target.captureMode,
-            browserURL: captured.target.browserURL,
+            browserURL: captured.writingStyle == nil ? captured.target.browserURL : nil,
             ioPath: captured.target.path.rawValue,
-            // The language the buttons write in, which is not the interface language:
-            // a 简体中文 user reads Chinese and writes Japanese (§17). Read at send
-            // time so a language changed mid-session takes effect on the next press.
-            writingLanguage: AppLanguageState.current.writingLanguageCode,
+            // Keep composition language with the captured profile through regeneration.
+            writingLanguage: captured.writingLanguageCode,
             attemptId: attempt.id.uuidString,
             rewriteType: rewriteType.rawValue,
             buttonAnalyticsKey: buttonAnalyticsKey,
-            previousEventId: previousEventId
+            previousEventId: previousEventId,
+            replyContext: replyContext,
+            draftReadStatus: draftReadStatus,
+            writingStyle: captured.writingStyle
         )
 
         rewriteTask?.cancel()
@@ -1056,13 +1540,14 @@ final class OverlayController: ObservableObject {
                 // already closed the attempt — `beginAttempt` as `superseded`, or
                 // `cancelRewrite`/`dismiss` as `dismissed`. Reporting again would be the
                 // second terminal event for one `started`.
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, self.lesson?.id == pending.lessonID else { return }
+                self.recordReplyWorkflow(pending.replyContext, stage: "generation_complete")
                 let latencyMs = Int(Date().timeIntervalSince(pending.startedAt) * 1000)
                 self.finishAttempt(
                     .completed(
                         target: captured.target,
                         promptOrigin: promptOrigin,
-                        isReply: replyTo != nil,
+                        isReply: pending.isReply,
                         candidateCount: result.candidates.count,
                         latencyMs: latencyMs
                     ),
@@ -1092,6 +1577,7 @@ final class OverlayController: ObservableObject {
                 self.resultContextBeforeRewrite = nil
                 self.transition(to: .result(context))
             } catch {
+                self.recordReplyWorkflow(pending.replyContext, stage: "generation_failed")
                 guard !Task.isCancelled else { return }
                 if let previousResults {
                     self.resultContextBeforeRewrite = nil
@@ -1130,7 +1616,7 @@ final class OverlayController: ObservableObject {
                 // For a reply the interesting "before" is the message being replied
                 // to, not the user's draft — which is usually the empty compose box
                 // and would file the row under a blank original.
-                originalText: pending.replyTo ?? pending.captured.target.text,
+                originalText: pending.replyContext?.selectedTargetText ?? pending.replyTo ?? pending.captured.target.text,
                 rewrittenText: candidate.replacement,
                 hostAppBundleId: pending.captured.target.hostAppBundleId
             )
@@ -1425,17 +1911,36 @@ final class OverlayController: ObservableObject {
         panel.acceptsKey = false
 
         Task { [weak self] in
-            guard let self else { return }
+            guard let self, self.lesson?.id == pending.lessonID else { return }
             do {
                 // The write puts the rewrite on the pasteboard and restores the
                 // original afterwards whenever it escalates to ⌘V.
                 ClipboardWatcher.suspend()
-                try await self.textIO.write(
-                    candidate.replacement,
-                    to: target,
-                    frontmostPID: frontmostPID
-                )
+                let binding = destination == .insert ? pending.captured.browserReplyBinding : nil
+                if let binding {
+                    let browser = self.replyCapture.browser
+                    _ = try await browser.validate(binding)
+                    self.recordReplyWorkflow(pending.replyContext, stage: "destination_validated")
+                    try await self.textIO.write(
+                        candidate.replacement,
+                        to: target,
+                        frontmostPID: frontmostPID,
+                        beforePaste: { @Sendable in _ = try await browser.validate(binding, focused: true) }
+                    )
+                    let result: String
+                    do { result = try await browser.validate(binding, expectedText: candidate.replacement) }
+                    catch {
+                        self.recordReplyWorkflow(pending.replyContext, stage: "insertion_unverified", reason: (error as? BrowserReplyError)?.reason ?? "verification_failed")
+                        throw error
+                    }
+                    self.recordReplyWorkflow(pending.replyContext, stage: result == "verified" ? "insertion_verified" : "insertion_failed", reason: result)
+                    if result != "verified" { throw TextIOError.writeFailed }
+                } else {
+                    try await self.textIO.write(candidate.replacement, to: target, frontmostPID: frontmostPID)
+                    self.recordReplyWorkflow(pending.replyContext, stage: destination == .insertHere ? "insertion_redirected" : "insertion_unverified")
+                }
                 ClipboardWatcher.resume()
+                guard self.lesson?.id == pending.lessonID else { return }
                 // Reported against the target that was *captured*, because that is what
                 // `capture_mode` and `io_path` describe. `insert_destination` is the new
                 // field and the one that says whether the rewrite went home or somewhere
@@ -1443,7 +1948,7 @@ final class OverlayController: ObservableObject {
                 self.analytics.inserted(
                     pending.attempt,
                     target: pending.captured.target,
-                    isReply: pending.replyTo != nil,
+                    isReply: pending.isReply,
                     selectedIndex: page.responseCandidateIndex,
                     destination: destination
                 )
@@ -1468,7 +1973,8 @@ final class OverlayController: ObservableObject {
                 destinationLog.debug(
                     "insert landed destination=\(String(describing: destination), privacy: .public)"
                 )
-                let tutorialCompletion = pending.isTutorial ? self.tutorialInserted : nil
+                let tutorialCompletion = pending.isTutorial && self.lesson?.id == pending.lessonID ? self.tutorialInserted : nil
+                if tutorialCompletion != nil { self.lessonEvent(.completed(.inserted)) }
                 if pending.isTutorial {
                     self.tutorialPrompts = []
                     self.tutorialInserted = nil
@@ -1477,13 +1983,14 @@ final class OverlayController: ObservableObject {
                 // The reply has been sent where it was going, so the copy behind it is
                 // spent. Cancelling the clock as well keeps a late expiry from firing
                 // over whatever the bar is doing minutes from now.
-                self.replyExpiryTask?.cancel()
-                self.replyExpiryTask = nil
+                if pending.isReply { self.clearAvailableReply() }
                 self.insertInFlight = false
                 self.transition(to: .pill)
-                tutorialCompletion?()
+                tutorialCompletion?(.inserted)
             } catch {
                 ClipboardWatcher.resume()
+                guard self.lesson?.id == pending.lessonID else { return }
+                self.recordReplyWorkflow(pending.replyContext, stage: "insertion_failed", reason: (error as? BrowserReplyError)?.reason ?? "write_failed")
                 destinationLog.debug(
                     "insert failed destination=\(String(describing: destination), privacy: .public) strategy=\(target.writeStrategy.rawValue, privacy: .public) error=\(String(describing: error), privacy: .public)"
                 )
@@ -1532,7 +2039,7 @@ final class OverlayController: ObservableObject {
         analytics.copied(
             pending.attempt,
             target: pending.captured.target,
-            isReply: pending.replyTo != nil,
+            isReply: pending.isReply,
             reason: reason
         )
         if let eventId = page.eventId {
@@ -1549,14 +2056,15 @@ final class OverlayController: ObservableObject {
         // A tutorial rewrite with nowhere to land still finished. Withholding the step
         // would leave first-run stuck on a screen waiting for an insert that this
         // machine cannot perform.
-        let tutorialCompletion = pending.isTutorial ? tutorialInserted : nil
+        let tutorialCompletion = pending.isTutorial && lesson?.id == pending.lessonID ? tutorialInserted : nil
+        if tutorialCompletion != nil { lessonEvent(.completed(.copied)) }
         if pending.isTutorial {
             tutorialPrompts = []
             tutorialInserted = nil
             tutorialMode = nil
+            tutorialReplySource = nil
         }
-        replyExpiryTask?.cancel()
-        replyExpiryTask = nil
+        if pending.isReply { clearAvailableReply() }
         insertInFlight = false
         transition(to: .pill)
         present(
@@ -1566,7 +2074,7 @@ final class OverlayController: ObservableObject {
                 "已复制。请在要粘贴的位置按 ⌘V。"
             )
         )
-        tutorialCompletion?()
+        tutorialCompletion?(.copied)
     }
 
     func copyToClipboard() {
@@ -1580,7 +2088,7 @@ final class OverlayController: ObservableObject {
             analytics.copied(
                 page.pending.attempt,
                 target: page.pending.captured.target,
-                isReply: page.pending.replyTo != nil,
+                isReply: page.pending.isReply,
                 reason: .userChose
             )
         }
@@ -1597,6 +2105,7 @@ final class OverlayController: ObservableObject {
         startRewrite(
             captured: pending.captured,
             promptText: promptText ?? pending.promptText,
+            instruction: pending.instruction.regenerated(edit: promptText),
             requestText: pending.requestText,
             // Carried forward. Dropping it would turn ↻ on a reply into a rewrite of
             // the user's draft, which for the usual empty compose box is a rewrite of
@@ -1612,7 +2121,9 @@ final class OverlayController: ObservableObject {
             rewriteType: .regenerate,
             isTutorial: pending.isTutorial,
             previousResults: context,
-            previousEventId: page.eventId
+            previousEventId: page.eventId,
+            replyContext: pending.replyContext,
+            draftReadStatus: pending.draftReadStatus
         )
     }
 
@@ -1630,6 +2141,7 @@ final class OverlayController: ObservableObject {
         startRewrite(
             captured: pending.captured,
             promptText: instruction,
+            instruction: .input(instruction),
             requestText: page.candidate.replacement,
             replyTo: pending.replyTo,
             buttonTitle: pending.buttonTitle,
@@ -1638,7 +2150,9 @@ final class OverlayController: ObservableObject {
             rewriteType: .refine,
             isTutorial: pending.isTutorial,
             previousResults: context,
-            previousEventId: page.eventId
+            previousEventId: page.eventId,
+            replyContext: pending.replyContext,
+            draftReadStatus: pending.replyContext == nil ? pending.draftReadStatus : .present
         )
     }
 
@@ -1673,6 +2187,13 @@ final class OverlayController: ObservableObject {
     // MARK: - Transitions
 
     private func transition(to next: OverlayState) {
+        guard introPresentation == nil else { return }
+        clipboardReplyCaptureID = nil
+        if replyCaptureID != nil { cancelReplySession() }
+        if case .explicitReply = state {
+            if case .explicitReply = next {} else { cancelReplySession() }
+        }
+
         let wasResult = { if case .result = state { return true } else { return false } }()
         let wasGenerating = { if case .generating = state { return true } else { return false } }()
 
@@ -1689,6 +2210,20 @@ final class OverlayController: ObservableObject {
             "transition \(self.state.name, privacy: .public) -> \(next.name, privacy: .public)"
         )
         state = next
+        switch next {
+        case .inputBar, .replyInput, .explicitReply: lessonEvent(.composerOpened)
+        case .generating: lessonEvent(.generating)
+        case .result: lessonEvent(.result)
+        case .pill:
+            if let phase = lesson?.phase, [.instruction, .submit, .generating, .result].contains(phase) {
+                lessonEvent(.cancelled)
+            } else { lessonEvent(.collapsed) }
+        case .hoverRow:
+            if let phase = lesson?.phase, [.instruction, .submit, .generating, .result].contains(phase) {
+                lessonEvent(.cancelled)
+                lessonEvent(.hovered)
+            }
+        }
 
         // **Only work in progress clears the message.** This used to dismiss on every
         // transition, and the transition that follows a capture failure is the hover
@@ -1699,7 +2234,7 @@ final class OverlayController: ObservableObject {
         // is clicked, or is replaced by a rewrite actually starting.
         switch next {
         case .generating, .result: dismissErrorToast()
-        case .pill, .hoverRow, .inputBar, .replyArmed, .replyInput: break
+        case .explicitReply, .pill, .hoverRow, .inputBar, .replyInput: break
         }
 
         // Key-ness is opened before the window is asked to take key, and closed
@@ -1711,19 +2246,19 @@ final class OverlayController: ObservableObject {
         // above it, so the hand-off is ordered to keep something on the bottom edge at
         // every instant: the bar returns *before* they leave, and leaves *after* they
         // arrive. Its frame stays valid while hidden — that is what they anchor to.
-        if next.showsPill { setPillVisible(true) }
+        if next.showsPill && visibilityRequested { setPillVisible(true) }
 
         switch next {
-        case .pill, .hoverRow, .inputBar, .replyArmed, .replyInput:
+        case .explicitReply, .pill, .hoverRow, .inputBar, .replyInput:
             if wasGenerating { dismissGeneratingPanel() }
             if wasResult { dismissResultPanel() }
             stopDestinationTracking()
             if next.wantsKeyWindow { panel.makeKey() }
 
         case .generating(let pending):
-            if wasResult { dismissResultPanel() }
             stopDestinationTracking()
             presentGeneratingPanel(pending)
+            if wasResult { dismissResultPanel() }
 
         case .result(let context):
             // Configure the result's first layout before constructing its window. The
@@ -1758,6 +2293,7 @@ final class OverlayController: ObservableObject {
         // After `syncReplyContextPanel`, which owns the same 8 pt above the bar in the
         // reply states — the notice stands down rather than stacking on it.
         syncUpdateNoticePanel(for: next)
+        syncLessonGuide()
 
         // Do not resize from the outgoing subtree's measurement. `PillRootView` tags
         // its preference with `contentLayout`, so even a height-only state change
@@ -1784,6 +2320,7 @@ final class OverlayController: ObservableObject {
     }
 
     private func applyMeasuredSize() {
+        guard introPresentation == nil, !isDraggingBar, !isAnimatingSnapLanding else { return }
         let size = currentSize()
         guard lastAppliedSize != size else {
             // **This early return is what broke the context pill twice.** `resize` is
@@ -1801,18 +2338,34 @@ final class OverlayController: ObservableObject {
 
     /// §4's 28/34 pt are a floor, not a fixed value — the input bar wraps and the
     /// window has to grow with it.
+    var usesSidebarLayout: Bool { parkedZone == .left || parkedZone == .right }
+
+    var barMinimumSize: NSSize {
+        if case .pill = state {
+            switch parkedZone {
+            case .left, .right:
+                return NSSize(width: Tokens.Geometry.sideTabWidth, height: Tokens.Geometry.sideTabHeight)
+            case .topCenter:
+                return NSSize(width: max(64, notchWidth), height: Tokens.Geometry.pillHeight)
+            case .bottomCenter:
+                return NSSize(width: Tokens.Geometry.pillCollapsedWidth, height: Tokens.Geometry.pillHeight)
+            }
+        }
+        return NSSize(width: parkedZone == .topCenter ? notchWidth : 0, height: state.contentHeight)
+    }
+
     private func currentSize() -> NSSize {
-        NSSize(
-            width: measuredSize?.width ?? Tokens.Geometry.pillCollapsedWidth,
-            height: max(measuredSize?.height ?? 0, state.contentHeight)
-        )
+        if case .pill = state { return barMinimumSize }
+        return NSSize(width: max(measuredSize?.width ?? Tokens.Geometry.pillCollapsedWidth, barMinimumSize.width),
+                      height: max(measuredSize?.height ?? 0, barMinimumSize.height))
     }
 
     /// §4: expansion animates the **window frame**. Animating only the view clips it,
     /// because a borderless window does not draw outside its bounds.
     private func resize(to size: NSSize, animated: Bool) {
+        guard introPresentation == nil, !isDraggingBar, !isAnimatingSnapLanding else { return }
         let screen = OverlayPlacement.screen(containing: panel.frame)
-        let target = OverlayPlacement.reframe(panel.frame, to: size, on: screen)
+        let target = OverlayPlacement.zoneFrame(parkedZone, barSize: size, on: screen)
 
         // Against `target`, not `panel.frame`: the animated branch below has not moved
         // the bar yet, and a card that waited for the animation to finish would be
@@ -1830,18 +2383,97 @@ final class OverlayController: ObservableObject {
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(target, display: true)
         } completionHandler: { [panel] in
-            // The window shadow is cached from the content's alpha channel; without
-            // this the collapsed pill keeps wearing the expanded row's outline.
-            panel.invalidateShadow()
+            Task { @MainActor in panel.invalidateShadow() }
         }
     }
 
-    func persistPosition() {
-        OverlayPlacement.persist(frame: panel.frame, on: OverlayPlacement.screen(containing: panel.frame))
-        // The bar is draggable while the composer is open, and dragging moves the
-        // window without going through `resize`.
-        replyContextPanel?.reanchor(to: panel.frame)
-        updateNoticePanel?.reanchor(to: panel.frame)
+    // MARK: - Bar dragging (§4, docs/bar-positioning.md)
+
+    private func barDidMove() {
+        guard introPresentation == nil, !isAnimatingSnapLanding else { return }
+        guard NSEvent.pressedMouseButtons & 1 != 0 else {
+            if isDraggingBar { endBarDrag() }
+            return
+        }
+        if !isDraggingBar {
+            // Resize animations also post didMove while a button can be held.
+            guard let start = panel.dragStartLocation,
+                  hypot(NSEvent.mouseLocation.x - start.x, NSEvent.mouseLocation.y - start.y) > 3
+            else { return }
+            dragOriginScreen = OverlayPlacement.screen(containing: panel.dragStartFrame ?? panel.frame)
+            collapseTask?.cancel()
+            isDraggingBar = true
+            syncLessonGuide()
+            let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    if NSEvent.pressedMouseButtons & 1 == 0 { self?.endBarDrag() }
+                }
+            }
+            dragEndTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+        }
+
+        let frame = panel.frame
+        let screen = OverlayPlacement.screen(containing: frame)
+        activeSnapZone = OverlayPlacement.activeSnapZone(near: frame, on: screen)
+        if snapOverlay == nil || snapOverlay?.displayID != SnapOverlayPanel.displayID(of: screen) {
+            snapOverlay?.orderOut(nil)
+            let overlay = SnapOverlayPanel(screen: screen, scrimOpacity: introDimmerVisible ? 0 : 0.64)
+            if introDimmerVisible { overlay.level = panel.level }
+            overlay.model.slots = OverlayPlacement.slotFrames(on: screen)
+            overlay.orderFrontRegardless()
+            panel.orderFrontRegardless()
+            snapOverlay = overlay
+        }
+        snapOverlay?.model.active = activeSnapZone
+        snapOverlay?.model.slots = OverlayPlacement.slotFrames(on: screen, active: activeSnapZone)
+        replyContextPanel?.reanchor(to: frame)
+        updateNoticePanel?.reanchor(to: frame)
+    }
+
+    func endBarDrag() {
+        guard isDraggingBar else { return }
+        dragEndTimer?.invalidate()
+        dragEndTimer = nil
+        isAnimatingSnapLanding = true
+        isDraggingBar = false
+
+        let destinationScreen = OverlayPlacement.screen(containing: panel.frame)
+        let screen = activeSnapZone == nil
+            ? dragOriginScreen.flatMap { original in NSScreen.screens.first { $0 == original } } ?? destinationScreen
+            : destinationScreen
+        parkedZone = activeSnapZone ?? parkedZone
+        notchWidth = OverlayPlacement.notchFrame(on: screen)?.width ?? 0
+        if debugIntroPlacement {
+            introPlacementOverride = parkedZone
+        } else {
+            introPlacementOverride = nil
+            OverlayPlacement.persist(zone: parkedZone)
+        }
+        activeSnapZone = nil
+        dragOriginScreen = nil
+        let slot = OverlayPlacement.zoneFrame(parkedZone, barSize: currentSize(), on: screen)
+        replyContextPanel?.reanchor(to: slot)
+        updateNoticePanel?.reanchor(to: slot)
+        let overlay = snapOverlay
+        snapOverlay = nil
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(slot, display: true)
+            overlay?.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            Task { @MainActor in
+                overlay?.orderOut(nil)
+                guard let self else { return }
+                self.isAnimatingSnapLanding = false
+                self.syncLessonGuide()
+                self.panel.invalidateShadow()
+                self.lastAppliedSize = nil
+                self.applyMeasuredSize()
+                if !self.panel.frame.contains(NSEvent.mouseLocation) { self.mouseExited() }
+            }
+        }
     }
 
     private func setPillVisible(_ visible: Bool) {
@@ -1857,6 +2489,52 @@ final class OverlayController: ObservableObject {
             panel.orderOut(nil)
         }
     }
+
+    #if DEBUG
+    var replyPreviewPanel: PillPanel { panel }
+    var replyPreviewHasDetachedContext: Bool { replyContextPanel != nil }
+
+    func prepareReplyPreview(zone: SnapZone) {
+        clearAvailableReply()
+        transition(to: .pill)
+        visibilityRequested = true
+        parkedZone = zone
+        let screen = NSScreen.main ?? OverlayPlacement.activeScreen()
+        notchWidth = OverlayPlacement.notchFrame(on: screen)?.width ?? 0
+        measuredSize = nil
+        lastAppliedSize = nil
+        if !(panel.contentView is NSHostingView<PillRootView>) {
+            let host = NSHostingView(rootView: PillRootView(controller: self))
+            host.sizingOptions = []
+            panel.contentView = host
+        }
+        panel.setFrame(OverlayPlacement.zoneFrame(zone, barSize: barMinimumSize, on: screen), display: true)
+        panel.orderFrontRegardless()
+    }
+
+    func previewCopy(_ source: ReplySource?) { armReply(source) }
+
+    func previewReplyComposer() {
+        guard let source = availableReplySource else { return }
+        clearAvailableReply()
+        transition(to: .replyInput(reply: source, target: CapturedTarget(
+            target: TextTarget(text: "", captureMode: .wholeInput, path: .ax, writeStrategy: .none),
+            frontmostPID: nil)))
+    }
+
+    var previewWritingCapture: Result<TextTarget, TextIOError>?
+    var previewError: ErrorPanel? { errorPanel }
+    var edgePreviewResult: ResultPanel? { resultPanel }
+
+    func configureEdgePreview(context: ResultContext, zone: SnapZone) {
+        dismiss()
+        parkedZone = zone
+        let screen = NSScreen.main ?? OverlayPlacement.activeScreen()
+        panel.setFrame(OverlayPlacement.zoneFrame(zone, barSize: NSSize(width: 44, height: 28), on: screen), display: false)
+        transition(to: .result(context))
+        stopDestinationTracking()
+    }
+    #endif
 
     // MARK: - Auxiliary windows
 
@@ -1910,48 +2588,37 @@ final class OverlayController: ObservableObject {
         updateNoticePanel = notice
     }
 
-    /// The card is up for **both** reply states, from the moment a copy arms.
-    ///
-    /// It used to appear only with the composer, which put the message on screen at the
-    /// same instant the user started writing against it and not one moment earlier —
-    /// so the armed bar still had to carry a truncated preview, and the handover
-    /// between the two was the thing that flickered. Spanning both states means the
-    /// card is created once, survives the hover, and the bar below it never has to
-    /// describe its own contents.
     private func syncReplyContextPanel(for next: OverlayState) {
-        guard let source = next.replySource else {
-            replyContextPanel?.orderOut(nil)
-            replyContextPanel = nil
+        if case .explicitReply = next {
+            if replyContextPanel?.source == nil, replyContextPanel != nil {
+                replyContextPanel?.reanchor(to: panel.frame)
+            } else {
+                replyContextPanel?.orderOut(nil)
+                let card = ReplyContextPanel(anchor: panel.frame, source: nil, controller: self, onDismiss: { [weak self] in self?.dismissReply() })
+                card.orderFrontRegardless()
+                replyContextPanel = card
+            }
             return
         }
-        // Rebuilt only when the copy itself changes — the armed → composing transition
-        // must not tear it down and put it back, which is exactly the flash it exists
-        // to avoid.
-        if let existing = replyContextPanel, existing.source == source {
-            existing.reanchor(to: panel.frame)
-            return
-        }
-
         replyContextPanel?.orderOut(nil)
-        let card = ReplyContextPanel(
-            anchor: panel.frame,
-            source: source,
-            onDismiss: { [weak self] in self?.dismissReply() }
-        )
-        card.orderFrontRegardless()
-        replyContextPanel = card
+        replyContextPanel = nil
+    }
+
+    private var companionGeometry: CompanionGeometry {
+        CompanionGeometry(zone: parkedZone, anchor: panel.frame,
+                          screen: OverlayPlacement.screen(containing: panel.frame))
     }
 
     private func presentGeneratingPanel(_ pending: PendingRewrite) {
         dismissGeneratingPanel()
         let generating = GeneratingPanel(
-            anchor: panel.frame,
+            geometry: companionGeometry,
             // **A progress word, not the button's name.** The capsule used to be
             // labelled with `buttonTitle`, so pressing 差し替え put 「差し替え」 on a
             // capsule that is not replacing anything yet — nothing has been written
             // back at this point and the rewrite may still fail. The one thing that is
             // true while it is on screen is that a candidate is being generated.
-            label: pending.replyTo == nil
+            label: !pending.isReply
                 ? tr("生成中", "Writing…", "生成中")
                 : tr("返信を生成中", "Replying…", "生成回复中"),
             onCancel: { [weak self] in self?.cancelRewrite() }
@@ -1967,11 +2634,12 @@ final class OverlayController: ObservableObject {
 
     private func presentResultPanel(_ context: ResultContext) {
         if let existing = resultPanel {
+            existing.reanchor(companionGeometry)
             existing.update(context: context)
             existing.orderFrontRegardless()
             return
         }
-        let result = ResultPanel(anchor: panel.frame, controller: self, context: context)
+        let result = ResultPanel(geometry: companionGeometry, controller: self, context: context)
         resultPanel = result
         // Accessory apps are not necessarily active. Order independently of activation,
         // then take key for Enter/Escape without asking macOS to activate the app.
@@ -2075,6 +2743,7 @@ final class OverlayController: ObservableObject {
     }
 
     private func present(message: String) {
+        lessonEvent(.failed)
         // Closes the attempt as a generation failure. A capture failure has already
         // closed its own attempt via `reportCaptureFailure` before reaching here, so
         // this is a no-op for those — which is the point of routing every terminal
@@ -2101,9 +2770,8 @@ final class OverlayController: ObservableObject {
 
     private func showErrorToast(_ message: String) {
         dismissErrorToast()
-        // Sits above whatever currently owns the bottom edge, which is not always the
-        // bar — an insert failure happens with a result card in its place, and the reply
-        // composer stacks its context card on top of the bar (§16).
+        // Stack inward from whichever surface currently owns the selected edge.
+        // An insert failure can anchor to a result card that is still measuring.
         //
         // The **window**, not its frame: the result card is created at 440 pt and shrinks
         // to its measured height a pass later, so a rectangle taken here is a number that
@@ -2112,11 +2780,12 @@ final class OverlayController: ObservableObject {
             ?? generatingPanel
             ?? replyContextPanel
             ?? panel
-        let toast = ErrorPanel(anchor: anchor, message: message) { [weak self] in
+        let toast = ErrorPanel(anchor: anchor, zone: parkedZone, message: message) { [weak self] in
             self?.dismissErrorToast()
         }
         toast.orderFrontRegardless()
         errorPanel = toast
+        syncLessonGuide()
 
         errorDismissTask = Task { [weak self] in
             try? await Task.sleep(
@@ -2132,6 +2801,7 @@ final class OverlayController: ObservableObject {
         errorDismissTask = nil
         errorPanel?.orderOut(nil)
         errorPanel = nil
+        syncLessonGuide()
     }
 
     private static func message(for error: Error) -> String {

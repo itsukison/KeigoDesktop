@@ -31,16 +31,26 @@ struct PillRootView: View {
     @ObservedObject var controller: OverlayController
 
     var body: some View {
+        Group {
+            if let presentation = controller.introPresentation {
+                IntroPillView(presentation: presentation)
+            } else {
+                restingBody
+            }
+        }
+    }
+
+    private var restingBody: some View {
         ZStack {
             // No SwiftUI `.shadow` here. The window is sized exactly to this shape, so
             // a shadow drawn inside it is clipped to the window bounds and all that
             // survives is a grey smear in the four corners — the pill's rounded
             // corners are the only place the shadow is not hidden under the fill.
             // `PillPanel.hasShadow` draws the real one, outside the frame (§8).
-            RoundedRectangle(cornerRadius: Tokens.Overlay.pillRadius, style: .continuous)
-                .fill(Tokens.Overlay.canvas)
+            SmokedGlassSurface(shape: barShape, joinsNotch: controller.parkedZone == .topCenter)
 
             content
+                .frame(minWidth: controller.barMinimumSize.width, minHeight: controller.barMinimumSize.height)
                 .background(
                     GeometryReader { proxy in
                         Color.clear.preference(
@@ -75,7 +85,7 @@ struct PillRootView: View {
         .background(HoverTracker(
             onEnter: { controller.mouseEntered() },
             onExit: { controller.mouseExited() },
-            onDragEnded: { controller.persistPosition() }
+            onDragEnded: { controller.endBarDrag() }
         ))
     }
 
@@ -93,11 +103,31 @@ struct PillRootView: View {
         case .hoverRow:
             HoverRow(controller: controller)
                 .background(RightClickCatcher { controller.toggleSnoozeMenu() })
-        case .inputBar, .replyInput:
+        case .explicitReply, .inputBar:
             InputBar(controller: controller)
-        case .replyArmed:
-            ReplyBar()
+        case .replyInput(let source, _):
+            VStack(spacing: 0) {
+                CopiedReplyHeader(source: source, onDismiss: controller.dismissReply)
+                Rectangle().fill(Tokens.Overlay.hairline).frame(height: 1).padding(.horizontal, 12)
+                InputBar(controller: controller)
+            }
+            .frame(width: controller.usesSidebarLayout ? Tokens.Geometry.sideInputWidth : Tokens.Geometry.inputBarWidth)
+
         }
+    }
+
+    private var barShape: UnevenRoundedRectangle {
+        let zone = controller.isDraggingBar ? SnapZone.bottomCenter : controller.parkedZone
+        let radius = zone == .topCenter ? Tokens.Geometry.topCornerRadius
+            : controller.usesSidebarLayout ? Tokens.Geometry.sideCornerRadius
+            : controller.state.replySource != nil ? Tokens.Overlay.panelRadius : Tokens.Overlay.pillRadius
+        return UnevenRoundedRectangle(
+            topLeadingRadius: zone == .left || zone == .topCenter ? 0 : radius,
+            bottomLeadingRadius: zone == .left ? 0 : radius,
+            bottomTrailingRadius: zone == .right ? 0 : radius,
+            topTrailingRadius: zone == .right || zone == .topCenter ? 0 : radius,
+            style: .continuous
+        )
     }
 
     // The padding is load-bearing, not decoration. The window follows this
@@ -106,8 +136,28 @@ struct PillRootView: View {
     // `Tokens.Geometry.pillCollapsedWidth`, which also means the window never resizes
     // on first layout and so never drifts off centre.
     private var pillMark: some View {
-        BrandMark()
-            .padding(.horizontal, (Tokens.Geometry.pillCollapsedWidth - 16) / 2)
+        BrandGlyph(size: 16, isAnimating: !controller.onboardingPassive)
+            .overlay(alignment: .topTrailing) {
+                if controller.availableReplySource != nil {
+                    Circle()
+                        .fill(Tokens.Overlay.textSecondary)
+                        .frame(width: 4, height: 4)
+                        .offset(x: 3, y: -2)
+                        .accessibilityHidden(true)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(controller.availableReplySource == nil
+                ? tr("文章作成バー", "Writing bar", "写作工具条")
+                : tr("文章作成バー、コピーした文章に返信できます", "Writing bar, reply to copied text available", "写作工具条，可回复已复制的文字"))
+            .keyframeAnimator(initialValue: CGFloat.zero, trigger: controller.introDragCue) { view, offset in
+                view.offset(x: offset)
+            } keyframes: { _ in
+                CubicKeyframe(-2, duration: 0.12)
+                CubicKeyframe(2, duration: 0.18)
+                CubicKeyframe(0, duration: 0.15)
+            }
+            .frame(width: controller.barMinimumSize.width, height: controller.barMinimumSize.height)
     }
 }
 
@@ -148,16 +198,14 @@ struct BrandMark: View {
     }
 }
 
-/// §4 hover-row layout, option C: mark, hairline, the user's own buttons as text
-/// labels, hairline, ✎.
-///
-/// Labels rather than icons because a user's buttons have arbitrary titles — there is
-/// no icon vocabulary that can carry 「敬語」 next to a button they wrote themselves.
+/// The compact row: mark, Polish, and one-off guidance.
 struct HoverRow: View {
     @ObservedObject var controller: OverlayController
 
     var body: some View {
-        HStack(spacing: 8) {
+        let sidebar = controller.usesSidebarLayout
+        let layout = sidebar ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
+        layout {
             BrandMark(animation: .engaged)
             divider
 
@@ -167,43 +215,63 @@ struct HoverRow: View {
                 // ✎ can only end in a failed rewrite — so the row is replaced by the
                 // single action that changes that, rather than reporting that the
                 // buttons could not be loaded and leaving the user to guess why.
-                Text(tr("サインインするとボタンが使えます", "Sign in to use your buttons", "登录后即可使用按钮"))
+                Text(tr("サインインするとボタンが使えます", "Sign in to polish your writing", "登录后即可使用按钮"))
                     .font(Tokens.Font.body(Tokens.Overlay.labelMedium))
                     .foregroundStyle(Tokens.Overlay.textSecondary)
-                RowPill(title: tr("サインイン", "Sign in", "登录"), emphasised: true) { controller.pressSignIn() }
+                    .multilineTextAlignment(sidebar ? .center : .leading)
+                    .fixedSize(horizontal: !sidebar, vertical: true)
+                RowPill(title: tr("サインイン", "Sign in", "登录"), emphasised: true, isSidebar: sidebar) { controller.pressSignIn() }
             } else {
-                if controller.displayedPrompts.isEmpty {
-                    // Two different empty states. Telling someone to go and make
-                    // buttons they already have, because the fetch failed, is worse
-                    // than silence.
-                    Text(
-                        controller.promptsFailed
-                            ? tr("ボタンを読み込めませんでした", "Couldn't load your buttons", "无法加载按钮")
-                            : tr(
-                                "スマホでボタンを作成してください",
-                                "Create a button to get started",
-                                "请先创建一个按钮"
-                            )
-                    )
-                    .font(Tokens.Font.body(Tokens.Overlay.labelMedium))
-                    .foregroundStyle(Tokens.Overlay.textTertiary)
-                } else {
-                    ForEach(controller.displayedPrompts) { prompt in
-                        RowPill(title: prompt.title) { controller.press(prompt) }
+                ScrollView(sidebar ? .vertical : .horizontal) {
+                    let buttonsLayout = sidebar ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
+                    buttonsLayout {
+                        if controller.displayedPrompts.isEmpty {
+                            Text(controller.promptsFailed
+                                ? tr("読み込み失敗", "Couldn't load buttons", "无法加载按钮")
+                                : tr("ボタンを追加", "Add buttons in settings", "在设置中添加按钮"))
+                                .font(Tokens.Font.body(12)).foregroundStyle(Tokens.Overlay.textSecondary)
+                            if controller.promptsFailed {
+                                Button(tr("再試行", "Retry", "重试")) { Task { await controller.refreshAccount() } }
+                                    .buttonStyle(.plain)
+                            }
+                        }
+                        ForEach(controller.displayedPrompts) { prompt in
+                            RowPill(title: prompt.title, emphasised: controller.lesson?.expectedAction == .polish, isSidebar: sidebar) { controller.press(prompt) }
+                                .disabled(!controller.allowsLessonAction(.polish))
+                                .opacity(controller.lesson != nil && controller.lesson?.expectedAction != .polish ? 0.35 : 1)
+                                .background(LessonAnchorReader(anchor: .polish, controller: controller))
+                                .help(prompt.title)
+                        }
                     }
                 }
-
+                .scrollIndicators(.visible)
+                .frame(width: controller.buttonViewportSize.width, height: controller.buttonViewportSize.height)
                 divider
-                RowPill(systemImage: "pencil") { controller.pressCustomInput() }
+                if controller.availableReplySource != nil {
+                    CopiedReplyAction(controller: controller)
+                } else if ReplyContextFeature.isEnabled {
+                    RowPill(title: tr("返信", "Reply", "回复"), emphasised: controller.lesson?.expectedAction == .reply, isSidebar: sidebar) { controller.pressReply() }
+                        .disabled(!controller.allowsLessonAction(.reply))
+                        .opacity(controller.lesson != nil && controller.lesson?.expectedAction != .reply ? 0.35 : 1)
+                        .background(LessonAnchorReader(anchor: .reply, controller: controller))
+                }
+                RowPill(systemImage: "pencil", emphasised: controller.lesson?.expectedAction == .custom, isSidebar: sidebar) { controller.pressCustomInput() }
+                    .disabled(!controller.allowsLessonAction(.custom))
+                    .opacity(controller.lesson != nil && controller.lesson?.expectedAction != .custom ? 0.35 : 1)
+                    .background(LessonAnchorReader(anchor: .custom, controller: controller))
+                    .accessibilityLabel(tr("指示を書く", "Write instructions", "填写要求"))
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, sidebar ? Tokens.Geometry.sideActionsPadding : 12)
+        .padding(.vertical, sidebar ? 12 : 0)
+        .frame(width: sidebar ? (controller.signedOut ? 176 : 144) : nil)
     }
 
     private var divider: some View {
         Rectangle()
             .fill(Tokens.Overlay.hairline)
-            .frame(width: 1, height: 16)
+            .frame(width: controller.usesSidebarLayout ? 40 : 1,
+                   height: controller.usesSidebarLayout ? 1 : 16)
     }
 }
 
@@ -218,20 +286,24 @@ struct RowPill: View {
     var title: String?
     var systemImage: String?
     var emphasised = false
+    var isSidebar = false
     let action: () -> Void
 
     @State private var isHovering = false
 
-    init(title: String, emphasised: Bool = false, action: @escaping () -> Void) {
+    init(title: String, emphasised: Bool = false, isSidebar: Bool = false, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = nil
         self.emphasised = emphasised
+        self.isSidebar = isSidebar
         self.action = action
     }
 
-    init(systemImage: String, action: @escaping () -> Void) {
+    init(systemImage: String, emphasised: Bool = false, isSidebar: Bool = false, action: @escaping () -> Void) {
         self.title = nil
         self.systemImage = systemImage
+        self.emphasised = emphasised
+        self.isSidebar = isSidebar
         self.action = action
     }
 
@@ -248,7 +320,7 @@ struct RowPill: View {
             }
             .foregroundStyle(foreground)
             .padding(.horizontal, 10)
-            .frame(height: 24)
+            .frame(width: isSidebar ? Tokens.Geometry.sideActionsWidth - 2 * Tokens.Geometry.sideActionsPadding : nil, height: isSidebar ? 32 : 24)
             .background(Capsule().fill(fill))
             .contentShape(Capsule())
         }
@@ -267,41 +339,97 @@ struct RowPill: View {
     }
 }
 
-/// The armed reply bar (§16) — what a copy turns the collapsed pill into.
-///
-/// **It carries no preview, deliberately.** It used to, and that was the whole design
-/// error: `ReplyContextPanel` is now up from the moment a copy arms, so a truncated
-/// copy of the same message in the bar underneath is duplication that has to be kept in
-/// sync and re-truncated at a second width. The bar's only job here is to say that
-/// hovering it opens a reply rather than the button row — which is one badge.
-///
-/// Dismissal lives on the card, next to the thing being dismissed.
-struct ReplyBar: View {
+private struct CopiedReplyAction: View {
+    @ObservedObject var controller: OverlayController
+    @State private var hovering = false
+
+    var body: some View {
+        let emphasised = controller.lesson?.expectedAction == .reply
+        HStack(spacing: 0) {
+            Button { controller.pressCopiedReply() } label: {
+                Text(tr("返信", "Reply", "回复"))
+                    .font(Tokens.Font.body(Tokens.Overlay.labelMedium, weight: .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .foregroundStyle(emphasised ? Tokens.Overlay.canvas : Tokens.Overlay.textPrimary)
+                    .padding(.leading, 8)
+                    .frame(height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!controller.allowsLessonAction(.reply))
+            .background(LessonAnchorReader(anchor: .reply, controller: controller))
+            .cursor(.pointingHand)
+            DismissCopiedReplyButton(onDismiss: controller.dismissReply, inverted: emphasised, compactLabelSpacing: true)
+        }
+        .background(Capsule().fill(emphasised ? Tokens.Overlay.textPrimary
+            : hovering ? Tokens.Overlay.controlHover : Tokens.Overlay.surface))
+        .onHover { hovering = $0 }
+        .opacity(controller.lesson != nil && !emphasised ? 0.35 : 1)
+    }
+}
+
+private struct DismissCopiedReplyButton: View {
+    let onDismiss: () -> Void
+    var inverted = false
+    var compactLabelSpacing = false
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: onDismiss) {
+            Image(systemName: "xmark")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(inverted ? Tokens.Overlay.canvas
+                    : hovering ? Tokens.Overlay.textPrimary : Tokens.Overlay.textSecondary)
+                .offset(x: compactLabelSpacing ? -4 : 0)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(tr("返信に使うコピーを閉じる", "Dismiss copied reply context", "关闭已复制的回复内容"))
+        .help(tr("クリップボードの内容は残ります", "Keeps the text on your clipboard", "不会清空剪贴板"))
+        .cursor(.pointingHand)
+    }
+}
+
+private struct CopiedReplyHeader: View {
+    let source: ReplySource
+    let onDismiss: () -> Void
+
     var body: some View {
         HStack(spacing: 8) {
-            BrandMark(animation: .engaged)
-
-            Text(tr("返信", "Reply", "回复"))
-                .font(Tokens.Font.body(Tokens.Overlay.labelSmall, weight: .medium))
-                .foregroundStyle(Tokens.Overlay.textPrimary)
-                .padding(.horizontal, 7)
-                .frame(height: 18)
-                .background(Capsule().fill(Tokens.Overlay.hairline))
+            Image(systemName: "arrowshape.turn.up.left")
+                .font(.system(size: 11))
+                .accessibilityHidden(true)
+            Text(source.contextText)
+                .font(Tokens.Font.body(Tokens.Overlay.labelMedium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(source.contextText)
+                .accessibilityLabel(tr("返信する文章：", "Replying to: ", "回复内容：") + source.contextText)
+            DismissCopiedReplyButton(onDismiss: onDismiss)
         }
-        .padding(.horizontal, 12)
+        .foregroundStyle(Tokens.Overlay.textSecondary)
+        .padding(.leading, 12)
+        .padding(.trailing, 4)
+        .frame(height: 34)
     }
 }
 
 /// The free-text path, in both of its modes.
 ///
-/// The target was already captured — when ✎ was pressed for a rewrite, and on hover
+/// The target was already captured — when ✎ was pressed for a rewrite, and when Reply was clicked
 /// for a reply (§16) — so this field is safe to make key either way.
 struct InputBar: View {
     @ObservedObject var controller: OverlayController
     @State private var text = ""
+    @State private var lessonID: UUID?
     @FocusState private var focused: Bool
 
     private var isReply: Bool {
+        if case .explicitReply = controller.state { return true }
         if case .replyInput = controller.state { return true }
         return false
     }
@@ -314,9 +442,9 @@ struct InputBar: View {
     /// type and a rewrite of nothing was the reasonable result.
     private var scope: RewriteScope? {
         switch controller.state {
-        case .inputBar(let captured), .replyInput(_, let captured):
+        case .explicitReply(let captured), .inputBar(let captured), .replyInput(_, let captured):
             return captured.target.scope
-        case .pill, .hoverRow, .generating, .result, .replyArmed:
+        case .pill, .hoverRow, .generating, .result:
             return nil
         }
     }
@@ -328,7 +456,10 @@ struct InputBar: View {
     /// A scratch compose (§18) stays blocked for the strongest version of the same
     /// reason: with no source text *and* no instruction there is nothing to send at all.
     private var canSubmit: Bool {
-        isReply || !text.trimmingCharacters(in: .whitespaces).isEmpty
+        if let session = controller.replySession {
+            return (session.phase == .loading || session.phase == .ready) && session.queuedGuidance == nil
+        }
+        return isReply || !text.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     /// Rendered separately from the field. AppKit's native placeholder ignores the
@@ -361,59 +492,72 @@ struct InputBar: View {
     }
 
     var body: some View {
-        // Centred, not top-aligned. Top alignment is only right while the field is
-        // wrapped, and it is on one line almost always — which left the text sitting
-        // high in the bar in the common case.
-        HStack(spacing: 8) {
+        let sidebar = controller.usesSidebarLayout
+        let layout = sidebar
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 8))
+        layout {
             BrandMark(animation: .engaged)
 
-            ZStack(alignment: .leading) {
-                // One line regardless of mode. Typed guidance may grow to three lines,
-                // but a hint must not make the bar taller before the user writes.
+            ZStack(alignment: sidebar ? .topLeading : .leading) {
                 if text.isEmpty {
                     Text(placeholderText)
                         .font(Tokens.Font.body(Tokens.Overlay.labelLarge))
                         .foregroundStyle(Tokens.Overlay.textSecondary)
-                        .lineLimit(1)
+                        .lineLimit(sidebar ? nil : 1)
                         .allowsHitTesting(false)
                 }
 
-                // `axis: .vertical` + a line-limit range is what lets the user's own
-                // long guidance wrap. Return still submits; the range governs wrapping.
                 TextField("", text: $text, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(Tokens.Font.body(Tokens.Overlay.labelLarge))
                     .foregroundStyle(Tokens.Overlay.textPrimary)
-                    .lineLimit(1...Tokens.Geometry.inputBarMaxLines)
+                    .lineLimit(1...(sidebar ? Tokens.Geometry.sideInputMaxLines : Tokens.Geometry.inputBarMaxLines))
                     .focused($focused)
+                    .disabled(controller.replySession?.queuedGuidance != nil)
                     .accessibilityLabel(placeholderText)
                     .onSubmit { controller.submitInput(text) }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(sidebar ? 10 : 0)
+            .frame(maxWidth: .infinity,
+                   minHeight: sidebar ? Tokens.Geometry.sideEditorHeight : nil,
+                   maxHeight: sidebar ? Tokens.Geometry.sideEditorHeight : nil,
+                   alignment: sidebar ? .topLeading : .leading)
+            .background {
+                if sidebar {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Tokens.Overlay.surface)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(Tokens.Overlay.hairline, lineWidth: 1)
+                        }
+                }
+            }
             .layoutPriority(1)
+            .background(LessonAnchorReader(anchor: .composer, controller: controller))
 
             Button {
                 controller.submitInput(text)
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 17))
+                    .font(.system(size: sidebar ? 22 : 17))
                     .foregroundStyle(
                         canSubmit ? Tokens.Overlay.textPrimary : Tokens.Overlay.textTertiary
                     )
+                    .frame(width: sidebar ? 28 : nil, height: sidebar ? 28 : nil)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!canSubmit)
+            .accessibilityLabel(tr("生成", "Generate", "生成"))
             .cursor(canSubmit ? .pointingHand : .arrow)
+            .frame(maxWidth: sidebar ? .infinity : nil, alignment: .trailing)
         }
         .padding(.horizontal, 12)
-        // Vertical padding so a wrapped second line has somewhere to go, and a fixed
-        // width so the bar does not resize under the cursor while typing.
-        .padding(.vertical, 8)
-        .frame(width: Tokens.Geometry.inputBarWidth)
-        .onAppear { focused = true }
-        // Both, deliberately. A focused `TextField` swallows Escape often enough that
-        // `onExitCommand` alone cannot be relied on, and `cancelInput` is idempotent,
-        // so a double delivery costs nothing.
+        .padding(.vertical, sidebar ? 12 : 8)
+        .frame(width: sidebar ? Tokens.Geometry.sideInputWidth : Tokens.Geometry.inputBarWidth)
+        .onAppear { lessonID = controller.lesson?.id; focused = true }
+        .onChange(of: text) { _, value in controller.guidanceChanged(value, sessionID: lessonID) }
         .onExitCommand { controller.cancelInput() }
         .onKeyPress(.escape) {
             controller.cancelInput()
@@ -462,7 +606,7 @@ private struct HoverTracker: NSViewRepresentable {
         override func mouseExited(with event: NSEvent) { onExit?() }
 
         /// `isMovableByWindowBackground` does the dragging; this just records where it
-        /// ended up so the offset can be persisted (§4).
+        /// ended so the selected slot can be committed (§4).
         override func mouseUp(with event: NSEvent) {
             super.mouseUp(with: event)
             onDragEnded?()

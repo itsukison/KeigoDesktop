@@ -115,7 +115,7 @@ struct PreferencesSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(section.title)
-                    .font(Tokens.Font.display(17))
+                    .font(Tokens.LightFont.display(17))
                     .foregroundStyle(Tokens.Window.textPrimary)
                 Spacer()
                 RoundIconButton(icon: .close, help: tr("閉じる", "Close", "关闭"), action: dismiss)
@@ -165,7 +165,7 @@ struct PreferencesSheet: View {
                         StatusDot(ok: model.isTrusted)
                         if model.isTrusted {
                             Text(tr("許可済み", "Granted", "已授权"))
-                                .font(Tokens.Font.body(13))
+                                .font(Tokens.LightFont.body(13))
                                 .foregroundStyle(Tokens.Window.textSecondary)
                         } else {
                             ActionButton(tr("許可する", "Grant access", "授予权限"), style: .primary) {
@@ -177,21 +177,12 @@ struct PreferencesSheet: View {
             }
 
             group(tr("基本", "Basics", "基本")) {
-                // The only entry point for everyone who finished onboarding before
-                // §15's language page existed — they are never asked, so this row is
-                // the whole answer for them (§17).
-                // The old second sentence read "Your existing buttons are not rewritten."
-                // True, and the reason an English user's rewrite came back in Japanese:
-                // the buttons carry the instruction the AI actually follows, so leaving
-                // them alone leaves them writing the previous language. Still true — this
-                // row writes nothing to `user_prompts` — but it now says where the rest of
-                // the change is, and ボタン raises a banner offering the swap.
                 SettingsRow(
                     title: tr("言語", "Language", "语言"),
                     subtitle: tr(
-                        "アプリの表示言語です。ボタンの文章はそのままなので、必要なら「ボタン」で入れ替えてください。",
-                        "The app's interface. Your buttons keep their current wording — swap them in Buttons if they write the wrong language.",
-                        "应用的界面语言。按钮内容保持不变，如需更换请前往「按钮」。"
+                        "アプリの表示言語です。文章を整えるときは、元の文章の言語を保ちます。",
+                        "The app's interface language. Polishing preserves the language of your draft.",
+                        "应用界面语言。润色时保留原文语言。"
                     )
                 ) {
                     Picker("", selection: Binding(
@@ -204,6 +195,7 @@ struct PreferencesSheet: View {
                     }
                     .labelsHidden()
                     .frame(width: 160)
+                    .cursor(.pointingHand)
                 }
                 Hairline()
                 SettingsRow(
@@ -220,17 +212,26 @@ struct PreferencesSheet: View {
                     ))
                     .accentSwitch()
                     .labelsHidden()
+                    .cursor(.pointingHand)
                 }
                 Hairline()
+                if ReplyContextFeature.isEnabled {
+                    SettingsRow(title: tr("返信", "Reply", "回复"), subtitle: tr(
+                        "バーの返信ボタンで会話を読み取ります。コピーだけでは起動しません。",
+                        "Press Reply on the bar to read a conversation. Copying does not activate it.",
+                        "点击工具栏的回复按钮读取对话。复制不会触发回复。")) {
+                        Text(tr("手動", "On demand", "手动"))
+                    }
+                } else {
                 // §16. On by default, so it needs a way off: the feature works by
                 // watching what the user copies, and that is worth saying out loud
                 // rather than burying — the same reasoning as 履歴を保存する.
                 SettingsRow(
                     title: tr("返信モード", "Reply mode", "回复模式"),
                     subtitle: tr(
-                        "文章をコピーすると、バーがその文章への返信モードに変わります。",
-                        "When you copy a message, the bar switches to composing a reply to it.",
-                        "复制文字后，工具栏会切换为对该内容的回复模式。"
+                        "コピーした文章への「返信」がバーに表示されます。クリックすると返信を作成できます。",
+                        "Watch copied text and offer Reply in the bar. Click Reply to start composing.",
+                        "复制文字后，工具条会显示「回复」。点击后即可撰写回复。"
                     )
                 ) {
                     Toggle("", isOn: Binding(
@@ -239,6 +240,8 @@ struct PreferencesSheet: View {
                     ))
                     .accentSwitch()
                     .labelsHidden()
+                    .cursor(.pointingHand)
+                }
                 }
                 Hairline()
                 SettingsRow(
@@ -272,6 +275,7 @@ struct PreferencesSheet: View {
                     ))
                     .accentSwitch()
                     .labelsHidden()
+                    .cursor(.pointingHand)
                 }
                 Hairline()
                 SettingsRow(
@@ -291,7 +295,7 @@ struct PreferencesSheet: View {
                 "Rewrites are stored only on this Mac and never sent to a server. The most recent \(RewriteHistoryStore.capacity) are kept.",
                 "改写内容仅保存在这台 Mac 上，不会发送到服务器。保留最近 \(RewriteHistoryStore.capacity) 条。"
             ))
-                .font(Tokens.Font.body(12))
+                .font(Tokens.LightFont.body(12))
                 .foregroundStyle(Tokens.Window.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -313,7 +317,7 @@ struct PreferencesSheet: View {
         group(tr("敬語ボタン", "KeigoButton", "敬語ボタン")) {
             SettingsRow(title: tr("バージョン", "Version", "版本"), subtitle: nil) {
                 Text(model.appVersion)
-                    .font(Tokens.Font.mono(13))
+                    .font(Tokens.LightFont.mono(13))
                     .foregroundStyle(Tokens.Window.textSecondary)
             }
             Hairline()
@@ -352,7 +356,7 @@ private struct NavItem: View {
                 Icon(icon, size: 17)
                     .frame(width: 18)
                 Text(title)
-                    .font(Tokens.Font.body(14, weight: isActive ? .medium : .regular))
+                    .font(Tokens.LightFont.body(14, weight: isActive ? .medium : .regular))
                 Spacer(minLength: 0)
             }
             .foregroundStyle(isActive ? Tokens.Window.textPrimary : Tokens.Window.textSecondary)

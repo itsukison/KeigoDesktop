@@ -47,7 +47,7 @@ struct HomeView: View {
                             "A new version is available",
                             "有新版本可用"
                         ))
-                            .font(Tokens.Font.body(14, weight: .medium))
+                            .font(Tokens.LightFont.body(14, weight: .medium))
                             .foregroundStyle(Tokens.Window.textPrimary)
                         Badge("v\(version)")
                     }
@@ -56,7 +56,7 @@ struct HomeView: View {
                         "KeigoButton \(version) is ready to install.",
                         "敬語ボタン \(version) 已可安装。"
                     ))
-                        .font(Tokens.Font.body(12))
+                        .font(Tokens.LightFont.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                 }
 
@@ -107,7 +107,7 @@ struct HomeView: View {
                             "Your introductory price is still open",
                             "新用户优惠价仍然有效"
                         ))
-                            .font(Tokens.Font.body(14, weight: .medium))
+                            .font(Tokens.LightFont.body(14, weight: .medium))
                             .foregroundStyle(Tokens.Window.textPrimary)
                         if let remaining { Badge(remaining) }
                     }
@@ -118,7 +118,7 @@ struct HomeView: View {
                         "Pro's first year is \(annual.display) instead of \(list.display), then it renews automatically.",
                         "Pro 首年 \(annual.display)（原价 \(list.display)），之后自动续订。"
                     ))
-                        .font(Tokens.Font.body(12))
+                        .font(Tokens.LightFont.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -157,13 +157,13 @@ struct HomeView: View {
             HStack(alignment: .center, spacing: 10) {
                 Badge(entitlement.plan.displayName)
                 Text(tr("\(entitlement.used) / \(entitlement.monthLimit) 回", "\(entitlement.used) / \(entitlement.monthLimit) rewrites", "\(entitlement.used) / \(entitlement.monthLimit) 次"))
-                    .font(Tokens.Font.body(14, weight: .medium))
+                    .font(Tokens.LightFont.body(14, weight: .medium))
                     .foregroundStyle(Tokens.Window.textPrimary)
                 Text({
                     let date = Self.resetFormatter.string(from: entitlement.resetsAt)
                     return tr("\(date)にリセット", "Resets on \(date)", "\(date)重置")
                 }())
-                    .font(Tokens.Font.body(12))
+                    .font(Tokens.LightFont.body(12))
                     .foregroundStyle(Tokens.Window.textSecondary)
 
                 Spacer(minLength: 16)
@@ -199,7 +199,7 @@ struct HomeView: View {
                     "We couldn't take your payment. Please update your card.",
                     "无法完成付款。请更新银行卡信息。"
                 ))
-                    .font(Tokens.Font.body(12))
+                    .font(Tokens.LightFont.body(12))
                     .foregroundStyle(Tokens.Window.textSecondary)
             } else if entitlement.isCancelScheduled, let end = entitlement.cancelsAt {
                 // `cancelsAt`, not `cancelAtPeriodEnd` — the boolean is false on a
@@ -212,7 +212,7 @@ struct HomeView: View {
                         "已办理取消。Pro 可使用至\(date)。"
                     )
                 }())
-                    .font(Tokens.Font.body(12))
+                    .font(Tokens.LightFont.body(12))
                     .foregroundStyle(Tokens.Window.textSecondary)
             }
         }
@@ -242,7 +242,7 @@ struct HomeView: View {
     private var hoverSentenceAfter: String {
         tr(
             "にカーソルを合わせると、ボタンが開きます",
-            " at the bottom of your screen opens your buttons on hover",
+            " opens your saved buttons on hover",
             "，光标悬停即可展开按钮"
         )
     }
@@ -251,12 +251,12 @@ struct HomeView: View {
         HStack(spacing: 10) {
             if !hoverSentenceBefore.isEmpty {
                 Text(hoverSentenceBefore)
-                    .font(Tokens.Font.body(15))
+                    .font(Tokens.LightFont.body(15))
                     .foregroundStyle(Tokens.Window.textSecondary)
             }
             PillPreview()
             Text(hoverSentenceAfter)
-                .font(Tokens.Font.body(15))
+                .font(Tokens.LightFont.body(15))
                 .foregroundStyle(Tokens.Window.textSecondary)
 
             Spacer(minLength: 16)
@@ -312,17 +312,7 @@ struct HomeView: View {
             }
             .padding(.vertical, 22)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                ZStack {
-                    Tokens.Window.canvas
-                    Image("StatsBackdrop")
-                        .resizable()
-                        .scaledToFill()
-                        // The raster supplies atmosphere, not a coloured card. At
-                        // full strength even this pale source read as a gradient.
-                        .opacity(0.55)
-                }
-            }
+            .background(Tokens.Window.surface)
             .clipShape(
                 RoundedRectangle(cornerRadius: Tokens.Window.cardRadius, style: .continuous)
             )
@@ -341,7 +331,7 @@ struct HomeView: View {
                         "最常用的应用：\(app)（\(count)次）"
                     )
                 }())
-                    .font(Tokens.Font.body(13))
+                    .font(Tokens.LightFont.body(13))
                     .foregroundStyle(Tokens.Window.textTertiary)
             } else {
                 Text(tr(
@@ -349,7 +339,7 @@ struct HomeView: View {
                     "Counted from the history stored on this Mac.",
                     "根据本机保存的记录统计。"
                 ))
-                    .font(Tokens.Font.body(13))
+                    .font(Tokens.LightFont.body(13))
                     .foregroundStyle(Tokens.Window.textTertiary)
             }
         }
@@ -368,7 +358,7 @@ struct HomeView: View {
                     Text(model.isSignedIn
                         ? tr("アクセシビリティを確認してください", "Check Accessibility access", "请检查辅助功能权限")
                         : tr("サインインが必要です", "You need to sign in", "需要登录"))
-                        .font(Tokens.Font.body(14, weight: .medium))
+                        .font(Tokens.LightFont.body(14, weight: .medium))
                         .foregroundStyle(Tokens.Window.textPrimary)
                     Text(model.isSignedIn
                          ? tr(
@@ -377,11 +367,11 @@ struct HomeView: View {
                             "读写当前编辑文字的权限已被取消。"
                          )
                          : tr(
-                            "ボタンを同期して書き換えるには、共有アカウントへ接続します。",
-                            "Connect your account to sync your buttons and start rewriting.",
-                            "连接共享账户后即可同步按钮并开始改写。"
+                            "文章を整えるには、アカウントにサインインしてください。",
+                            "Sign in to your account to start polishing your writing.",
+                            "登录账户即可开始润色文字。"
                          ))
-                        .font(Tokens.Font.body(12))
+                        .font(Tokens.LightFont.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                 }
                 Spacer()
@@ -462,7 +452,7 @@ struct HomeView: View {
             HStack(spacing: 14) {
                 IconPlate(icon: icon, diameter: 36)
                 Text(text)
-                    .font(Tokens.Font.body(14))
+                    .font(Tokens.LightFont.body(14))
                     .foregroundStyle(Tokens.Window.textSecondary)
                 Spacer(minLength: 12)
                 if let action {
@@ -519,15 +509,15 @@ private struct StatCell: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(Tokens.Font.body(13))
+                .font(Tokens.LightFont.body(13))
                 .foregroundStyle(Tokens.Window.textSecondary)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
-                    .font(Tokens.Font.display(26))
-                    .tracking(Tokens.Font.displayTracking(26))
+                    .font(Tokens.LightFont.display(26))
+                    .tracking(Tokens.LightFont.displayTracking(26))
                     .foregroundStyle(Tokens.Window.textPrimary)
                 Text(unit)
-                    .font(Tokens.Font.body(13))
+                    .font(Tokens.LightFont.body(13))
                     .foregroundStyle(Tokens.Window.textSecondary)
             }
         }
@@ -560,7 +550,7 @@ private struct HistoryRow: View {
             // reference's history does the same, and it is `design.md`'s one
             // technical-metadata face.
             Text(Self.timeFormatter.string(from: entry.createdAt))
-                .font(Tokens.Font.mono(12))
+                .font(Tokens.LightFont.mono(12))
                 .foregroundStyle(Tokens.Window.textTertiary)
                 .frame(width: 46, alignment: .leading)
                 .padding(.top, 2)
@@ -570,18 +560,18 @@ private struct HistoryRow: View {
                     Badge(entry.label)
                     if let bundleId = entry.hostAppBundleId {
                         Text(MainModel.appName(for: bundleId))
-                            .font(Tokens.Font.body(12))
+                            .font(Tokens.LightFont.body(12))
                             .foregroundStyle(Tokens.Window.textTertiary)
                     }
                     if entry.accepted {
                         Text(tr("挿入済み", "Inserted", "已插入"))
-                            .font(Tokens.Font.body(11))
+                            .font(Tokens.LightFont.body(11))
                             .foregroundStyle(Tokens.Window.textTertiary)
                     }
                 }
 
                 Text(entry.rewrittenText)
-                    .font(Tokens.Font.body(14))
+                    .font(Tokens.LightFont.body(14))
                     .foregroundStyle(Tokens.Window.textPrimary)
                     .lineSpacing(5)
                     .lineLimit(isExpanded ? nil : 2)
@@ -592,10 +582,10 @@ private struct HistoryRow: View {
                 if isExpanded, !entry.originalText.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(tr("元の文章", "Original", "原文"))
-                            .font(Tokens.Font.body(11))
+                            .font(Tokens.LightFont.body(11))
                             .foregroundStyle(Tokens.Window.textTertiary)
                         Text(entry.originalText)
-                            .font(Tokens.Font.body(13))
+                            .font(Tokens.LightFont.body(13))
                             .foregroundStyle(Tokens.Window.textSecondary)
                             .lineSpacing(4)
                             .fixedSize(horizontal: false, vertical: true)

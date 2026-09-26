@@ -25,6 +25,16 @@ public enum UserPromptOrder {
         }
     }
 
+    public static func moving(_ prompts: [UserPrompt], id: UUID, before destination: UUID) -> [UserPrompt]? {
+        guard id != destination, let source = prompts.firstIndex(where: { $0.id == id }),
+              prompts.contains(where: { $0.id == destination }) else { return nil }
+        var next = prompts
+        let row = next.remove(at: source)
+        guard let target = next.firstIndex(where: { $0.id == destination }) else { return nil }
+        next.insert(row, at: target)
+        return normalized(next)
+    }
+
     /// Moves one row by one position and immediately normalizes the slot contract.
     /// Returning nil means the identifier or offset was invalid, or the row is already
     /// at that edge. The UI intentionally calls this only with -1 or +1.

@@ -77,6 +77,17 @@ final class MainModel: NSObject, ObservableObject {
     /// The row currently open for editing. Only ever one — an inline editor per row
     /// would make the list unreadable at seven buttons.
     @Published var editingPromptId: UUID?
+    @Published private(set) var isSavingButtons = false
+    @Published private(set) var isReorderingButtons = false
+    var confirmLeavingButtons: ((@escaping () -> Void) -> Void)?
+    func leaveButtons(perform action: @escaping () -> Void) {
+        if page == .buttons, let confirmLeavingButtons { confirmLeavingButtons(action) }
+        else { action() }
+    }
+    private var promptAccountID: String?
+    private var promptRevision: UInt64 = 0
+    private var promptLoadID = UUID()
+
     /// Arrow clicks may arrive faster than Supabase round trips. Keep only the newest
     /// not-yet-written snapshot and drain it behind the active write, so responses can
     /// never land out of order and snap the visible list backwards.
@@ -262,11 +273,15 @@ final class MainModel: NSObject, ObservableObject {
     /// rebuild silently revokes it. Re-checked on every activation, along with
     /// everything else that can change while the window is closed.
     func refresh() {
+        #if DEBUG
+        if AsideDesignPreview.isRunning { return }
+        #endif
         applyTrusted(AXPermission.isTrusted)
         launchAtLogin = SMAppService.mainApp.status == .enabled
         Task {
             let session = await auth.currentSession
             signedInEmail = await auth.currentEmail
+            if session?.userId != promptAccountID { await reloadPrompts() }
             await identifyIfNeeded(session)
             await reloadHistory()
             guard signedInEmail != nil else {
@@ -275,7 +290,7 @@ final class MainModel: NSObject, ObservableObject {
             }
             await loadProfile()
             await reloadEntitlement()
-            if prompts.isEmpty { await reloadPrompts() }
+            if !isSavingButtons { await reloadPrompts() }
         }
     }
 
@@ -283,6 +298,9 @@ final class MainModel: NSObject, ObservableObject {
 
     /// Re-read rather than cached, every time. See `entitlement`.
     func reloadEntitlement() async {
+        #if DEBUG
+        if AsideDesignPreview.isRunning { return }
+        #endif
         guard signedInEmail != nil else {
             entitlement = nil
             return
@@ -644,6 +662,10 @@ final class MainModel: NSObject, ObservableObject {
     }
 
     func signOut() {
+        promptRevision &+= 1
+        promptAccountID = nil
+        prompts = []
+        pendingPromptOrder = nil
         Task {
             await auth.signOut()
             PostHogSDK.shared.reset()
@@ -666,14 +688,34 @@ final class MainModel: NSObject, ObservableObject {
     // MARK: - Buttons
 
     func reloadPrompts() async {
+        #if DEBUG
+        if AsideDesignPreview.isRunning { return }
+        #endif
+        let account = await auth.currentSession?.userId
+        if promptAccountID != account {
+            promptRevision &+= 1
+            promptAccountID = account
+            prompts = []
+            editingPromptId = nil
+            pendingPromptOrder = nil
+        }
+        guard let account else { isLoadingPrompts = false; return }
+        let loadID = UUID()
+        promptLoadID = loadID
         isLoadingPrompts = true
-        defer { isLoadingPrompts = false }
         do {
-            prompts = UserPromptOrder.sortedForEditing(try await promptStore.fetch())
+            let loaded = try await promptStore.scoped(to: account).fetch()
+            guard await auth.currentSession?.userId == account,
+                  promptAccountID == account, promptLoadID == loadID else { return }
+            if pendingPromptOrder == nil && promptOrderSaveTask == nil {
+                prompts = UserPromptOrder.sortedForEditing(loaded)
+            }
             promptsError = nil
         } catch {
+            guard promptAccountID == account, promptLoadID == loadID else { return }
             promptsError = tr("ボタンを読み込めませんでした。", "Couldn't load your buttons.", "无法加载按钮。")
         }
+        if promptLoadID == loadID { isLoadingPrompts = false }
     }
 
     /// Whether the buttons on this account write a language the app is not writing.
@@ -698,7 +740,7 @@ final class MainModel: NSObject, ObservableObject {
             keeping: prompts,
             whenWriting: language
         )
-        mutate {
+        mutate { _ in
             try await self.applyOnboardingButtons(drafts)
             PostHogSDK.shared.capture("desktop_button_language_realigned", properties: [
                 "pack": pack.rawValue,
@@ -716,133 +758,125 @@ final class MainModel: NSObject, ObservableObject {
     }
 
     func applyOnboardingButtons(_ drafts: [OnboardingButtonDraft]) async throws {
-        let replacements = drafts.enumerated().map { index, draft in
-            draft.userPrompt(at: index)
-        }
-        prompts = UserPromptOrder.sortedForEditing(
-            try await promptStore.replaceAll(with: replacements)
-        )
+        guard let account = await auth.currentSession?.userId else { throw RewriteError.notSignedIn }
+        let store = promptStore.scoped(to: account)
+        let replacements = drafts.enumerated().map { $0.element.userPrompt(at: $0.offset) }
+        let loaded = try await store.replaceAll(with: replacements)
+        guard await auth.currentSession?.userId == account else { throw RewriteError.notSignedIn }
+        prompts = UserPromptOrder.sortedForEditing(loaded)
         promptsError = nil
         await onPromptsChanged()
     }
 
-    func addPrompt() {
-        let slot: UserPrompt.Slot = prompts.isEmpty ? .main : .sub
-        mutate {
-            let created = try await self.promptStore.create(
-                title: tr("新しいボタン", "New", "新按钮"),
-                prompt: "",
-                slot: slot,
-                sortOrder: (self.prompts.map(\.sortOrder).max() ?? 0) + 1
-            )
-            PostHogSDK.shared.capture("desktop_prompt_created", properties: [
-                "slot": slot.rawValue,
-            ])
-            self.editingPromptId = created.id
-        }
-    }
-
-    func save(_ prompt: UserPrompt) {
-        // Applied locally first: the list is the thing the user is looking at, and a
-        // round trip's worth of stale text in the row reads as a dropped edit.
-        applyLocally(prompt)
-        mutate {
-            try await self.promptStore.update(prompt)
-            PostHogSDK.shared.capture("desktop_prompt_updated", properties: [
-                "slot": prompt.slot.rawValue,
-                "is_enabled": prompt.isEnabled,
-                "origin": prompt.origin.rawValue,
-            ])
+    func saveButton(_ existing: UserPrompt?, title: String, instruction: String) async -> Bool {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let instruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, !instruction.isEmpty, !isSavingButtons,
+              promptOrderSaveTask == nil, let account = promptAccountID else { return false }
+        guard await auth.currentSession?.userId == account, !isSavingButtons, promptOrderSaveTask == nil else { return false }
+        isSavingButtons = true
+        defer { isSavingButtons = false }
+        let store = promptStore.scoped(to: account)
+        do {
+            let saved: UserPrompt
+            if let existing {
+                guard var prompt = prompts.first(where: { $0.id == existing.id }) else { return false }
+                prompt.title = title
+                prompt.prompt = instruction
+                try await store.update(prompt)
+                saved = prompt
+            } else {
+                saved = try await store.create(title: title, prompt: instruction,
+                    slot: prompts.isEmpty ? .main : .sub, sortOrder: (prompts.map(\.sortOrder).max() ?? -1) + 1)
+            }
+            guard await auth.currentSession?.userId == account else { return false }
+            if let index = prompts.firstIndex(where: { $0.id == saved.id }) { prompts[index] = saved }
+            else { prompts.append(saved) }
+            editingPromptId = saved.id
+            PostHogSDK.shared.capture(existing == nil ? "desktop_prompt_created" : "desktop_prompt_updated",
+                properties: ["slot": saved.slot.rawValue, "origin": saved.origin.rawValue, "is_enabled": saved.isEnabled])
+            await reloadPrompts()
+            await onPromptsChanged()
+            return true
+        } catch {
+            guard await auth.currentSession?.userId == account else { return false }
+            promptsError = tr("保存できませんでした。もう一度お試しください。", "Couldn't save. Your edits are still here; try again.", "无法保存。编辑内容已保留，请重试。")
+            return false
         }
     }
 
     func setEnabled(_ prompt: UserPrompt, _ isEnabled: Bool) {
+        guard !isSavingButtons, promptOrderSaveTask == nil else { return }
         var next = prompt
         next.isEnabled = isEnabled
-        save(next)
+        mutate { store in try await store.update(next) }
     }
 
     func delete(_ prompt: UserPrompt) {
-        prompts.removeAll { $0.id == prompt.id }
-        prompts = UserPromptOrder.normalized(prompts)
-        editingPromptId = nil
-        let remaining = prompts
-        mutate {
-            try await self.promptStore.delete(id: prompt.id)
-            try await self.persistPromptOrder(remaining)
-            PostHogSDK.shared.capture("desktop_prompt_deleted", properties: [
-                "slot": prompt.slot.rawValue,
-                "origin": prompt.origin.rawValue,
-            ])
+        guard !isSavingButtons, promptOrderSaveTask == nil else { return }
+        let remaining = UserPromptOrder.normalized(prompts.filter { $0.id != prompt.id })
+        mutate { store in
+            try await store.delete(id: prompt.id)
+            for row in remaining.filter({ $0.slot == .sub }) + remaining.filter({ $0.slot == .main }) {
+                try await store.update(row)
+            }
+            PostHogSDK.shared.capture("desktop_prompt_deleted", properties: ["slot": prompt.slot.rawValue, "origin": prompt.origin.rawValue])
         }
     }
 
-    // MARK: - Reordering
-
-    /// Moves one row by one position. Position zero becomes `main`; every other row
-    /// becomes `sub`, so moving a secondary button above the first row replaces the
-    /// iPhone's primary toolbar button without a separate "set as main" state.
     @discardableResult
     func movePrompt(id: UUID, by offset: Int) -> Bool {
-        guard let next = UserPromptOrder.moving(
-            prompts,
-            id: id,
-            by: offset
-        ) else { return false }
+        guard !isSavingButtons, let next = UserPromptOrder.moving(prompts, id: id, by: offset) else { return false }
         prompts = next
-        editingPromptId = nil
         commitOrder()
         return true
     }
 
-    /// Serializes order snapshots. Repeated clicks while a write is active coalesce to
-    /// the newest complete order; secondary rows are always written before the main so
-    /// a partial network failure cannot leave two main rows.
+    func movePrompt(id: UUID, before destination: UUID) {
+        guard !isSavingButtons, let next = UserPromptOrder.moving(prompts, id: id, before: destination) else { return }
+        prompts = next
+        commitOrder()
+    }
+
     func commitOrder() {
         pendingPromptOrder = prompts
         guard promptOrderSaveTask == nil else { return }
-
-        promptOrderSaveTask = Task { [weak self] in
-            guard let self else { return }
-            while let ordered = self.pendingPromptOrder {
-                self.pendingPromptOrder = nil
+        guard let account = promptAccountID else { pendingPromptOrder = nil; return }
+        let revision = promptRevision
+        isReorderingButtons = true
+        promptOrderSaveTask = Task {
+            defer { isReorderingButtons = false }
+            guard await auth.currentSession?.userId == account else { pendingPromptOrder = nil; promptOrderSaveTask = nil; return }
+            let store = promptStore.scoped(to: account)
+            var failed = false
+            while revision == promptRevision, let ordered = pendingPromptOrder {
+                pendingPromptOrder = nil
                 do {
-                    try await self.persistPromptOrder(ordered)
-                    self.promptsError = nil
-                } catch {
-                    self.promptsError = tr("保存できませんでした。", "Couldn't save.", "无法保存。")
-                }
+                    for prompt in ordered.filter({ $0.slot == .sub }) + ordered.filter({ $0.slot == .main }) {
+                        try await store.update(prompt)
+                    }
+                } catch { failed = true; pendingPromptOrder = nil; break }
             }
-            self.promptOrderSaveTask = nil
-            await self.reloadPrompts()
-            await self.onPromptsChanged()
-        }
-    }
-
-    private func persistPromptOrder(_ prompts: [UserPrompt]) async throws {
-        let secondary = prompts.filter { $0.slot == .sub }
-        let main = prompts.filter { $0.slot == .main }
-        for prompt in secondary + main {
-            try await promptStore.update(prompt)
-        }
-    }
-
-    private func applyLocally(_ prompt: UserPrompt) {
-        guard let index = prompts.firstIndex(where: { $0.id == prompt.id }) else { return }
-        prompts[index] = prompt
-    }
-
-    /// Every button mutation ends the same way: reload from the server so a rejected
-    /// write cannot linger in the list, then re-push the hover row.
-    private func mutate(_ work: @escaping () async throws -> Void) {
-        Task {
-            do {
-                try await work()
-                promptsError = nil
-            } catch {
-                promptsError = tr("保存できませんでした。", "Couldn't save.", "无法保存。")
-            }
+            promptOrderSaveTask = nil
+            guard revision == promptRevision, await auth.currentSession?.userId == account else { return }
             await reloadPrompts()
+            if failed { promptsError = tr("並べ替えを保存できませんでした。再度お試しください。", "Couldn't save the order. Please try again.", "无法保存排序，请重试。") }
+            await onPromptsChanged()
+        }
+    }
+
+    private func mutate(_ work: @escaping (UserPromptRemoteStore) async throws -> Void) {
+        guard !isSavingButtons, promptOrderSaveTask == nil, let account = promptAccountID else { return }
+        isSavingButtons = true
+        Task {
+            defer { isSavingButtons = false }
+            guard await auth.currentSession?.userId == account else { return }
+            var failed = false
+            do { try await work(promptStore.scoped(to: account)) }
+            catch { failed = true }
+            guard await auth.currentSession?.userId == account else { return }
+            await reloadPrompts()
+            if failed { promptsError = tr("保存できませんでした。", "Couldn't save. Please try again.", "无法保存，请重试。") }
             await onPromptsChanged()
         }
     }
@@ -1021,3 +1055,23 @@ extension MainModel: ASWebAuthenticationPresentationContextProviding {
         }
     }
 }
+
+#if DEBUG
+extension MainModel {
+    /// Inert design fixtures; never restore a session, load files, or call a service.
+    func configureDesignPreview(signedIn: Bool = true, state: String = "ready") {
+        language = AppLanguageState.current
+        signedInEmail = signedIn ? "alex@example.com" : nil
+        displayName = signedIn ? "Alex" : ""
+        displayNameDraft = displayName
+        isTrusted = state != "permission"
+        authMode = state == "signup" ? .signUp : .signIn
+        isAuthenticating = state == "loading"
+        authError = state == "error" ? tr("接続できませんでした。ネットワークを確認して、もう一度お試しください。", "We couldn’t connect. Check your connection and try again. Your information has not been lost.", "无法连接。请检查网络连接，然后重试。你的信息没有丢失。") : nil
+        profileError = state == "error" ? authError : nil
+        email = state == "signup" ? "alex@example.com" : ""
+        prompts = OnboardingPresetPack.starter.drafts().enumerated().map { $0.element.userPrompt(at: $0.offset) }
+        history = []
+    }
+}
+#endif

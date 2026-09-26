@@ -48,11 +48,11 @@ struct AccountView: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(model.accountLabel)
-                        .font(Tokens.Font.body(15, weight: .semibold))
+                        .font(Tokens.LightFont.body(15, weight: .semibold))
                         .foregroundStyle(Tokens.Window.textPrimary)
                     if !model.displayName.isEmpty, let email = model.signedInEmail {
                         Text(email)
-                            .font(Tokens.Font.body(13))
+                            .font(Tokens.LightFont.body(13))
                             .foregroundStyle(Tokens.Window.textSecondary)
                     }
                     if let joined = model.joinedAt {
@@ -60,7 +60,7 @@ struct AccountView: View {
                             let date = Self.joinedFormatter.string(from: joined)
                             return tr("\(date) から利用中", "Member since \(date)", "\(date) 起使用")
                         }())
-                            .font(Tokens.Font.body(12))
+                            .font(Tokens.LightFont.body(12))
                             .foregroundStyle(Tokens.Window.textTertiary)
                     }
                 }
@@ -105,20 +105,20 @@ struct AccountView: View {
                 Hairline()
                 SettingsRow(title: tr("メールアドレス", "Email address", "邮箱地址")) {
                     Text(model.signedInEmail ?? "—")
-                        .font(Tokens.Font.body(13))
+                        .font(Tokens.LightFont.body(13))
                         .foregroundStyle(Tokens.Window.textSecondary)
                         .textSelection(.enabled)
                 }
                 Hairline()
                 SettingsRow(title: tr("利用開始", "Joined", "开始使用")) {
                     Text(model.joinedAt.map { Self.joinedFormatter.string(from: $0) } ?? "—")
-                        .font(Tokens.Font.body(13))
+                        .font(Tokens.LightFont.body(13))
                         .foregroundStyle(Tokens.Window.textSecondary)
                 }
             }
             if let error = model.profileError {
                 Text(error)
-                    .font(Tokens.Font.body(12))
+                    .font(Tokens.LightFont.body(12))
                     .foregroundStyle(Tokens.Window.textPrimary)
             }
         }
@@ -129,7 +129,7 @@ struct AccountView: View {
             SectionCaption(text: tr("同期", "Sync", "同步"))
             RowGroup {
                 SettingsRow(
-                    title: tr("ボタンと表示名", "Buttons and display name", "按钮与显示名称"),
+                    title: tr("ボタン・表示名・契約", "Buttons, name and subscription", "按钮、名称与订阅"),
                     subtitle: tr("スマホとこの Mac の両方に反映されます", "Applied on both your phone and this Mac", "会同时应用到手机和这台 Mac")
                 ) {
                     Badge(tr("同期", "Synced", "同步"))
@@ -137,7 +137,7 @@ struct AccountView: View {
                 Hairline()
                 SettingsRow(
                     title: tr("履歴と統計", "History and stats", "历史与统计"),
-                    subtitle: tr("文章の記録はこの端末から出ません", "Your text never leaves this Mac", "文字记录不会离开这台设备")
+                    subtitle: tr("設定と履歴はこの Mac に保存されます", "Preferences and history are stored on this Mac", "偏好和历史保存在这台 Mac")
                 ) {
                     Badge(tr("この Mac", "This Mac", "这台 Mac"))
                 }
@@ -151,7 +151,7 @@ struct AccountView: View {
             RowGroup {
                 SettingsRow(
                     title: tr("この Mac からサインアウト", "Sign out of this Mac", "从这台 Mac 退出登录"),
-                    subtitle: tr("履歴は端末に残り、同期だけが停止します", "History stays on the Mac; only syncing stops", "历史保留在本机，仅停止同步")
+                    subtitle: tr("設定と履歴はこの Mac に残ります", "Your preferences and history stay on this Mac", "偏好和历史保留在这台 Mac")
                 ) {
                     ActionButton(tr("サインアウト", "Sign out", "退出登录"), style: .secondary) { model.signOut() }
                 }
@@ -224,13 +224,13 @@ struct AccountView: View {
 
             if let error = model.authError {
                 Text(error)
-                    .font(Tokens.Font.body(13))
+                    .font(Tokens.LightFont.body(13))
                     .foregroundStyle(Tokens.Window.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let notice = model.authNotice {
                 Text(notice)
-                    .font(Tokens.Font.body(13))
+                    .font(Tokens.LightFont.body(13))
                     .foregroundStyle(Tokens.Window.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -260,10 +260,10 @@ struct AccountView: View {
             SectionCaption(text: tr("サインインすると", "When you sign in", "登录后"))
             RowGroup {
                 SettingsRow(
-                    title: tr("ボタンが自動で同期されます", "Your buttons sync automatically", "按钮会自动同步"),
-                    subtitle: tr("スマホで作ったボタンが、この Mac のバーにそのまま並びます", "The buttons you made on your phone appear on this Mac's bar", "在手机上创建的按钮会直接出现在这台 Mac 的工具栏上")
+                    title: tr("スマホと同期するボタン", "Your buttons, synced", "同步你的按钮"),
+                    subtitle: tr("同じアカウントでスマホのボタンと同期します", "Use the same saved buttons on your phone and Mac", "在手机和 Mac 上使用相同的已保存按钮")
                 ) {
-                    Badge(tr("同期", "Synced", "同步"))
+                    Badge(tr("この Mac", "This Mac", "这台 Mac"))
                 }
                 Hairline()
                 SettingsRow(
@@ -275,7 +275,7 @@ struct AccountView: View {
                 Hairline()
                 SettingsRow(
                     title: tr("履歴と統計はこの Mac に残ります", "History and stats stay on this Mac", "历史与统计保留在这台 Mac"),
-                    subtitle: tr("文章の記録はこの端末から出ません", "Your text never leaves this Mac", "文字记录不会离开这台设备")
+                    subtitle: tr("設定と履歴はこの Mac に保存されます", "Preferences and history are stored on this Mac", "偏好和历史保存在这台 Mac")
                 ) {
                     Badge(tr("この Mac", "This Mac", "这台 Mac"))
                 }
@@ -304,7 +304,7 @@ private struct StatusBadge: View {
                 .fill(isPositive ? Tokens.Window.success : Tokens.Window.controlOff)
                 .frame(width: 6, height: 6)
             Text(title)
-                .font(Tokens.Font.body(12, weight: .medium))
+                .font(Tokens.LightFont.body(12, weight: .medium))
         }
         .foregroundStyle(Tokens.Window.textSecondary)
         .padding(.horizontal, 10)
@@ -339,7 +339,7 @@ private struct ModeTabs: View {
             mode = value
         } label: {
             Text(title)
-                .font(Tokens.Font.body(13, weight: .medium))
+                .font(Tokens.LightFont.body(13, weight: .medium))
                 .foregroundStyle(
                     isActive ? Tokens.Window.textPrimary : Tokens.Window.textSecondary
                 )

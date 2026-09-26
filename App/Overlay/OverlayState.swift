@@ -6,41 +6,30 @@ import TextIO
 /// carry the captured target forward, because by the time a result exists the user's
 /// selection may be long gone and the target is the only record of where the text has
 /// to go back.
-///
-/// The reply pair is a **parallel** resting state, not a sixth step in the same line:
-/// `.replyArmed` stands in for `.pill` while a copy is live, and hovering it goes
-/// straight to `.replyInput` where hovering the pill goes to `.hoverRow`. From
-/// `.replyInput` on, the flow rejoins §4 unchanged — generating, result, insert.
 enum OverlayState: Equatable {
     case pill
     case hoverRow
     case inputBar(target: CapturedTarget)
+    case explicitReply(target: CapturedTarget)
     case generating(request: PendingRewrite)
     case result(ResultContext)
-    /// A copy is live and the bar is showing it. Resting, like `.pill`.
-    case replyArmed(ReplySource)
-    /// The input bar, in reply mode. The target was captured on hover, before this
-    /// window could take key — the same ordering `pressCustomInput` uses (§4).
+    /// Reply was clicked and the destination captured before taking key.
     case replyInput(reply: ReplySource, target: CapturedTarget)
 
     var isExpanded: Bool {
         switch self {
         case .pill: return false
-        case .hoverRow, .inputBar, .generating, .result, .replyArmed, .replyInput: return true
+        case .explicitReply, .hoverRow, .inputBar, .generating, .result, .replyInput: return true
         }
     }
 
-    /// Whether a copy is still live. `dismissReply` and the expiry timer both need to
-    /// leave a rewrite that is already in flight alone.
-    var isReply: Bool { replySource != nil }
+    var isReply: Bool { if case .explicitReply = self { return true }; return replySource != nil }
 
-    /// The live copy, in whichever of the two reply states holds it. `ReplyContextPanel`
-    /// is up for both, so the states it spans are one question, not two.
+    /// A source is active only after the user chooses Reply.
     var replySource: ReplySource? {
         switch self {
-        case .replyArmed(let source): return source
         case .replyInput(let source, _): return source
-        case .pill, .hoverRow, .inputBar, .generating, .result: return nil
+        case .explicitReply, .pill, .hoverRow, .inputBar, .generating, .result: return nil
         }
     }
 
@@ -51,9 +40,9 @@ enum OverlayState: Equatable {
         case .pill: return "pill"
         case .hoverRow: return "hoverRow"
         case .inputBar: return "inputBar"
+        case .explicitReply: return "explicitReply"
         case .generating: return "generating"
         case .result: return "result"
-        case .replyArmed: return "replyArmed"
         case .replyInput: return "replyInput"
         }
     }
@@ -64,7 +53,7 @@ enum OverlayState: Equatable {
     /// result panel is just a second control with nothing to do.
     var showsPill: Bool {
         switch self {
-        case .pill, .hoverRow, .inputBar, .replyArmed, .replyInput: return true
+        case .explicitReply, .pill, .hoverRow, .inputBar, .replyInput: return true
         case .generating, .result: return false
         }
     }
@@ -72,27 +61,18 @@ enum OverlayState: Equatable {
     /// Only the input bar and the result panel may take key, and only after capture.
     var wantsKeyWindow: Bool {
         switch self {
-        case .inputBar, .replyInput: return true
-        case .pill, .hoverRow, .generating, .result, .replyArmed: return false
+        case .explicitReply, .inputBar, .replyInput: return true
+        case .pill, .hoverRow, .generating, .result: return false
         }
     }
 
     /// Whether Sparkle may run a check right now. A scheduled updater window can take
     /// key, which is safe only while the bar is resting — anywhere else it would
     /// interrupt capture, typing, a rewrite in flight, or a result being judged.
-    ///
-    /// **Both resting states, not just `.pill`.** `.replyArmed` is documented above as
-    /// standing in for `.pill` while a copy is live, and clipboard watching is on by
-    /// default, so a copy puts the bar here for `ReplySource.lifetime` — 180 s at a
-    /// time, many times a day. Declining a check is not free: Sparkle stamps
-    /// `SULastCheckTime` *before* it asks `updater(_:mayPerform:)`
-    /// (`SPUUpdater.m:789` against `:847`) and then reschedules with
-    /// `usingCurrentDate:NO`, so one refusal costs a whole interval rather than
-    /// delaying the check to the moment the bar is free again.
     var allowsUpdateCheck: Bool {
         switch self {
-        case .pill, .replyArmed: return true
-        case .hoverRow, .inputBar, .generating, .result, .replyInput: return false
+        case .pill: return true
+        case .explicitReply, .hoverRow, .inputBar, .generating, .result, .replyInput: return false
         }
     }
 
@@ -108,7 +88,7 @@ enum OverlayState: Equatable {
         case .pill, .generating, .result: return .pill
         case .hoverRow: return .hoverRow
         case .inputBar: return .inputBar
-        case .replyArmed: return .replyArmed
+        case .explicitReply: return .replyInput
         case .replyInput: return .replyInput
         }
     }
@@ -119,9 +99,9 @@ enum OverlayState: Equatable {
         switch self {
         case .pill, .generating, .result:
             return Tokens.Geometry.pillHeight
-        case .hoverRow, .replyArmed:
+        case .hoverRow:
             return Tokens.Geometry.hoverRowHeight
-        case .inputBar, .replyInput:
+        case .explicitReply, .inputBar, .replyInput:
             return Tokens.Geometry.inputBarHeight
         }
     }
@@ -154,7 +134,6 @@ enum OverlayContentLayout: Equatable {
     case pill
     case hoverRow
     case inputBar
-    case replyArmed
     case replyInput
 }
 
@@ -164,11 +143,17 @@ enum OverlayContentLayout: Equatable {
 struct CapturedTarget: Equatable {
     let target: TextTarget
     let frontmostPID: pid_t?
+    var browserReplyBinding: BrowserReplyBinding? = nil
+    var writingStyle: ResolvedWritingStyle? = nil
+    var writingLanguageCode: String = AppLanguageState.current.writingLanguageCode
 
     static func == (lhs: CapturedTarget, rhs: CapturedTarget) -> Bool {
         lhs.target.text == rhs.target.text
             && lhs.target.captureMode == rhs.target.captureMode
             && lhs.frontmostPID == rhs.frontmostPID
+            && lhs.browserReplyBinding == rhs.browserReplyBinding
+            && lhs.writingStyle == rhs.writingStyle
+            && lhs.writingLanguageCode == rhs.writingLanguageCode
     }
 }
 
@@ -178,14 +163,17 @@ struct PendingRewrite: Equatable {
     /// guided regeneration uses the visible candidate while `captured` keeps pointing
     /// at the original field where Insert must write the final result.
     let requestText: String
-    /// The prompt text sent to the backend. Echoed in the result panel's top field
-    /// per `result.png`, which is why it is held rather than discarded after the call.
+    /// The prompt sent to the backend, retained for regeneration.
     let promptText: String
+    var instruction: ResultInstruction = .hidden
     /// The copied message being replied to, or nil outside reply mode (§16). Held
     /// rather than read off the state because ↻ regenerates from `pending` alone, and
     /// a regenerate that dropped this would silently rewrite the user's draft instead
     /// of re-composing the reply.
     let replyTo: String?
+    let replyContext: ReplyContext?
+    let draftReadStatus: ReplyDraftReadStatus?
+    var isReply: Bool { replyTo != nil || replyContext != nil }
     /// The button's own title, or nil for the custom-input path.
     let buttonTitle: String?
     /// The attempt this rewrite belongs to. Held on the pending request rather than
@@ -194,6 +182,7 @@ struct PendingRewrite: Equatable {
     /// report against the attempt that produced *that* candidate, not the newest one.
     let attempt: RewriteAttempt
     let startedAt: Date
+    var lessonID: UUID? = nil
 
     /// Tutorial rewrites exercise the real backend and write path, but are not part
     /// of the user's history or statistics. Read off the attempt so there is one

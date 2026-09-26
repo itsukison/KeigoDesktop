@@ -90,9 +90,10 @@ final class ClipboardWatcher {
 
     private var timer: Timer?
     private var lastChangeCount = NSPasteboard.general.changeCount
-    private let onCopy: (ReplySource) -> Void
+    private var wasEnabled = true
+    private let onCopy: (ReplySource?) -> Void
 
-    init(onCopy: @escaping (ReplySource) -> Void) {
+    init(onCopy: @escaping (ReplySource?) -> Void) {
         self.onCopy = onCopy
     }
 
@@ -111,17 +112,16 @@ final class ClipboardWatcher {
     private func poll() {
         let pasteboard = NSPasteboard.general
         let count = pasteboard.changeCount
+        let enabled = Self.isEnabled && !Self.isCopyTemporarilyDisabled
+        if wasEnabled && !enabled { onCopy(nil) }
+        wasEnabled = enabled
         guard count != lastChangeCount else { return }
         // Absorbed even when the change turns out to be ours, so a bump that happens
         // mid-suspension is not re-examined once the suspension lifts.
         lastChangeCount = count
 
         guard Self.suspensionDepth == 0, count != Self.lastSelfChangeCount else { return }
-        guard Self.isEnabled, !Self.isCopyTemporarilyDisabled else { return }
-        guard let string = pasteboard.string(forType: .string),
-              let source = ReplySource(copied: string)
-        else { return }
-
-        onCopy(source)
+        guard enabled else { return }
+        onCopy(pasteboard.string(forType: .string).flatMap { ReplySource(copied: $0) })
     }
 }

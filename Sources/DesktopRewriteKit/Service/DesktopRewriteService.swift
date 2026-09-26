@@ -84,12 +84,22 @@ public struct DesktopRewriteService: Sendable {
         let data = try await post(
             to: config.rewriteEndpoint,
             body: try JSONEncoder().encode(request),
-            timeout: 25
+            timeout: 25,
+            styleVersion: request.writingStyle == nil ? nil : "1"
         )
         guard let result = try? JSONDecoder().decode(RewriteResult.self, from: data) else {
             throw RewriteError.invalidResponse
         }
+        guard request.writingStyle == nil || result.candidates.count == 1 else { throw RewriteError.invalidResponse }
         return result
+    }
+
+    public func replyContext(_ evidence: CapturedReplyEvidence, attemptId: String = UUID().uuidString, appCategory: String = "other", appVersion: String = "unknown") async throws -> ReplyContextOutcome {
+        let data = try await post(to: config.supabaseURL.appendingPathComponent("functions/v1/desktop-reply-context"),
+                                  body: try JSONEncoder().encode(evidence), timeout: 25, attemptId: attemptId, replyMetadata: ["X-Reply-App-Category": appCategory, "X-Reply-Client-Version": appVersion])
+        let outcome = try JSONDecoder().decode(ReplyContextOutcome.self, from: data)
+        guard outcome.snapshotId == evidence.snapshotId else { throw RewriteError.invalidResponse }
+        return outcome
     }
 
     // MARK: - Feedback
@@ -129,7 +139,7 @@ public struct DesktopRewriteService: Sendable {
 
     // MARK: - Wire
 
-    private func post(to url: URL, body: Data, timeout: TimeInterval) async throws -> Data {
+    private func post(to url: URL, body: Data, timeout: TimeInterval, attemptId: String? = nil, styleVersion: String? = nil, replyMetadata: [String: String] = [:]) async throws -> Data {
         let accessToken: String
         do {
             accessToken = try await auth.ensureFreshAccessToken()
@@ -144,12 +154,29 @@ public struct DesktopRewriteService: Sendable {
         request.setValue(config.publishableKey, forHTTPHeaderField: "apikey")
         request.timeoutInterval = timeout
         request.httpBody = body
+        if let attemptId { request.setValue(attemptId, forHTTPHeaderField: "X-Reply-Attempt") }
+        for (name, value) in replyMetadata { request.setValue(value, forHTTPHeaderField: name) }
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw RewriteError.invalidResponse
         }
-        if (200..<300).contains(http.statusCode) { return data }
+        if (200..<300).contains(http.statusCode) {
+            if let styleVersion, http.value(forHTTPHeaderField: "X-Desktop-Style-Version") != styleVersion {
+                throw RewriteError.backend(tr("文章スタイルに対応するサーバーの更新が必要です。", "The server needs an update to support writing styles.", "服务器需要更新以支持写作风格。"))
+            }
+            return data
+        }
+
+        if url.lastPathComponent == "desktop-reply-context" {
+            struct ContextError: Decodable { let error: String; let diagnostics: ReplyInterpretationDiagnostics? }
+            let failure = try? JSONDecoder().decode(ContextError.self, from: data)
+            let code = failure?.error
+            if http.statusCode == 401 || http.statusCode == 403 { throw ReplyAnalysisError.unauthorized }
+            let error = code.flatMap(ReplyAnalysisError.init(rawValue:)) ?? .context_unavailable
+            if let diagnostics = failure?.diagnostics { throw ReplyAnalysisFailure(code: error, diagnostics: diagnostics) }
+            throw error
+        }
 
         let payload = try? JSONDecoder().decode(ErrorPayload.self, from: data)
         let message = payload?.error.message ?? tr("書き換えに失敗しました。", "The rewrite failed.", "改写失败。")

@@ -2,50 +2,48 @@ import DesktopRewriteKit
 import SwiftUI
 
 struct OnboardingVisualStage<Content: View>: View {
+    var artwork: AsideBackdrop.Artwork = .mountain
     var cornerRadius: CGFloat = 20
     @ViewBuilder var content: () -> Content
-
     var body: some View {
         ZStack {
-            OnboardingLavenderBackground()
+            AsideBackdrop(artwork: artwork)
             content()
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(Color.black.opacity(0.06))
-        )
     }
 }
 
-private struct OnboardingLavenderBackground: View {
+/// Shared bounds keep illustration edges stable across account, name and access.
+struct OnboardingSplitPage<Copy: View, Visual: View>: View {
+    @ViewBuilder var copy: () -> Copy
+    @ViewBuilder var visual: () -> Visual
     var body: some View {
-        GeometryReader { proxy in
-            let diagonal = hypot(proxy.size.width, proxy.size.height)
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(hex: 0xefecfa),
-                        Color(hex: 0xddd8f2),
-                        Color(hex: 0xc8c1e8),
-                    ],
-                    startPoint: UnitPoint(x: 0.08, y: 0),
-                    endPoint: UnitPoint(x: 0.92, y: 1)
-                )
-                RadialGradient(
-                    colors: [.white, .white.opacity(0)],
-                    center: UnitPoint(x: 0.18, y: 0.12),
-                    startRadius: 0,
-                    endRadius: diagonal * 0.62
-                )
-                RadialGradient(
-                    colors: [Color(hex: 0xa99ed4), Color(hex: 0xa99ed4).opacity(0)],
-                    center: UnitPoint(x: 0.88, y: 0.84),
-                    startRadius: 0,
-                    endRadius: diagonal * 0.56
-                )
-                .opacity(0.78)
+        HStack(spacing: 32) {
+            GeometryReader { geometry in
+                ScrollView {
+                    copy()
+                        .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .leading)
+                }
+                .scrollIndicators(.hidden)
             }
+            .frame(width: 420)
+            visual().frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+struct OnboardingChoicePage<Content: View>: View {
+    var width: CGFloat = 560
+    @ViewBuilder var content: () -> Content
+    var body: some View {
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 24) { content() }
+                    .frame(width: width)
+                    .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .center)
+            }
+            .scrollIndicators(.hidden)
         }
     }
 }
@@ -58,13 +56,13 @@ struct OnboardingMailScene<Editor: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let horizontalInset = max(18, proxy.size.width * 0.055)
-            let bottomInset = showsBar ? max(44, proxy.size.height * 0.16) : 22
+            let horizontalInset = showsBar ? max(18, proxy.size.width * 0.055) : 24
+            let bottomInset = showsBar ? max(44, proxy.size.height * 0.16) : 24
 
             ZStack(alignment: .bottom) {
                 OnboardingMailWindow(editor: editor)
                     .padding(.horizontal, horizontalInset)
-                    .padding(.top, max(18, proxy.size.height * 0.07))
+                    .padding(.top, showsBar ? max(18, proxy.size.height * 0.07) : 24)
                     .padding(.bottom, bottomInset)
 
                 if showsBar {
@@ -92,7 +90,7 @@ struct OnboardingMailWindow<Editor: View>: View {
             }
             .padding(.horizontal, 14)
             .frame(height: 34)
-            .background(Color(hex: 0xf8f8f9))
+            .background(Tokens.Window.surfaceHover)
 
             MailHeaderRow(label: tr("宛先", "To", "收件人"), value: tr("佐藤さん", "Sam Rivera", "佐藤さん"))
             Hairline()
@@ -119,147 +117,44 @@ struct OnboardingSlackScene<Composer: View>: View {
     @ViewBuilder var composer: () -> Composer
 
     var body: some View {
-        GeometryReader { proxy in
-            VStack(spacing: 0) {
-                MockWindowChrome(title: "Slack — Core7")
-
-                HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 8) {
-                            RoundedRectangle(cornerRadius: 7)
-                                .fill(Color(hex: 0x4a154b))
-                                .frame(width: 28, height: 28)
-                                .overlay(
-                                    Text("C")
-                                        .font(Tokens.Font.body(13, weight: .medium))
-                                        .foregroundStyle(.white)
-                                )
-                            Text("Core7")
-                                .font(Tokens.Font.body(13, weight: .medium))
-                                .foregroundStyle(.white)
+        VStack(spacing: 0) {
+            MockWindowChrome(title: "Slack — # product").accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image("LogoSlack").resizable().scaledToFit().frame(width: 32, height: 32)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Aki Matsuda").font(Tokens.LightFont.body(14, weight: .medium))
+                        Text(message).font(Tokens.LightFont.Onboarding.instruction)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button(action: onCopy) {
+                            Label(ReplyContextFeature.isEnabled
+                                ? (copied ? tr("選択済み", "Selected", "已选择") : tr("このメッセージを選択", "Select this message", "选择这条消息"))
+                                : (copied ? tr("コピーしました", "Copied", "已复制") : tr("メッセージをコピー", "Copy message", "复制消息")),
+                                systemImage: copied ? "checkmark" : "doc.on.doc")
+                                .font(Tokens.LightFont.Onboarding.action)
+                                .foregroundStyle(copied ? Tokens.Window.success : Tokens.Window.accentText)
+                                .padding(.horizontal, 12).frame(height: 40)
+                                .background(Tokens.Window.accentTint, in: RoundedRectangle(cornerRadius: 10))
                         }
-                        .padding(.horizontal, 12)
-                        .frame(height: 48)
-
-                        SlackSidebarRow(title: tr("スレッド", "Threads", "话题"))
-                        SlackSidebarRow(title: tr("メンション", "Mentions", "提及"))
-
-                        Text(tr("チャンネル", "Channels", "频道"))
-                            .font(Tokens.Font.body(10, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.62))
-                            .padding(.horizontal, 14)
-                            .padding(.top, 18)
-                            .padding(.bottom, 5)
-
-                        SlackSidebarRow(title: "#  general")
-                        SlackSidebarRow(title: "#  product", selected: true)
-                        SlackSidebarRow(title: "#  random")
-                        Spacer()
-                    }
-                    .frame(width: max(142, proxy.size.width * 0.22), alignment: .topLeading)
-                    .background(Color(hex: 0x3f0e40))
-
-                    VStack(spacing: 0) {
-                        HStack(spacing: 9) {
-                            Text("# product")
-                                .font(Tokens.Font.body(14, weight: .medium))
-                                .foregroundStyle(Tokens.Window.textPrimary)
-                            Text(tr("8人", "8", "8人"))
-                                .font(Tokens.Font.body(10))
-                                .foregroundStyle(Tokens.Window.textTertiary)
-                            Spacer()
-                            Icon(.search, size: 13)
-                                .foregroundStyle(Tokens.Window.textSecondary)
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(height: 45)
-                        .background(.white)
-                        .overlay(alignment: .bottom) { Hairline() }
-
-                        VStack(alignment: .leading, spacing: 0) {
-                            HStack(alignment: .top, spacing: 10) {
-                                Circle()
-                                    .fill(Color(hex: 0xd8d1ed))
-                                    .frame(width: 34, height: 34)
-                                    .overlay(
-                                        Text("AM")
-                                            .font(Tokens.Font.body(10, weight: .medium))
-                                            .foregroundStyle(Color(hex: 0x4a154b))
-                                    )
-
-                                VStack(alignment: .leading, spacing: 5) {
-                                    HStack(spacing: 7) {
-                                        Text("Aki Matsuda")
-                                            .font(Tokens.Font.body(12, weight: .medium))
-                                        Text("10:24")
-                                            .font(Tokens.Font.body(9))
-                                            .foregroundStyle(Tokens.Window.textTertiary)
-                                    }
-                                    Text(message)
-                                        .font(Tokens.Font.body(13))
-                                        .foregroundStyle(Tokens.Window.textPrimary)
-                                        .lineSpacing(4)
-                                        .fixedSize(horizontal: false, vertical: true)
-
-                                    Button(action: onCopy) {
-                                        HStack(spacing: 6) {
-                                            Icon(copied ? .check : .copy, size: 12)
-                                            Text(copied ? tr("コピーしました", "Copied", "已复制") : tr("メッセージをコピー", "Copy message", "复制消息"))
-                                                .font(Tokens.Font.body(11, weight: .medium))
-                                        }
-                                        .foregroundStyle(
-                                            copied ? Tokens.Window.success : Tokens.Window.accentText
-                                        )
-                                        .padding(.horizontal, 9)
-                                        .frame(height: 28)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 7)
-                                                .fill(copied ? Tokens.Window.surface : Tokens.Window.accentTint)
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                    .cursor(.pointingHand)
-                                    .padding(.top, 3)
-                                }
-                            }
-                            .padding(18)
-
-                            Spacer(minLength: 12)
-
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text(copied ? tr("返信先を選択済み", "Ready to reply", "已选定回复对象") : tr("コピーすると返信モードになります", "Copying arms reply mode", "复制后即进入回复模式"))
-                                    .font(Tokens.Font.body(10, weight: .medium))
-                                    .foregroundStyle(
-                                        copied ? Tokens.Window.success : Tokens.Window.textTertiary
-                                    )
-                                composer()
-                                    .frame(height: 76)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 9)
-                                            .strokeBorder(
-                                                copied ? Tokens.Window.accent : Tokens.Window.hairline,
-                                                lineWidth: 1
-                                            )
-                                    )
-                                    .clipShape(RoundedRectangle(cornerRadius: 9))
-                            }
-                            .padding(14)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(.white)
+                        .buttonStyle(LightPressStyle()).disabled(copied)
                     }
                 }
+                Spacer(minLength: 0)
+                Text(tr("あなたの返信", "Your reply", "你的回复"))
+                    .font(Tokens.LightFont.Onboarding.caption)
+                    .foregroundStyle(Tokens.Window.textSecondary)
+                composer().frame(minHeight: 76, maxHeight: .infinity)
+                    .background(.white)
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Tokens.Window.borderControl))
             }
-            .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.09))
-            )
-            .shadow(color: .black.opacity(0.16), radius: 24, y: 12)
-            .padding(.horizontal, max(26, proxy.size.width * 0.055))
-            .padding(.vertical, max(20, proxy.size.height * 0.06))
+            .padding(24)
         }
+        .foregroundStyle(Tokens.Window.textPrimary)
+        .background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
+        .padding(24)
     }
 }
 
@@ -269,12 +164,12 @@ private struct SlackSidebarRow: View {
 
     var body: some View {
         Text(title)
-            .font(Tokens.Font.body(11, weight: selected ? .medium : .regular))
+            .font(Tokens.LightFont.body(11, weight: selected ? .medium : .regular))
             .foregroundStyle(.white.opacity(selected ? 1 : 0.72))
             .padding(.horizontal, 14)
             .frame(height: 27)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? Color(hex: 0x1164a3) : .clear)
+            .accessibilityHidden(true)
     }
 }
 
@@ -289,7 +184,7 @@ struct OnboardingStaticMailBody: View {
             Text(tr("よろしくお願いします。", "Thanks!", "拜托了。"))
             Spacer(minLength: 0)
         }
-        .font(Tokens.Font.body(12))
+        .font(Tokens.LightFont.body(12))
         .foregroundStyle(Tokens.Window.textPrimary)
         .lineSpacing(4)
         .padding(16)
@@ -331,7 +226,7 @@ struct OnboardingNameMailBody: View {
             .padding(.top, 5)
             Spacer(minLength: 0)
         }
-        .font(Tokens.Font.body(12))
+        .font(Tokens.LightFont.Onboarding.body)
         .foregroundStyle(Tokens.Window.textPrimary)
         .lineSpacing(4)
         .padding(16)
@@ -395,109 +290,162 @@ struct OnboardingOverlayBar: View {
     }
 }
 
+/// The System Settings → Accessibility pane, drawn close to the real window so the
+/// step transfers: the pane name in the title bar, a sidebar with the pane selected,
+/// the explanation line, and a short app list whose toggles the user will recognise.
+/// Only the KeigoButton row reflects real state; the two Apple-app rows are set
+/// dressing that keeps the list from looking like it contains one app. Deliberately
+/// sparser than the real pane — a dozen sidebar categories and app rows add nothing
+/// to the lesson.
 struct OnboardingSystemSettingsScene: View {
     let granted: Bool
 
     var body: some View {
-        GeometryReader { proxy in
+        VStack(spacing: 0) {
+            titleBar
             HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 0) {
-                    MockTrafficLights()
-                        .padding(.bottom, 15)
-
-                    HStack(spacing: 7) {
-                        Icon(.search, size: 12)
-                        Text(tr("検索", "Search", "搜索"))
-                            .font(Tokens.Font.body(11))
-                    }
-                    .foregroundStyle(Tokens.Window.textTertiary)
-                    .padding(.horizontal, 9)
-                    .frame(height: 26)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(.white.opacity(0.72)))
-
-                    SettingsSidebarRow(icon: .settings, title: tr("一般", "General", "通用"))
-                        .padding(.top, 12)
-                    SettingsSidebarRow(icon: .user, title: tr("ユーザとグループ", "Users & Groups", "用户与群组"))
-                    SettingsSidebarRow(icon: .accessibility, title: tr("プライバシーとセキュリティ", "Privacy & Security", "隐私与安全"), selected: true)
-                    SettingsSidebarRow(icon: .info, title: tr("このMacについて", "About This Mac", "关于本机"))
-                    Spacer()
-                }
-                .padding(14)
-                .frame(width: max(145, proxy.size.width * 0.34), alignment: .topLeading)
-                .background(.white.opacity(0.52))
-
-                Rectangle()
-                    .fill(Color.black.opacity(0.07))
-                    .frame(width: 1)
-
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(tr("アクセシビリティ", "Accessibility", "辅助功能"))
-                        .font(Tokens.Font.display(17))
-                        .foregroundStyle(Tokens.Window.textPrimary)
-
-                    Text(tr("以下のアプリケーションに、Macの操作を許可します。", "Allow the applications below to control your Mac.", "允许以下应用控制你的 Mac。"))
-                        .font(Tokens.Font.body(11))
-                        .foregroundStyle(Tokens.Window.textSecondary)
-                        .padding(.top, 7)
-
-                    VStack(spacing: 0) {
-                        HStack(spacing: 10) {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(.white)
-                                .frame(width: 34, height: 34)
-                                .overlay(AppMark(size: 20))
-                                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Tokens.Window.hairline))
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(tr("敬語ボタン", "KeigoButton", "敬語ボタン"))
-                                    .font(Tokens.Font.body(12, weight: .medium))
-                                Text(tr("ほかのアプリの入力欄を読み書き", "Reads and replaces text in other apps", "读写其他应用的输入框"))
-                                    .font(Tokens.Font.body(10))
-                                    .foregroundStyle(Tokens.Window.textSecondary)
-                            }
-                            Spacer(minLength: 8)
-                            MockSwitch(isOn: granted)
-                        }
-                        .padding(12)
-
-                        Hairline()
-
-                        HStack(spacing: 6) {
-                            Icon(.add, size: 12)
-                            Icon(.close, size: 12)
-                            Spacer()
-                            Text(granted ? tr("許可済み", "Allowed", "已允许") : tr("許可が必要です", "Needs permission", "需要授权"))
-                                .font(Tokens.Font.body(10, weight: .medium))
-                                .foregroundStyle(granted ? Tokens.Window.success : Tokens.Window.textSecondary)
-                        }
-                        .padding(.horizontal, 12)
-                        .frame(height: 32)
-                    }
-                    .background(RoundedRectangle(cornerRadius: 10).fill(.white.opacity(0.82)))
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.black.opacity(0.08)))
-                    .padding(.top, 18)
-
-                    HStack(alignment: .top, spacing: 8) {
-                        Icon(.info, size: 12)
-                            .opticalCentre()
-                        Text(tr("マイクや画面収録へのアクセスは必要ありません。", "No microphone or screen recording access is needed.", "无需麦克风或录屏权限。"))
-                            .font(Tokens.Font.body(10))
-                    }
-                    .foregroundStyle(Tokens.Window.textSecondary)
-                    .padding(.top, 14)
-                    Spacer()
-                }
-                .padding(22)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(Color(hex: 0xf7f7f8).opacity(0.9))
+                sidebar
+                content
             }
-            .background(.white.opacity(0.82))
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Color.black.opacity(0.09)))
-            .shadow(color: .black.opacity(0.16), radius: 24, y: 12)
-            .padding(24)
         }
+        .foregroundStyle(Tokens.Window.textPrimary)
+        .frame(height: 320)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
+        .padding(24)
+        .accessibilityHidden(true)
+    }
+
+    private var titleBar: some View {
+        ZStack {
+            Text(tr("アクセシビリティ", "Accessibility", "辅助功能"))
+                .font(Tokens.LightFont.body(12, weight: .semibold))
+            HStack(spacing: 16) {
+                MockTrafficLights()
+                HStack(spacing: 12) {
+                    Image(systemName: "chevron.left")
+                        .foregroundStyle(Tokens.Window.textSecondary)
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Tokens.Window.textTertiary)
+                }
+                .font(.system(size: 10, weight: .semibold))
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+        }
+        .frame(height: 34)
+        .background(Color(hex: 0xf4f4f6))
+        .overlay(alignment: .bottom) { Hairline() }
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 10, weight: .medium))
+                Text(tr("検索", "Search", "搜索"))
+                    .font(Tokens.LightFont.body(11))
+            }
+            .foregroundStyle(Tokens.Window.textSecondary)
+            .padding(.horizontal, 7)
+            .frame(height: 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.black.opacity(0.07), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .padding(.bottom, 8)
+
+            SettingsSidebarRow(symbol: "wifi", tint: Color(hex: 0x007aff), title: "Wi-Fi")
+            SettingsSidebarRow(symbol: "gearshape.fill", tint: Color(hex: 0x8e8e93), title: tr("一般", "General", "通用"))
+            SettingsSidebarRow(symbol: "figure.stand", tint: Color(hex: 0x007aff), title: tr("アクセシビリティ", "Accessibility", "辅助功能"), selected: true)
+            SettingsSidebarRow(symbol: "circle.lefthalf.filled", tint: Color(hex: 0x3a3a3c), title: tr("外観", "Appearance", "外观"))
+            SettingsSidebarRow(symbol: "display", tint: Color(hex: 0x007aff), title: tr("ディスプレイ", "Displays", "显示器"))
+            SettingsSidebarRow(symbol: "bell.fill", tint: Color(hex: 0xff3b30), title: tr("通知", "Notifications", "通知"))
+            Spacer()
+        }
+        .padding(10)
+        .frame(width: 150)
+        .background(Color(hex: 0xe9e7ea))
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(Tokens.Window.hairline).frame(width: 1)
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(tr(
+                "以下のアプリケーションにコンピュータの制御を許可します。",
+                "Allow the applications below to control your computer.",
+                "允许以下应用程序控制您的电脑。"
+            ))
+            .font(Tokens.LightFont.body(12))
+            .foregroundStyle(Tokens.Window.textSecondary)
+            .padding(.horizontal, 4)
+
+            VStack(spacing: 0) {
+                appRow(name: "Terminal", isOn: true) { terminalIcon }
+                Hairline().padding(.leading, 50)
+                appRow(name: tr("敬語ボタン", "KeigoButton", "敬語ボタン"), isOn: granted) { AppMark(size: 28) }
+                Hairline().padding(.leading, 50)
+                appRow(name: "TextEdit", isOn: false) { textEditIcon }
+                Hairline()
+                HStack(spacing: 0) {
+                    Text("+").frame(width: 30)
+                    Rectangle().fill(Tokens.Window.hairline).frame(width: 1, height: 14)
+                    Text("−").frame(width: 30)
+                    Spacer()
+                }
+                .font(Tokens.LightFont.body(13, weight: .medium))
+                .foregroundStyle(Tokens.Window.textSecondary)
+                .frame(height: 26)
+                .background(Color(hex: 0xf7f7f9))
+            }
+            .background(.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Tokens.Window.hairline)
+            )
+
+            Spacer()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: 0xf6f6f8))
+    }
+
+    private func appRow<Icon: View>(name: String, isOn: Bool, @ViewBuilder icon: () -> Icon) -> some View {
+        HStack(spacing: 10) {
+            icon()
+                .frame(width: 28, height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: 6.5, style: .continuous))
+            Text(name)
+                .font(Tokens.LightFont.body(13))
+            Spacer(minLength: 0)
+            MockSwitch(isOn: isOn)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+    }
+
+    private var terminalIcon: some View {
+        Color(hex: 0x232326)
+            .overlay(
+                Text("›_")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white)
+            )
+    }
+
+    private var textEditIcon: some View {
+        Color.white
+            .overlay(
+                Image(systemName: "pencil")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: 0xff9f0a))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.12))
+            )
     }
 }
 
@@ -506,10 +454,10 @@ private struct MockWindowChrome: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            MockTrafficLights()
+            MockTrafficLights().accessibilityHidden(true)
             Spacer()
             Text(title)
-                .font(Tokens.Font.body(10, weight: .medium))
+                .font(Tokens.LightFont.body(10, weight: .medium))
                 .foregroundStyle(Tokens.Window.textSecondary)
             Spacer()
             Color.clear.frame(width: 42, height: 1)
@@ -539,9 +487,11 @@ private struct MockToolbarButton: View {
         HStack(spacing: 5) {
             Icon(icon, size: 11)
             Text(title)
-                .font(Tokens.Font.body(10, weight: .medium))
+                .font(Tokens.LightFont.body(10, weight: .medium))
         }
-        .foregroundStyle(Tokens.Window.textSecondary)
+        .foregroundStyle(Tokens.Window.textTertiary)
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
     }
 }
 
@@ -559,48 +509,60 @@ private struct MailHeaderRow: View {
                 .foregroundStyle(Tokens.Window.textPrimary)
             Spacer()
         }
-        .font(Tokens.Font.body(10))
+        .font(Tokens.LightFont.body(10))
         .padding(.horizontal, 14)
         .frame(height: 27)
         .background(.white)
     }
 }
 
+/// One row of the mock System Settings sidebar. The glyphs are SF Symbols rather
+/// than Reicon on purpose: this is macOS's own chrome being imitated, not our UI,
+/// and the real pane's rows are coloured plates with white system glyphs.
 private struct SettingsSidebarRow: View {
-    let icon: Icon.Name
+    let symbol: String
+    let tint: Color
     let title: String
     var selected = false
 
     var body: some View {
         HStack(spacing: 7) {
-            Icon(icon, size: 12)
-                .opticalCentre()
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(tint)
+                .frame(width: 20, height: 20)
+                .overlay(
+                    Image(systemName: symbol)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.white)
+                )
             Text(title)
-                .font(Tokens.Font.body(10, weight: selected ? .medium : .regular))
+                .font(Tokens.LightFont.body(11, weight: selected ? .medium : .regular))
                 .lineLimit(1)
+            Spacer(minLength: 0)
         }
         .foregroundStyle(Tokens.Window.textPrimary)
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 6)
+        .frame(height: 26)
         .background(
-            RoundedRectangle(cornerRadius: 7)
-                .fill(selected ? Tokens.Window.rowActive.opacity(0.92) : .clear)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(selected ? .white.opacity(0.85) : .clear)
         )
     }
 }
 
+/// macOS's own switch (36×22, system blue), not the app's control: it sits in a
+/// replica of System Settings and has to read as the toggle the user is about to flip.
 private struct MockSwitch: View {
     let isOn: Bool
 
     var body: some View {
         ZStack(alignment: isOn ? .trailing : .leading) {
             Capsule()
-                .fill(isOn ? Tokens.Window.accent : Tokens.Window.controlOff)
-                .frame(width: 32, height: 19)
+                .fill(isOn ? Color(hex: 0x007aff) : Color(hex: 0xd6d6da))
+                .frame(width: 34, height: 20)
             Circle()
                 .fill(.white)
-                .frame(width: 15, height: 15)
+                .frame(width: 16, height: 16)
                 .padding(2)
                 .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
         }

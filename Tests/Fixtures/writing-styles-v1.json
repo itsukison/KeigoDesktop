@@ -1,0 +1,326 @@
+[
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "email",
+    "voice": "relaxed",
+    "notes": "",
+    "source": "known_surface",
+    "organization": "preserve"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "email",
+    "voice": "relaxed",
+    "notes": "",
+    "source": "known_surface",
+    "organization": "readable"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "email",
+    "voice": "relaxed",
+    "notes": "",
+    "source": "known_surface",
+    "organization": "reorganize"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "email",
+    "voice": "polite",
+    "notes": "",
+    "source": "known_surface",
+    "organization": "preserve"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "email",
+    "voice": "polite",
+    "notes": "",
+    "source": "known_surface",
+    "organization": "readable"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "email",
+    "voice": "polite",
+    "notes": "",
+    "source": "known_surface",
+    "organization": "reorganize"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "email",
+    "voice": "formal",
+    "notes": "",
+    "source": "known_surface",
+    "organization": "preserve"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "email",
+    "voice": "formal",
+    "notes": "",
+    "source": "known_surface",
+    "organization": "readable"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "email",
+    "voice": "formal",
+    "notes": "",
+    "source": "known_surface",
+    "organization": "reorganize"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "work_chat",
+    "voice": "casual",
+    "notes": "",
+    "source": "known_surface",
+    "presentation": "concise"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "work_chat",
+    "voice": "casual",
+    "notes": "",
+    "source": "known_surface",
+    "presentation": "balanced"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "work_chat",
+    "voice": "casual",
+    "notes": "",
+    "source": "known_surface",
+    "presentation": "detailed"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "work_chat",
+    "voice": "neutral",
+    "notes": "",
+    "source": "known_surface",
+    "presentation": "concise"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "work_chat",
+    "voice": "neutral",
+    "notes": "",
+    "source": "known_surface",
+    "presentation": "balanced"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "work_chat",
+    "voice": "neutral",
+    "notes": "",
+    "source": "known_surface",
+    "presentation": "detailed"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "work_chat",
+    "voice": "polite",
+    "notes": "",
+    "source": "known_surface",
+    "presentation": "concise"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "work_chat",
+    "voice": "polite",
+    "notes": "",
+    "source": "known_surface",
+    "presentation": "balanced"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "work_chat",
+    "voice": "polite",
+    "notes": "",
+    "source": "known_surface",
+    "presentation": "detailed"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "personal",
+    "voice": "casual",
+    "notes": "",
+    "source": "known_surface",
+    "rhythm": "preserve"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "personal",
+    "voice": "casual",
+    "notes": "",
+    "source": "known_surface",
+    "rhythm": "moderate"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "personal",
+    "voice": "casual",
+    "notes": "",
+    "source": "known_surface",
+    "rhythm": "frequent"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "personal",
+    "voice": "polite",
+    "notes": "",
+    "source": "known_surface",
+    "rhythm": "preserve"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "personal",
+    "voice": "polite",
+    "notes": "",
+    "source": "known_surface",
+    "rhythm": "moderate"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "personal",
+    "voice": "polite",
+    "notes": "",
+    "source": "known_surface",
+    "rhythm": "frequent"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "personal",
+    "voice": "formal",
+    "notes": "",
+    "source": "known_surface",
+    "rhythm": "preserve"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "personal",
+    "voice": "formal",
+    "notes": "",
+    "source": "known_surface",
+    "rhythm": "moderate"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "personal",
+    "voice": "formal",
+    "notes": "",
+    "source": "known_surface",
+    "rhythm": "frequent"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "other",
+    "voice": "conversational",
+    "notes": "",
+    "source": "known_surface",
+    "editStrength": "light"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "other",
+    "voice": "conversational",
+    "notes": "",
+    "source": "known_surface",
+    "editStrength": "flow"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "other",
+    "voice": "conversational",
+    "notes": "",
+    "source": "known_surface",
+    "editStrength": "rework"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "other",
+    "voice": "neutral",
+    "notes": "",
+    "source": "known_surface",
+    "editStrength": "light"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "other",
+    "voice": "neutral",
+    "notes": "",
+    "source": "known_surface",
+    "editStrength": "flow"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "other",
+    "voice": "neutral",
+    "notes": "",
+    "source": "known_surface",
+    "editStrength": "rework"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "other",
+    "voice": "formal",
+    "notes": "",
+    "source": "known_surface",
+    "editStrength": "light"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "other",
+    "voice": "formal",
+    "notes": "",
+    "source": "known_surface",
+    "editStrength": "flow"
+  },
+  {
+    "version": 1,
+    "resolverVersion": 1,
+    "context": "other",
+    "voice": "formal",
+    "notes": "",
+    "source": "known_surface",
+    "editStrength": "rework"
+  }
+]

@@ -53,14 +53,14 @@ artwork arrived in.
 
 | Asset | Cut | Source | Used for |
 |---|---|---|---|
-| `icon-brand` | the full-bleed purple tile | `public/default.png` | `AppMark` (sidebar, onboarding) |
+| `KeigoAppMark` | the full-bleed blue tile | `public/generated/keigo-icon-cyan-v2.png` | `AppMark` (sidebar, onboarding) |
 | `icon-mark` | line art, **template** | `public/black.png` | the menu-bar status item, `IconPlate(icon: .mark)` |
 | `icon-mark-filled` | filled, two-tone, **not** a template | `public/bgremoved.png` | static source/fallback for the overlay animation |
-| `AppIcon` | the full tile | `public/default.png` | the Dock, Finder, the Accessibility dialog |
+| `KeigoAppIcon` | the full tile | `public/generated/keigo-icon-cyan-v2.png` | the Dock, Finder, the Accessibility dialog |
 
 **Why the cuts.** The mark is a two-tone illustration: an off-white keycap with a black
-keyline and black eyes. The window's brand row shows the full-bleed default artwork
-(the keycap on its purple field, the same cut `AppIcon` ships) clipped to a rounded
+keyline and black eyes. The window's brand row shows the full-bleed cyan artwork
+(the same cut `KeigoAppIcon` ships) clipped to a rounded
 tile in `AppMark`. On the overlay's `#141312` the line art's own double keyline closes
 into a smudge at 16 pt, while the filled art is a white shape with two dark counters
 and stays legible. The menu bar needs alpha (it inverts its contents), so it takes the
@@ -68,19 +68,15 @@ template cut.
 
 **How they were derived**, so this is repeatable:
 
-- `icon-brand` — `public/default.png` resized to 64 / 128, full bleed. The corners are
-  rounded at draw time by `AppMark` (22.5 %, continuous), not baked in, so the radius
-  scales with the tile.
+- `KeigoAppMark` — generated blue artwork resized to 64 / 128, full bleed. Corners
+  are rounded at draw time by `AppMark` (22.5 %, continuous).
 - `icon-mark` — `public/black.png` is white strokes on pure black, so luminance *is* the
   alpha. Ramp 40→200 to drop the faint halo, crop to the content box, pad to square,
   resize. Padding to square matters: `Icon` draws into a square frame and the artwork is
   903×827, so an unpadded mask would be stretched.
 - `icon-mark-color` — `public/bgremoved.png` cropped to its alpha box and padded square.
-- `AppIcon` — `public/default.png` is full-bleed, and macOS does **not** mask app icons
-  the way iOS does. The artwork is scaled to 824/1024 of the canvas, masked with an
-  `|x|⁵+|y|⁵ ≤ 1` superellipse (the macOS icon grid's continuous-corner squircle), and
-  centred on a transparent 1024. Shipping `default.png` directly would put a hard square
-  in the Dock.
+- `KeigoAppIcon` — generated blue artwork inset to 824/1024, masked with a
+  superellipse, and centered on a transparent canvas for macOS.
 
 The overlay's live mark is now three 4×4 transparent atlases in `Assets.xcassets`:
 `MascotIdleSprite`, `MascotEngagedSprite` and `MascotThinkingSprite`. Higgsfield
@@ -88,3 +84,13 @@ Seedance 2.0 generated them from `public/bgremoved.png` as first and last frame;
 4-second clips were sampled at 4 fps, chroma-keyed, normalized to one stable crop and
 tiled into 16-frame PNGs. The generation ids are recorded in `AGENTS.md` §8 so the
 sources are reproducible.
+
+### Current cyan app icon
+
+`KeigoAppIcon` is the selected app icon; `KeigoAppMark` is the matching full-bleed
+window mark. The generated source is `public/generated/keigo-icon-cyan-v2.png`.
+`swift scripts/prepare-app-icon.swift` emits the ten macOS icon sizes with the
+existing 824/1024 superellipse grid and the 64/128 px window mark. Legacy
+`AppIcon` / `icon-brand` names are regenerated as identical blue aliases, so older
+references cannot reintroduce a purple tile.
+The menu template, overlay sprites, and onboarding character are unchanged by this icon.

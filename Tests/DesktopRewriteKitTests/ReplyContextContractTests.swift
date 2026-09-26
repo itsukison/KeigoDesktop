@@ -9,7 +9,7 @@ final class ReplyContextContractTests: XCTestCase {
     }
 
     func testSharedContextFixturesRoundTripWithoutLosingUnknowns() throws {
-        for name in ["direct-ja", "group-en", "quoted-zh", "ambiguous"] {
+        for name in ["direct-ja", "group-en", "quoted-zh", "ambiguous", "context-regions-v2"] {
             let data = try fixture(name)
             let context = try JSONDecoder().decode(ReplyContext.self, from: data)
             let encoded = try JSONEncoder().encode(context)
@@ -32,6 +32,18 @@ final class ReplyContextContractTests: XCTestCase {
         XCTAssertEqual(evidence.truncationReasons, ["node_budget"])
     }
 
+    func testRegionEvidenceRoundTripsAndBindsContextAcrossNestedContainers() throws {
+        let data = try fixture("captured-regions-v2")
+        let evidence = try JSONDecoder().decode(CapturedReplyEvidence.self, from: data)
+        XCTAssertEqual(evidence.version, 2)
+        let encoded = try JSONEncoder().encode(evidence)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: data) as? NSDictionary,
+                       try JSONSerialization.jsonObject(with: encoded) as? NSDictionary)
+        let context = try JSONDecoder().decode(ReplyContext.self, from: fixture("context-regions-v2"))
+        XCTAssertTrue(context.isBound(to: evidence))
+        XCTAssertEqual(context.selectedTargetText, "明日の15時は空いていますか？")
+    }
+
     func testStructuredReplyRequestIsAdditiveAndKeepsBillingIdentity() throws {
         let context = try JSONDecoder().decode(ReplyContext.self, from: fixture("direct-ja"))
         let request = RewriteRequest(
@@ -51,5 +63,18 @@ final class ReplyContextContractTests: XCTestCase {
         XCTAssertNil(legacyBody["replyContext"])
         XCTAssertNil(legacyBody["draftReadStatus"])
         XCTAssertEqual(legacyBody["replyTo"] as? String, "明日？")
+    }
+}
+
+extension ReplyContextContractTests {
+    func testV3CaptureRoundTripsAndBindsExistingV2WriterContext() throws {
+        let data = try fixture("captured-observations-v3")
+        let evidence = try JSONDecoder().decode(CapturedReplyEvidence.self, from: data)
+        XCTAssertEqual(evidence.version, 3)
+        XCTAssertEqual(evidence.observations?.filter { $0.kind == "composer" }.count, 1)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: data) as? NSDictionary,
+                       try JSONSerialization.jsonObject(with: JSONEncoder().encode(evidence)) as? NSDictionary)
+        let context = try JSONDecoder().decode(ReplyContext.self, from: fixture("context-regions-v2"))
+        XCTAssertTrue(context.isBound(to: evidence))
     }
 }

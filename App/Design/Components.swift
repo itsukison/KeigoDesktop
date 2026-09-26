@@ -6,6 +6,17 @@ import AppKit
 import DesktopRewriteKit
 import SwiftUI
 
+private struct OnboardingPresentationKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var onboardingPresentation: Bool {
+        get { self[OnboardingPresentationKey.self] }
+        set { self[OnboardingPresentationKey.self] = newValue }
+    }
+}
+
 /// The one thing that changes the cursor over a window that can never be key.
 ///
 /// **The root cause of "the overlay never shows a pointer" is `addCursorRect`, which is
@@ -174,39 +185,18 @@ extension View {
         background(CursorArea(cursor: cursor))
     }
 
-    /// Lifts a glyph onto the optical centre of the Japanese label beside it.
-    ///
-    /// SwiftUI centres a `Text` by its **line box**, and the line box a Japanese string
-    /// gets carries more space under the glyphs than over them: measured with
-    /// `ImageRenderer`, 「ホーム」 at 14 pt inks from 22.5 to 34.5 inside a 60 pt frame,
-    /// i.e. its own centre sits 1.5 pt above the box's. A glyph centred in the same
-    /// `HStack` is therefore centred against nothing the eye can see, and reads as
-    /// sitting low against its label — which is exactly what the sidebar looked like.
-    ///
-    /// The correction is a constant because the gap is: it measured 1.4–2.1 pt across
-    /// 11–15 pt, on katakana, kanji and Latin alike. Applied to the **glyph**, not the
-    /// text, so nothing about type rendering changes.
-    ///
-    /// Only for a glyph that is a *sibling* of the label. A container drawn **around**
-    /// the label needs `opticalPadding` instead — offsetting the text inside its own
-    /// plate moves the ink and leaves the plate where it was, which is the same error
-    /// twice over.
+    /// Light-window system fonts use their native baseline. The legacy overlay
+    /// nudge remains in Tokens.Font and is not inherited by light controls.
     func opticalCentre() -> some View {
-        offset(y: -Tokens.Font.opticalNudge)
+        offset(y: -Tokens.LightFont.opticalNudge)
     }
 
-    /// Padding that centres a plate on its label's **ink** rather than on its line box.
-    ///
-    /// The other half of `opticalCentre`: same measurement, applied to the container.
-    /// Symmetric padding around a Japanese label leaves visibly more air underneath it
-    /// than above — measured on the メイン badge at 4/4, the gaps came out 3.5 pt over
-    /// and 6.5 pt under — so the vertical padding is biased by the nudge and the plate
-    /// lands centred on what the eye actually sees.
     func opticalPadding(vertical: CGFloat, horizontal: CGFloat) -> some View {
-        padding(.top, vertical + Tokens.Font.opticalNudge)
-            .padding(.bottom, vertical - Tokens.Font.opticalNudge)
+        padding(.top, vertical + Tokens.LightFont.opticalNudge)
+            .padding(.bottom, vertical - Tokens.LightFont.opticalNudge)
             .padding(.horizontal, horizontal)
     }
+
 }
 
 // MARK: - Surfaces
@@ -276,11 +266,11 @@ struct SettingsRow<Trailing: View>: View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(Tokens.Font.body(14, weight: .medium))
+                    .font(Tokens.LightFont.body(14, weight: .medium))
                     .foregroundStyle(Tokens.Window.textPrimary)
                 if let subtitle {
                     Text(subtitle)
-                        .font(Tokens.Font.body(13))
+                        .font(Tokens.LightFont.body(13))
                         .foregroundStyle(Tokens.Window.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -317,12 +307,12 @@ struct PageTitle: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(Tokens.Font.display(20))
-                .tracking(Tokens.Font.displayTracking(20))
+                .font(Tokens.LightFont.pageTitle)
+                .tracking(Tokens.LightFont.displayTracking(20))
                 .foregroundStyle(Tokens.Window.textPrimary)
             if let subtitle {
                 Text(subtitle)
-                    .font(Tokens.Font.body(13))
+                    .font(Tokens.LightFont.body(13))
                     .foregroundStyle(Tokens.Window.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -337,7 +327,7 @@ struct SectionCaption: View {
 
     var body: some View {
         Text(text)
-            .font(Tokens.Font.body(12, weight: .medium))
+            .font(Tokens.LightFont.body(12, weight: .medium))
             .foregroundStyle(Tokens.Window.textTertiary)
     }
 }
@@ -351,7 +341,7 @@ struct SectionHeader<Trailing: View>: View {
     var body: some View {
         HStack(alignment: .center) {
             Text(title)
-                .font(Tokens.Font.body(15, weight: .medium))
+                .font(Tokens.LightFont.body(15, weight: .medium))
                 .foregroundStyle(Tokens.Window.textPrimary)
             Spacer(minLength: 12)
             trailing
@@ -375,7 +365,7 @@ struct Badge: View {
 
     var body: some View {
         Text(text)
-            .font(Tokens.Font.body(12, weight: .medium))
+            .font(Tokens.LightFont.body(12, weight: .medium))
             .foregroundStyle(Tokens.Window.accentText)
             .opticalPadding(vertical: 4, horizontal: 8)
             .background(Capsule().fill(Tokens.Window.accentPlate))
@@ -384,16 +374,17 @@ struct Badge: View {
 
 /// Text that acts. The accent is allowed here — under the old system it was not.
 struct LinkButton: View {
+    @Environment(\.onboardingPresentation) private var onboardingPresentation
     let title: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(Tokens.Font.body(13, weight: .medium))
+                .font(Tokens.LightFont.body(onboardingPresentation ? 16 : 14, weight: .medium))
                 .foregroundStyle(Tokens.Window.accentText)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LightPressStyle())
         .cursor(.pointingHand)
     }
 }
@@ -403,7 +394,7 @@ struct LinkButton: View {
 /// Google's own button, not one of ours.
 ///
 /// It is deliberately outside `ActionButton`'s two axes: the white plate, the
-/// `#747775` border, the `#1f1f1f` label and the full-colour G are Google's identity
+/// neutral control border, the `#1f1f1f` label and the full-colour G are Google's identity
 /// guidelines, and a `.secondary` `ActionButton` reading 「Google で続ける」 with no mark
 /// on it — which is what アカウント shipped — is both off-brand and the one button on
 /// the page a user scans for by its logo.
@@ -413,6 +404,7 @@ struct LinkButton: View {
 /// row metrics for アカウント, where it stands beside サインイン. Everything else about
 /// the two is identical, which is the point of having one type.
 struct GoogleSignInButton: View {
+    @Environment(\.onboardingPresentation) private var onboardingPresentation
     enum Size {
         case wide
         case inline
@@ -444,24 +436,24 @@ struct GoogleSignInButton: View {
                         ? tr("接続中…", "Connecting…", "连接中…")
                         : tr("Google で続ける", "Continue with Google", "使用 Google 继续")
                 )
-                .font(Tokens.Font.body(size.font, weight: .medium))
+                .font(Tokens.LightFont.body(onboardingPresentation ? 16 : size.font, weight: .medium))
                 .foregroundStyle(Color(hex: 0x1f1f1f))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             }
             .padding(.horizontal, size == .wide ? 0 : 14)
             .frame(maxWidth: size == .wide ? .infinity : nil)
-            .frame(height: size.height)
+            .frame(height: onboardingPresentation ? 40 : size.height)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: Tokens.Window.buttonRadius, style: .continuous)
                     .fill(hovering ? Tokens.Window.surface : .white)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color(hex: 0x747775), lineWidth: 1)
+                RoundedRectangle(cornerRadius: Tokens.Window.buttonRadius, style: .continuous)
+                    .strokeBorder(Tokens.Window.borderControl, lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LightPressStyle())
         .disabled(isLoading)
         .onHover { hovering = $0 }
         .cursor(isLoading ? .arrow : .pointingHand)
@@ -472,9 +464,9 @@ struct GoogleSignInButton: View {
 ///
 /// `design.md` uses an 8 pt rounded rectangle for actions that live in a row and a
 /// full pill for the few that are meant to be seen from across the window. The
-/// primary fill is the accent, which is the rule the previous system forbade
-/// outright — filled ink was the only primary it allowed.
+/// primary action is near-black; blue is reserved for selection and focus.
 struct ActionButton: View {
+    @Environment(\.onboardingPresentation) private var onboardingPresentation
     enum Style {
         case primary
         case secondary
@@ -518,7 +510,7 @@ struct ActionButton: View {
                     Icon(icon, size: 14)
                 }
                 Text(title)
-                    .font(Tokens.Font.body(13, weight: .medium))
+                    .font(Tokens.LightFont.body(onboardingPresentation ? 16 : 14, weight: .medium))
                     // A 32 pt button has room for exactly one line, so wrapping is never
                     // an outcome it can render — it can only clip. 保存 in a row that ran
                     // out of width broke between its two characters and lost both halves'
@@ -529,12 +521,12 @@ struct ActionButton: View {
             }
             .foregroundStyle(foreground)
             .padding(.horizontal, shape == .pill ? 18 : 14)
-            .frame(height: 32)
+            .frame(height: onboardingPresentation ? 40 : 32)
             .background(background)
             .overlay(border)
             .clipShape(clipShape)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LightPressStyle())
         .disabled(!enabled)
         .onHover { hovering = $0 }
         .cursor(enabled ? .pointingHand : .arrow)
@@ -549,7 +541,7 @@ struct ActionButton: View {
     }
 
     private var foreground: Color {
-        guard enabled else { return Tokens.Window.textTertiary }
+        guard enabled else { return Tokens.Window.disabledText }
         switch style {
         case .primary: return .white
         case .secondary, .ghost: return Tokens.Window.textPrimary
@@ -562,13 +554,13 @@ struct ActionButton: View {
         case .primary:
             clipShape.fill(
                 enabled
-                    ? Tokens.Window.accent.opacity(hovering ? 0.88 : 1)
-                    : Tokens.Window.controlOff
+                    ? (hovering ? Tokens.Window.actionHover : Tokens.Window.actionPrimary)
+                    : Tokens.Window.disabledSurface
             )
         case .secondary:
-            clipShape.fill(hovering && enabled ? Tokens.Window.surface : Tokens.Window.canvas)
+            clipShape.fill(hovering && enabled ? Tokens.Window.surfaceHover : Tokens.Window.canvas)
         case .ghost:
-            clipShape.fill(hovering && enabled ? Tokens.Window.surface : .clear)
+            clipShape.fill(hovering && enabled ? Tokens.Window.surfaceHover : .clear)
         }
     }
 
@@ -598,10 +590,10 @@ struct IconButton: View {
                 .frame(width: 26, height: 26)
                 .background(
                     RoundedRectangle(cornerRadius: Tokens.Window.rowRadius, style: .continuous)
-                        .fill(hovering && enabled ? Tokens.Window.surface : .clear)
+                        .fill(hovering && enabled ? Tokens.Window.surfaceHover : .clear)
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LightPressStyle())
         .disabled(!enabled)
         .help(help)
         .onHover { hovering = $0 }
@@ -628,7 +620,7 @@ struct RoundIconButton: View {
                     Circle().fill(hovering ? Tokens.Window.rowActive : Tokens.Window.surface)
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LightPressStyle())
         .help(help)
         .onHover { hovering = $0 }
         .cursor(.pointingHand)
@@ -652,7 +644,7 @@ struct FieldBackground: View {
             .fill(Tokens.Window.group)
             .overlay(
                 RoundedRectangle(cornerRadius: Tokens.Window.inputRadius, style: .continuous)
-                    .strokeBorder(focused ? Tokens.Window.accent : .clear, lineWidth: 1)
+                    .strokeBorder(focused ? Tokens.Window.accentText : .clear, lineWidth: 1)
             )
             .animation(.easeOut(duration: 0.12), value: focused)
     }
@@ -665,6 +657,7 @@ struct FieldBackground: View {
 /// live next to the field it tracks, which is why this is a view rather than a
 /// modifier.
 struct SettingsField: View {
+    @Environment(\.onboardingPresentation) private var onboardingPresentation
     let placeholder: String
     @Binding var text: String
     var secure = false
@@ -685,11 +678,11 @@ struct SettingsField: View {
             }
         }
         .textFieldStyle(.plain)
-        .font(Tokens.Font.body(14))
+        .font(Tokens.LightFont.body(onboardingPresentation ? 16 : 14))
         .foregroundStyle(Tokens.Window.textPrimary)
         .focused($focused)
         .padding(.horizontal, 10)
-        .frame(height: 32)
+        .frame(height: onboardingPresentation ? 40 : 32)
         .background(FieldBackground(focused: focused))
         .onSubmit(onSubmit)
         .onAppear {
@@ -714,7 +707,7 @@ struct SearchField: View {
                 .foregroundStyle(Tokens.Window.textTertiary)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
-                .font(Tokens.Font.body(13))
+                .font(Tokens.LightFont.body(13))
                 .foregroundStyle(Tokens.Window.textPrimary)
         }
         .padding(.horizontal, 12)
@@ -739,5 +732,20 @@ extension View {
     /// Every switch in the window is the same accent switch.
     func accentSwitch() -> some View {
         toggleStyle(.switch).tint(Tokens.Window.accent)
+    }
+}
+
+/// Shared pressed/focus feedback confined to light-window controls.
+struct LightPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .overlay {
+                if configuration.isPressed {
+                    RoundedRectangle(cornerRadius: Tokens.Window.buttonRadius)
+                        .fill(Color.black.opacity(0.06)).allowsHitTesting(false)
+                }
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

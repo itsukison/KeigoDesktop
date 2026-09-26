@@ -70,6 +70,14 @@ public actor TextIOCoordinator {
     /// inside a reply field is only part of the user's draft. AX owns that distinction;
     /// the clipboard fallback is intentionally skipped because it can only copy the
     /// already-known source message again.
+    public func writingSurface(frontmostPID: pid_t?) async -> WritingSurfaceEvidence {
+        await ax.writingSurface(frontmostPID: frontmostPID)
+    }
+
+    public func captureReplyAnchor(frontmostPID: pid_t?) async throws -> ReplyCaptureAnchor {
+        try await ax.captureReplyAnchor(frontmostPID: frontmostPID)
+    }
+
     public func captureReply(frontmostPID: pid_t?, copiedMessage: String) async throws -> TextTarget {
         let target = try await ax.captureReply(
             frontmostPID: frontmostPID,
@@ -84,6 +92,10 @@ public actor TextIOCoordinator {
     /// Kept separate from `resolveDestination` because the two have different *validity
     /// windows*: this one is only truthful while none of our own windows holds key, and
     /// the caller is the only thing that knows when that is. See `AXTextIO.UserFocus`.
+    public func replyTargetStillFocused(_ target: TextTarget, frontmostPID: pid_t?) async -> Bool {
+        await ax.replyTargetStillFocused(target, frontmostPID: frontmostPID)
+    }
+
     public func readUserFocus(frontmostPID: pid_t?) async -> AXTextIO.UserFocusReading {
         await ax.readUserFocus(frontmostPID: frontmostPID)
     }
@@ -120,7 +132,7 @@ public actor TextIOCoordinator {
     ///
     /// - Parameter frontmostPID: the app that was frontmost at capture time. Required
     ///   for any paste; without it there is no way to know where ⌘V would land.
-    public func write(_ replacement: String, to target: TextTarget, frontmostPID: pid_t?) async throws {
+    public func write(_ replacement: String, to target: TextTarget, frontmostPID: pid_t?, beforePaste: (@Sendable () async throws -> Void)? = nil) async throws {
         // A scratch compose has nowhere to go and the caller is expected to have offered
         // Copy instead (§18). Reaching here would mean synthesizing ⌘A into whatever
         // happens to be focused, which is the one thing `.none` exists to prevent.
@@ -146,7 +158,8 @@ public actor TextIOCoordinator {
         try await clipboard.write(
             replacement,
             toFrontmost: frontmostPID,
-            mode: target.captureMode
+            mode: target.captureMode,
+            beforePaste: beforePaste
         )
 
         // The keystroke is posted, not acknowledged, so "sent" is not "landed". Settle,

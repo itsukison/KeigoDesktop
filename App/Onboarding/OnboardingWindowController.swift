@@ -1,10 +1,15 @@
 import AppKit
+import Combine
 import DesktopRewriteKit
 import PostHog
 import SwiftUI
 
 @MainActor
 final class OnboardingCoordinator: ObservableObject {
+    @Published private(set) var lesson: OnboardingLesson?
+    @Published private(set) var barDiscovered = false
+    @Published private(set) var lessonCopyOnly = false
+    private var lessonSubscriptions: Set<AnyCancellable> = []
     @Published private(set) var step: DesktopOnboardingStep = .language
     /// Published so the whole flow re-renders on the language page itself: `tr`
     /// reads a global, and a global changing is not something SwiftUI can observe.
@@ -14,9 +19,8 @@ final class OnboardingCoordinator: ObservableObject {
     @Published private(set) var replyPracticeCompleted = false
     @Published private(set) var selectedSource: OnboardingSource?
     @Published private(set) var selectedPack: OnboardingPresetPack?
-    @Published var buttonDrafts: [OnboardingButtonDraft] = [] {
-        didSet { saveDrafts() }
-    }
+    @Published var buttonDrafts: [OnboardingButtonDraft] = [] { didSet { saveDrafts() } }
+    var isReplaying: Bool { replaying }
     @Published private(set) var isPreparingPurpose = false
     @Published private(set) var purposeError: String?
     @Published private(set) var isSavingButtons = false
@@ -42,6 +46,8 @@ final class OnboardingCoordinator: ObservableObject {
     private let languageStore: AppLanguageStore
     private let onFinish: () -> Void
     private var replaying = false
+    private var preparingIntro = false
+    var shouldPresentIntro: Bool { progress.shouldPresentIntro }
     var restoreWindowAfterTutorialInsert: (() -> Void)?
 
     init(
@@ -57,10 +63,19 @@ final class OnboardingCoordinator: ObservableObject {
         self.languageStore = languageStore
         self.language = languageStore.resolved
         self.onFinish = onFinish
+        overlay.$lesson.sink { [weak self] lesson in
+            self?.lesson = lesson
+            if lesson?.discovered == true { self?.barDiscovered = true }
+        }.store(in: &lessonSubscriptions)
+        overlay.$insertAction.sink { [weak self] action in
+            self?.lessonCopyOnly = action == .copyOnly
+        }.store(in: &lessonSubscriptions)
     }
 
-    func start(replay: Bool) {
+    func start(replay: Bool, preparingIntro: Bool = false) {
+        self.preparingIntro = preparingIntro
         replaying = replay
+        barDiscovered = false
         rewritePracticeCompleted = false
         customPracticeCompleted = false
         replyPracticeCompleted = false
@@ -69,9 +84,10 @@ final class OnboardingCoordinator: ObservableObject {
         offerExpiresAt = nil
         offerCheckoutOpened = false
         selectedPack = progress.savedPack
-        buttonDrafts = progress.savedDrafts
+        buttonDrafts = replay ? mainModel.prompts.map(OnboardingButtonDraft.init(prompt:)) : progress.savedDrafts
         language = languageStore.resolved
         move(to: replay ? .language : progress.savedStep)
+        self.preparingIntro = false
     }
 
     /// Applied immediately rather than on 次へ: the page is the one place the effect
@@ -86,43 +102,49 @@ final class OnboardingCoordinator: ObservableObject {
     }
 
     func move(to next: DesktopOnboardingStep) {
-        if [.practice, .customPractice, .replyPractice].contains(step), next != step {
+        let next = next.activeStep
+        if overlay.lesson != nil || [.practice, .customPractice, .replyPractice].contains(step) {
             overlay.endTutorial()
         }
         step = next
         if !replaying { progress.save(step: next) }
 
+        let earlySteps: [DesktopOnboardingStep] = [.language, .welcome, .name, .purpose, .review, .writingStyle, .access]
+        overlay.setOnboardingPassive(earlySteps.contains(next))
         switch next {
-        case .language, .welcome, .name, .purpose, .review, .access:
-            overlay.setVisible(false)
-        case .bar, .source, .complete:
+        case .language, .welcome, .name, .purpose, .review, .writingStyle, .access:
+            overlay.setVisible(!preparingIntro)
+        case .source, .complete:
             overlay.endTutorial()
             overlay.setVisible(true)
         case .offer:
             overlay.endTutorial()
             overlay.setVisible(true)
             openWelcomeOfferWindow()
-        case .practice:
+        case .bar, .practice:
             overlay.setVisible(true)
-            overlay.beginTutorial(prompts: tutorialPrompts) { [weak self] in
+            overlay.beginTutorial(prompts: tutorialPrompts) { [weak self] _ in
                 guard let self else { return }
                 self.rewritePracticeCompleted = true
                 self.restoreWindowAfterTutorialInsert?()
             }
+            overlay.beginLesson(.rewrite, discovered: barDiscovered)
         case .customPractice:
             overlay.setVisible(true)
-            overlay.beginCustomTutorial { [weak self] in
+            overlay.beginCustomTutorial { [weak self] _ in
                 guard let self else { return }
                 self.customPracticeCompleted = true
                 self.restoreWindowAfterTutorialInsert?()
             }
+            overlay.beginLesson(.custom, discovered: barDiscovered)
         case .replyPractice:
             overlay.setVisible(true)
-            overlay.beginReplyTutorial { [weak self] in
+            overlay.beginReplyTutorial { [weak self] _ in
                 guard let self else { return }
                 self.replyPracticeCompleted = true
                 self.restoreWindowAfterTutorialInsert?()
             }
+            overlay.beginLesson(.reply, discovered: barDiscovered)
         }
     }
 
@@ -139,8 +161,8 @@ final class OnboardingCoordinator: ObservableObject {
         case .name where mainModel.hasDisplayNameDraft: preparePurpose()
         case .purpose: move(to: .review)
         case .review: confirmButtons()
-        case .access where mainModel.isTrusted: move(to: .bar)
-        case .bar: move(to: .practice)
+        case .writingStyle: move(to: .purpose)
+        case .access where mainModel.isTrusted: move(to: .practice)
         case .practice where rewritePracticeCompleted: move(to: .customPractice)
         case .customPractice where customPracticeCompleted: move(to: .replyPractice)
         case .replyPractice where replyPracticeCompleted: move(to: .source)
@@ -233,11 +255,9 @@ final class OnboardingCoordinator: ObservableObject {
         move(to: .offer)
     }
 
-    var usesCurrentButtons: Bool { selectedPack == nil && !buttonDrafts.isEmpty }
+    var tutorialSample: String { OnboardingPracticeSample.text(for: tutorialPrompt) }
 
-    var tutorialSample: String {
-        OnboardingPracticeSample.text(for: tutorialPrompt)
-    }
+    var usesCurrentButtons: Bool { selectedPack == nil && !buttonDrafts.isEmpty }
 
     var canConfirmButtons: Bool {
         !buttonDrafts.isEmpty && buttonDrafts.allSatisfy {
@@ -319,11 +339,13 @@ final class OnboardingCoordinator: ObservableObject {
     }
 
     func close() {
+        overlay.endOnboardingPresentation()
         overlay.endTutorial()
         overlay.setVisible(mainModel.isSignedIn && mainModel.isTrusted)
     }
 
     private func finish() {
+        overlay.endOnboardingPresentation()
         overlay.endTutorial()
         overlay.setVisible(true)
         if !replaying {
@@ -373,7 +395,9 @@ final class OnboardingCoordinator: ObservableObject {
         Task {
             defer { isSavingButtons = false }
             do {
-                try await mainModel.applyOnboardingButtons(drafts)
+                if !replaying, drafts != mainModel.prompts.map(OnboardingButtonDraft.init(prompt:)) {
+                    try await mainModel.applyOnboardingButtons(drafts)
+                }
                 // Emit only after the remote replace succeeds. A retry must not turn a
                 // failed save into a preset selection, and a tutorial replay must not
                 // overwrite first-run product-choice behaviour.
@@ -407,7 +431,8 @@ final class OnboardingCoordinator: ObservableObject {
     }
 
     private var tutorialPrompts: [UserPrompt] {
-        let enabled = mainModel.prompts.filter(\.isEnabled)
+        let source = replaying ? buttonDrafts.enumerated().map { $0.element.userPrompt(at: $0.offset) } : mainModel.prompts
+        let enabled = source.filter(\.isEnabled)
         return enabled.isEmpty ? [Self.fallbackTutorialPrompt] : enabled
     }
 
@@ -418,7 +443,7 @@ final class OnboardingCoordinator: ObservableObject {
         UserPrompt(
             id: UUID(uuidString: "A8D15BB9-5A3F-45A3-B5D7-91B3AC0D8C44")!,
             slot: .main,
-            title: tr("敬語", "Polite", "敬語"),
+            title: tr("整える", "Polish", "润色"),
             prompt: tr(
                 "次の文章を、日常でそのまま送れる自然でやわらかい丁寧語に変換してください。意味を変えず、命令や指示はやわらかいお願いの形にしてください。出力は変換後の文章だけにしてください。",
                 "Rewrite the text so it reads warm, courteous and professional. Keep the meaning, soften blunt requests, and output only the rewritten text.",
@@ -431,6 +456,8 @@ final class OnboardingCoordinator: ObservableObject {
 
 final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     private let coordinator: OnboardingCoordinator
+    private var intro: OnboardingIntroController?
+    private var debugIntroPresented = false
 
     @MainActor
     init(coordinator: OnboardingCoordinator) {
@@ -462,6 +489,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         window.center()
         super.init(window: window)
         window.delegate = self
+        coordinator.overlay.onboardingWindow = window
         coordinator.restoreWindowAfterTutorialInsert = { [weak window] in
             guard let window else { return }
             window.makeKeyAndOrderFront(nil)
@@ -473,13 +501,58 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { fatalError() }
 
     @MainActor
-    func present(replay: Bool) {
-        coordinator.start(replay: replay)
-        window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+    func present(replay: Bool, debugIntro: Bool = false) {
+        guard intro == nil else { return }
+        if window?.isVisible == true {
+            window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let replayIntro = debugIntro && !debugIntroPresented
+        let showsIntro = debugIntro ? replayIntro : (!replay && coordinator.shouldPresentIntro)
+        let selectedScreen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        coordinator.start(replay: replay || debugIntro, preparingIntro: showsIntro)
+        if showsIntro, let window, let screen = selectedScreen {
+            debugIntroPresented = debugIntroPresented || replayIntro
+            let intro = OnboardingIntroController(overlay: coordinator.overlay, window: window,
+                                                  screen: screen, debugReplay: replayIntro) { [weak self] _ in
+                self?.intro = nil
+            }
+            self.intro = intro
+            intro.start()
+        } else {
+            window?.alphaValue = 1
+            window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
+        intro?.interrupt()
+        intro = nil
         Task { @MainActor [coordinator] in coordinator.close() }
     }
 }
+
+#if DEBUG
+extension OnboardingCoordinator {
+    /// Assign presentation state directly: `move(to:)` deliberately runs real services.
+    func configureDesignPreview(step: DesktopOnboardingStep) {
+        replaying = true
+        language = AppLanguageState.current
+        self.step = step.activeStep
+        selectedPack = .starter
+        buttonDrafts = OnboardingPresetPack.starter.drafts()
+        selectedSource = .allCases.first
+        offerExpiresAt = Date().addingTimeInterval(48 * 3600)
+        let kind: OnboardingLesson.Kind?
+        switch step {
+        case .bar, .practice: kind = .rewrite
+        case .customPractice: kind = .custom
+        case .replyPractice: kind = .reply
+        default: kind = nil
+        }
+        lesson = kind.map { OnboardingLesson(kind: $0) }
+    }
+}
+#endif

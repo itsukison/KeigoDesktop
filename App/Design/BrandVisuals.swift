@@ -9,8 +9,8 @@ import SwiftUI
 /// puts the accent on the chrome itself, so nothing here is load-bearing any more —
 /// it is just the handful of shapes the window draws that are not text or a control.
 
-/// The product mark: the default artwork — the keycap on its purple field — clipped
-/// to a rounded tile. This is the same cut `AppIcon` ships, so the window's brand row
+/// The product mark: the keycap on its pale cyan field, clipped to a rounded tile.
+/// This is the same artwork `KeigoAppIcon` ships, so the window's brand row
 /// shows the icon the Dock and Finder show. The corner radius follows the macOS icon
 /// grid (~22.5 %, continuous) rather than a fixed number, so the tile keeps the
 /// squircle's proportion at any size. The menu bar keeps the template line-art cut
@@ -43,9 +43,10 @@ enum MascotAnimation: String, CaseIterable {
 struct BrandGlyph: View {
     var size: CGFloat = 16
     var animation: MascotAnimation = .idle
+    var isAnimating = true
 
     var body: some View {
-        MascotSprite(animation: animation, size: size)
+        MascotSprite(animation: animation, size: size, isAnimating: isAnimating)
     }
 }
 
@@ -76,9 +77,10 @@ struct PillPreview: View {
 struct MascotSprite: View {
     let animation: MascotAnimation
     var size: CGFloat = 16
+    var isAnimating = true
 
     var body: some View {
-        SpriteSheetView(animation: animation)
+        SpriteSheetView(animation: animation, isAnimating: isAnimating)
             .frame(width: size, height: size)
     }
 
@@ -89,15 +91,18 @@ struct MascotSprite: View {
 
 private struct SpriteSheetView: NSViewRepresentable {
     let animation: MascotAnimation
+    let isAnimating: Bool
 
     func makeNSView(context: Context) -> SpriteImageView {
         let view = SpriteImageView(frame: .zero)
         view.configure(animation)
+        view.setPlaying(isAnimating)
         return view
     }
 
     func updateNSView(_ view: SpriteImageView, context: Context) {
         view.configure(animation)
+        view.setPlaying(isAnimating)
     }
 
     func sizeThatFits(
@@ -132,6 +137,7 @@ private struct SpriteSheetView: NSViewRepresentable {
         private var frameIndex = 0
         private var frameImage: NSImage?
         private var timer: Timer?
+        private var playing = true
 
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)
@@ -175,6 +181,18 @@ private struct SpriteSheetView: NSViewRepresentable {
             if window != nil { startAnimating() }
         }
 
+        func setPlaying(_ value: Bool) {
+            playing = value
+            if value {
+                if window != nil { startAnimating() }
+            } else {
+                stopAnimating()
+                frameIndex = 0
+                frameImage = frames.first
+                needsDisplay = true
+            }
+        }
+
         func stopAnimating() {
             timer?.invalidate()
             timer = nil
@@ -185,7 +203,7 @@ private struct SpriteSheetView: NSViewRepresentable {
         }
 
         private func startAnimating() {
-            guard timer == nil, frames.count > 1 else { return }
+            guard playing, timer == nil, frames.count > 1 else { return }
             let timer = Timer(
                 timeInterval: Self.frameDuration,
                 target: self,
@@ -231,20 +249,20 @@ private struct SpriteSheetView: NSViewRepresentable {
     }
 }
 
-/// Identity, in the sidebar and on the account page. A flat accent disc with the
-/// initial knocked out in white.
+/// Identity, in the sidebar and on the account page. A neutral plate keeps identity separate
+/// from interaction color.
 struct Avatar: View {
     let initial: String
     var diameter: CGFloat = 30
 
     var body: some View {
         Circle()
-            .fill(Tokens.Window.accent)
+            .fill(Tokens.Window.selectionLocal)
             .frame(width: diameter, height: diameter)
             .overlay(
                 Text(initial)
-                    .font(Tokens.Font.body(diameter * 0.44, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(Tokens.LightFont.body(diameter * 0.44, weight: .semibold))
+                    .foregroundStyle(Tokens.Window.textPrimary)
             )
     }
 }
@@ -262,7 +280,7 @@ struct IconPlate: View {
             .frame(width: diameter, height: diameter)
             .overlay(
                 Icon(icon, size: diameter * 0.46)
-                    .foregroundStyle(tinted ? Tokens.Window.accent : Tokens.Window.textSecondary)
+                    .foregroundStyle(tinted ? Tokens.Window.accentText : Tokens.Window.textSecondary)
             )
     }
 }
@@ -295,4 +313,70 @@ struct AppIconView: View {
         cache[bundleId] = icon
         return icon
     }
+}
+
+/// Bundled, static artwork. Never participates in sizing, focus, or hit testing.
+struct AsideBackdrop: View {
+    enum Artwork: String { case mountain = "AsideMountain", glow = "AsideGlow" }
+    var artwork: Artwork = .mountain
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Tokens.Window.environment
+                if !reduceTransparency {
+                    Image(artwork.rawValue)
+                        .resizable().interpolation(.high).scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                }
+            }
+            .clipped()
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+struct AsideSidebarBackdrop: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        ZStack {
+            if reduceTransparency || contrast == .increased {
+                Tokens.Window.sidebar
+            } else {
+                Tokens.Window.sidebarGlassTint
+                Image(nsImage: SidebarGlassGrain.image)
+                    .resizable(resizingMode: .tile)
+                    .interpolation(.none)
+                    .opacity(0.045)
+            }
+        }
+        .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private enum SidebarGlassGrain {
+    // A fixed, cached half-point grain; no animation or per-layout random noise.
+    static let image: NSImage = {
+        let side = 256
+        var seed: UInt32 = 0x4b656967
+        var pixels = [UInt8](repeating: 0, count: side * side)
+        for index in pixels.indices {
+            seed = 1664525 &* seed &+ 1013904223
+            pixels[index] = UInt8(truncatingIfNeeded: seed >> 24)
+        }
+        let provider = CGDataProvider(data: Data(pixels) as CFData)!
+        let image = CGImage(
+            width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 8,
+            bytesPerRow: side, space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent
+        )!
+        return NSImage(cgImage: image, size: NSSize(width: 128, height: 128))
+    }()
 }

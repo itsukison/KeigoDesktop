@@ -72,6 +72,7 @@ public struct TextTarget: Sendable {
     public let hostAppBundleId: String?
     /// Best-effort, and only when the host app is a browser.
     public let browserURL: String?
+    public let writingSurfaceHint: WritingSurfaceHint
 
     /// The AX handle to write back into. Nil on the clipboard path, where the
     /// write goes through pasteboard + synthesized ⌘V instead.
@@ -99,6 +100,7 @@ public struct TextTarget: Sendable {
         contextAfter: String? = nil,
         hostAppBundleId: String? = nil,
         browserURL: String? = nil,
+        writingSurfaceHint: WritingSurfaceHint = .unknown,
         element: AXElementHandle? = nil,
         excludedRedirectElement: AXElementHandle? = nil,
         selectedRange: CFRange? = nil
@@ -111,6 +113,7 @@ public struct TextTarget: Sendable {
         self.contextAfter = contextAfter
         self.hostAppBundleId = hostAppBundleId
         self.browserURL = browserURL
+        self.writingSurfaceHint = writingSurfaceHint
         self.element = element
         self.excludedRedirectElement = excludedRedirectElement
         self.selectedRange = selectedRange

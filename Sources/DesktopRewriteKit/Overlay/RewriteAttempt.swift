@@ -25,6 +25,7 @@ import Foundation
 public enum RewriteType: String, Sendable, CaseIterable, Equatable {
     /// A saved or builtin button on the hover row.
     case savedButton = "saved_button"
+    case universal = "universal"
     /// The ✎ bar — a free-text instruction the user typed.
     case customInstruction = "custom_instruction"
     /// Reply mode: composing an answer to a copied message (§16).

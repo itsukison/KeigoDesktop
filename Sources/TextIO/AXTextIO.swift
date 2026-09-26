@@ -41,6 +41,26 @@ public actor AXTextIO {
         systemWide.applyMessagingTimeout()
     }
 
+    public func writingSurface(frontmostPID: pid_t?) -> WritingSurfaceEvidence {
+        let bundle = frontmostPID.flatMap { BundleIdentity.bundleIdentifier(for: $0) }
+        guard AXPermission.isTrusted, let element = focusedElement(frontmostPID: frontmostPID),
+              element.processIdentifier == frontmostPID else {
+            return WritingSurfaceEvidence(bundleID: bundle, url: nil, hint: .unknown)
+        }
+        return WritingSurfaceEvidence(bundleID: bundle, url: browserURL(from: element), hint: writingSurfaceHint(element))
+    }
+
+    private func writingSurfaceHint(_ element: AXUIElement) -> WritingSurfaceHint {
+        let subrole = element.stringAttribute(kAXSubroleAttribute) ?? ""
+        if ["AXSecureTextField", "AXSearchField"].contains(subrole) { return .excluded }
+        let label = ((element.stringAttribute(kAXDescriptionAttribute) ?? "") + " " +
+                     (element.stringAttribute("AXPlaceholderValue") ?? "")).lowercased()
+        if ["search", "検索", "搜索", "address and search", "recipient", "宛先", "收件人", "source editor"].contains(where: label.contains) { return .excluded }
+        if ["message body", "メール本文", "邮件正文"].contains(where: label.contains) { return .mail }
+        if ["message to", "message #", "message @", "send a message", "type a message", "メッセージを入力", "にメッセージ", "发送消息", "输入消息"].contains(where: label.contains) { return .chat }
+        return .unknown
+    }
+
     // MARK: - Read
 
     /// - Parameter frontmostPID: the app to prime before reading. **Required for
@@ -105,6 +125,36 @@ public actor AXTextIO {
                 selectedRange: focused.rangeAttribute(kAXSelectedTextRangeAttribute)
             )
         }
+    }
+
+    public func captureReplyAnchor(frontmostPID: pid_t?) throws -> ReplyCaptureAnchor {
+        guard AXPermission.isTrusted else { throw TextIOError.notTrusted }
+        let focused = focusedElement(frontmostPID: frontmostPID)
+        let app = frontmostPID.map { AXUIElementCreateApplication($0) }
+        app?.applyMessagingTimeout()
+        let window = focused?.elementAttribute(kAXWindowAttribute) ?? app?.elementAttribute(kAXFocusedWindowAttribute)
+        window?.applyMessagingTimeout()
+        let root = window.map { AXElementHandle(element: $0, pid: frontmostPID ?? $0.processIdentifier) }
+        let bundle = frontmostPID.flatMap { BundleIdentity.bundleIdentifier(for: $0) }
+        guard let focused else {
+            return ReplyCaptureAnchor(target: .scratch(hostAppBundleId: bundle), draftStatus: .noDestination, root: root, excludedField: nil, focusedElement: nil, selectedSource: nil)
+        }
+        focused.applyMessagingTimeout()
+        let handle = AXElementHandle(element: focused, pid: focused.processIdentifier)
+        if focused.stringAttribute(kAXSubroleAttribute) == kAXSecureTextFieldSubrole {
+            return ReplyCaptureAnchor(target: .scratch(hostAppBundleId: bundle, excluding: handle), draftStatus: .noDestination, root: root, excludedField: handle, focusedElement: handle, selectedSource: nil)
+        }
+        guard focused.boolAttribute("AXEditable") != false, Self.canTakeText(focused) else {
+            return ReplyCaptureAnchor(target: .scratch(hostAppBundleId: bundle, excluding: handle), draftStatus: .noDestination, root: root, excludedField: nil, focusedElement: handle, selectedSource: focused.stringAttribute(kAXSelectedTextAttribute))
+        }
+        guard let value = focused.stringAttribute(kAXValueAttribute) else {
+            // Unknown draft contents never authorize replacing that field, even via redirect.
+            return ReplyCaptureAnchor(target: .scratch(hostAppBundleId: bundle, excluding: handle), draftStatus: .unreadable, root: root, excludedField: handle, focusedElement: handle, selectedSource: nil)
+        }
+        let target = TextTarget(text: value, captureMode: .wholeInput, path: .ax,
+            writeStrategy: focused.isSettable ? .ax : .clipboard, hostAppBundleId: bundle,
+            element: handle, selectedRange: focused.rangeAttribute(kAXSelectedTextRangeAttribute))
+        return ReplyCaptureAnchor(target: target, draftStatus: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .empty : .present, root: root, excludedField: handle, focusedElement: handle, selectedSource: nil)
     }
 
     enum ReplyCaptureDisposition: Equatable {
@@ -209,6 +259,7 @@ public actor AXTextIO {
                 contextAfter: after,
                 hostAppBundleId: bundleId,
                 browserURL: browserURL,
+                writingSurfaceHint: writingSurfaceHint(element),
                 element: handle,
                 selectedRange: range
             )
@@ -224,6 +275,7 @@ public actor AXTextIO {
                 writeStrategy: strategy,
                 hostAppBundleId: bundleId,
                 browserURL: browserURL,
+                writingSurfaceHint: writingSurfaceHint(element),
                 element: handle,
                 selectedRange: range
             )
@@ -256,6 +308,7 @@ public actor AXTextIO {
                 writeStrategy: strategy,
                 hostAppBundleId: bundleId,
                 browserURL: browserURL,
+                writingSurfaceHint: writingSurfaceHint(element),
                 element: handle,
                 selectedRange: range
             )
@@ -566,6 +619,10 @@ public actor AXTextIO {
         return (verdict, verdict == .redirect ? redirect : nil)
     }
 
+    public func replyTargetStillFocused(_ target: TextTarget, frontmostPID: pid_t?) -> Bool {
+        capturedElementIsFocused(target, focused: focusedElement(frontmostPID: frontmostPID))
+    }
+
     private func capturedElementIsFocused(_ target: TextTarget, focused: AXUIElement?) -> Bool {
         guard let handle = target.element, let focused else { return false }
         handle.element.applyMessagingTimeout()
@@ -739,28 +796,32 @@ public actor AXTextIO {
 
     // MARK: - Browser URL
 
-    /// Best-effort. Walks up from the focused element looking for an `AXWebArea`
-    /// carrying `AXURL`.
+    /// Gmail's inline reply body can sit 30 ancestors below its AXWebArea.
+    /// Bound both depth and time; fall back only to this element's own window.
     ///
     /// Deliberately not AppleScript, which `prompt/`'s `getBrowserContext` uses:
     /// that would add an Automation permission prompt on top of Accessibility for a
     /// field that only shapes the prompt and feeds analytics. Nil is fine.
-    private func browserURL(from element: AXUIElement) -> String? {
-        var current: AXUIElement? = element
-        var depth = 0
-        while let node = current, depth < 12 {
-            node.applyMessagingTimeout()
+    func browserURL(from element: AXUIElement) -> String? {
+        let result = BrowserURLProbe.resolve(from: element, sameNode: { CFEqual($0, $1) }, read: { node in
+            node.applyMessagingTimeout(0.05)
+            defer { node.applyMessagingTimeout() }
+            var url: String?
             if node.stringAttribute(kAXRoleAttribute) == "AXWebArea" {
-                if let url = node.copyAttribute(kAXURLAttribute) as? URL {
-                    return url.absoluteString
-                }
-                if let url = node.stringAttribute(kAXURLAttribute) {
-                    return url
-                }
+                let raw = node.copyAttribute(kAXURLAttribute)
+                url = (raw as? URL)?.absoluteString ?? (raw as? String)
             }
-            current = node.elementAttribute(kAXParentAttribute)
-            depth += 1
-        }
-        return nil
+            return BrowserURLProbe.NodeInfo(url: url, parent: node.elementAttribute(kAXParentAttribute))
+        }, documentURL: {
+            element.applyMessagingTimeout(0.05)
+            defer { element.applyMessagingTimeout() }
+            guard let window = element.elementAttribute(kAXWindowAttribute) else { return nil }
+            window.applyMessagingTimeout(0.05)
+            defer { window.applyMessagingTimeout() }
+            let raw = window.copyAttribute(kAXDocumentAttribute)
+            return (raw as? URL)?.absoluteString ?? (raw as? String)
+        })
+        destinationLog.debug("surface URL source=\(result.source, privacy: .public) depth=\(result.depth) available=\(result.url != nil)")
+        return result.url
     }
 }

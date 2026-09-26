@@ -29,6 +29,17 @@ final class OnboardingProgressStoreTests: XCTestCase {
         XCTAssertEqual(store.savedStep, DesktopOnboardingStep.flow.first)
     }
 
+    func testRetiredBarPageResumesAtPracticeWithoutReplayingIntro() {
+        defaults.set(4, forKey: "desktopOnboarding.step")
+        let store = OnboardingProgressStore(defaults: defaults)
+        XCTAssertEqual(store.savedStep, .practice)
+        XCTAssertFalse(store.shouldPresentIntro)
+        XCTAssertFalse(store.isComplete)
+        XCTAssertEqual(DesktopOnboardingStep.bar.activeStep, .practice)
+        XCTAssertFalse(DesktopOnboardingStep.flow.contains(.bar))
+        XCTAssertFalse(DesktopOnboardingStep.railSteps.contains(.bar))
+    }
+
     func testUnfinishedStepSurvivesAStoreReload() {
         OnboardingProgressStore(defaults: defaults).save(step: .replyPractice)
         XCTAssertEqual(OnboardingProgressStore(defaults: defaults).savedStep, .replyPractice)
@@ -107,7 +118,7 @@ final class OnboardingProgressStoreTests: XCTestCase {
         XCTAssertEqual(
             DesktopOnboardingStep.flow,
             [
-                .language, .welcome, .name, .purpose, .review, .access, .bar, .practice,
+                .language, .welcome, .name, .purpose, .review, .access, .practice,
                 .customPractice, .replyPractice, .source, .offer, .complete,
             ]
         )
@@ -116,11 +127,11 @@ final class OnboardingProgressStoreTests: XCTestCase {
     func testVisualFlowHasMatchingForwardAndBackNavigation() {
         let flow = DesktopOnboardingStep.flow
         XCTAssertEqual(Array(flow.dropFirst()), [
-            .welcome, .name, .purpose, .review, .access, .bar, .practice, .customPractice,
+            .welcome, .name, .purpose, .review, .access, .practice, .customPractice,
             .replyPractice, .source, .offer, .complete,
         ])
         XCTAssertEqual(Array(flow.dropLast().reversed()), [
-            .offer, .source, .replyPractice, .customPractice, .practice, .bar, .access,
+            .offer, .source, .replyPractice, .customPractice, .practice, .access,
             .review, .purpose, .name, .welcome, .language,
         ])
     }
@@ -153,7 +164,7 @@ final class OnboardingProgressStoreTests: XCTestCase {
     /// from a practice screen and took `source` and `offer` with it — so declining a
     /// tutorial cancelled the ask for money that comes two pages later.
     func testSkippingAnEducationPageAdvancesOnePageInsteadOfEndingTheRun() {
-        XCTAssertEqual(DesktopOnboardingStep.bar.skippingEducation, .practice)
+        XCTAssertNil(DesktopOnboardingStep.bar.skippingEducation)
         XCTAssertEqual(DesktopOnboardingStep.practice.skippingEducation, .customPractice)
         XCTAssertEqual(DesktopOnboardingStep.customPractice.skippingEducation, .replyPractice)
         XCTAssertEqual(DesktopOnboardingStep.replyPractice.skippingEducation, .source)
@@ -164,7 +175,7 @@ final class OnboardingProgressStoreTests: XCTestCase {
     /// past `.offer` again.
     func testSkippingEveryEducationPageStillReachesTheSourceQuestionAndTheOffer() {
         var visited: [DesktopOnboardingStep] = []
-        var step = DesktopOnboardingStep.bar
+        var step = DesktopOnboardingStep.practice
         while let next = step.skippingEducation {
             visited.append(next)
             step = next
@@ -178,12 +189,12 @@ final class OnboardingProgressStoreTests: XCTestCase {
         XCTAssertEqual(Array(DesktopOnboardingStep.flow.suffix(3)), [.source, .offer, .complete])
     }
 
-    /// Only the four teaching pages carry the link. Everything else answers nil, so a
+    /// Only the three practice pages carry the link. Everything else answers nil, so a
     /// caller cannot use it to jump out of a setup page that has to be completed.
-    func testOnlyTheFourTeachingPagesCanBeSkipped() {
+    func testOnlyTheThreePracticePagesCanBeSkipped() {
         XCTAssertEqual(
             DesktopOnboardingStep.educationSteps,
-            [.bar, .practice, .customPractice, .replyPractice]
+            [.practice, .customPractice, .replyPractice]
         )
         for step in DesktopOnboardingStep.allCases
         where !DesktopOnboardingStep.educationSteps.contains(step) {
@@ -196,7 +207,7 @@ final class OnboardingProgressStoreTests: XCTestCase {
     func testTheRailCountsNeitherTheLanguagePageNorTheOffer() {
         XCTAssertFalse(DesktopOnboardingStep.railSteps.contains(.language))
         XCTAssertFalse(DesktopOnboardingStep.railSteps.contains(.offer))
-        XCTAssertEqual(DesktopOnboardingStep.railSteps.count, 11)
+        XCTAssertEqual(DesktopOnboardingStep.railSteps.count, 10)
     }
 
     /// A step with no segment lights the last one at or before it. Without this the

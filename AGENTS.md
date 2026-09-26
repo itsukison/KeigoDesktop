@@ -1,10 +1,11 @@
 # AGENTS.md — macOS app
 
 **Read this file first.** Single source of truth for the macOS app that lives in
-this folder. `design.md` (Willow style reference, measured from `reference/`) is the
-main-window visual authority; `onboarding_reference/` supplies the first-run interaction
-reference. This file is the architectural authority. Where they disagree about the
-overlay, §8 records the sanctioned deviations.
+this folder. `design.md` (Aside-inspired desktop system, grounded in `reference/aside/`) is the
+visual authority for the main window and onboarding; `onboarding_reference/` supplies
+the first-run interaction reference. `docs/design.md` is the historical Willow reference.
+The Aside direction governs the native light UI. This file is the architectural authority. Where they disagree about the overlay, §8 records the
+sanctioned deviations.
 
 Status: **MVP implemented, the backend is live, and the app has been run once.**
 The first run produced `debug.png` and a round of overlay fixes (§4, §8).
@@ -16,6 +17,11 @@ The first run produced `debug.png` and a round of overlay fixes (§4, §8).
 - Keep this file as current architectural and product guidance. Update the relevant numbered section in place when a durable rule changes.
 - Put release evidence and historical investigation records in the relevant document under `docs/` or leave them in Git history.
 - Report task-specific tests and verification in the handoff; add them here only when they establish a lasting constraint future work must preserve.
+- When failures recur across surfaces after local fixes, reassess the shared architecture
+  and evidence representation before adding another exception. Identify the recurring
+  failure pattern, compare a working implementation, and address missing capabilities
+  at their source. Passing unit tests or an intermediate `ready` state does not establish
+  that the user's end-to-end workflow succeeds.
 
 ---
 
@@ -25,12 +31,17 @@ A macOS menu-bar-less companion to the iOS keyboard (`../Japanese`, internal nam
 `KeigoButton`, user-facing `AIキーボード`). Same product, same account, different
 surface.
 
-The whole app is one interaction: a small pill sits at the bottom of the screen
-above the Dock. Hovering it expands a row of the user's own rewrite buttons —
-the same `UserPrompt` buttons they configured on their phone — plus a custom
-button that turns the row into a free-text input bar. Pressing a button reads
-the text the user is currently editing in whatever app they're in, rewrites it,
-and writes the result back in place.
+The pill reveals the account's enabled saved buttons in their saved order, plus the
+pencil composer and a separate copy-to-reply action when a source is available.
+Saved buttons require nonempty text or a selection; blank/missing targets show guidance
+without taking focus. The pencil can compose from scratch. Reply retains its own
+source/audience and capture rules (§16).
+
+Mac and phone explicitly share `user_prompts`. Loading never reseeds or replaces an
+existing configuration. Preserve IDs, origins, builtin identities, enabled states and
+ordering. The first item owns the main slot. Universal writing styles and automatic
+Reply are independent experiments, preserved under recovery references; neither is
+active on the multiple-button release branch. Leave local style JSON files untouched.
 
 There is **no keyboard, no IME, no kana-kanji conversion** in this app. macOS
 already has a Japanese IME. `AzooKeyKanaKanjiConverter`, Zenzai, KeyboardKit and
@@ -82,14 +93,14 @@ Their `ScreenCaptureKit` + `Vision` screen-OCR path is out of scope for v1 (§10
   plainly: *"Nothing here references or alters existing tables, so it cannot
   affect app users or the rest of the schema."*
   (`../Japanese/supabase/migrations/20260728120000_web_rewrite_rate_limit.sql`)
-- **`user_prompts` is shared and read-write from both surfaces.** It is the one
-  deliberate exception to the rule above — it is what makes a user's buttons
-  follow them from phone to laptop. Treat its schema as a contract owned by the
-  iOS repo.
+- **Shared buttons are an explicit exception: desktop reads and writes `user_prompts`.**
+  Preserve the existing wire contract and account-scoped ownership. Edits and deletion
+  sync to the phone; explain that in the interface. Never reseed on load or sign-in.
 - **Analytics never mix.** Desktop reports to its own PostHog project, not the
   existing `Default project` (id 465060, org `Keigo`). See §7.
-- **The overlay is dark; the main window is white.** The window is `design.md`'s
-  published system; the overlay is its own ramp. See §8.
+- **The overlay is dark; the main workspace is light.** `design.md` specifies an
+  Aside-inspired translucent glass frame and opaque white working surfaces. The overlay keeps
+  its independent dark ramp, geometry, and focus rules. See §8.
 
 ---
 
@@ -98,14 +109,15 @@ Their `ScreenCaptureKit` + `Vision` screen-OCR path is out of scope for v1 (§10
 ```
 laptop/
 ├── AGENTS.md                      ← you are here
-├── design.md                      ← Willow style reference (visual authority)
+├── design.md                      ← Aside-inspired desktop visual authority
 ├── project.yml                    ← XcodeGen, mirrors ../Japanese's setup
 ├── Package.swift                  ← local SPM package for the testable core
 ├── Sources/
 │   ├── DesktopRewriteKit/         ← pure Swift, no AppKit: models + service
 │   │   ├── Models/                ← UserPrompt, RewriteModels
 │   │   ├── Service/               ← AuthService, DesktopRewriteService, KeychainSessionStore
-│   │   ├── Prompts/               ← UserPromptRemoteStore (shared user_prompts, read+write)
+│   │   ├── Prompts/               ← legacy contract code, not wired into desktop
+│   │   ├── WritingStyle/          ← local profiles, persistence and surface resolver
 │   │   ├── Profile/               ← ProfileRemoteStore (shared profiles, read+write)
 │   │   ├── History/               ← RewriteHistoryStore + RewriteStats (§14, local only)
 │   │   └── SupabaseConfig.swift
@@ -184,18 +196,18 @@ bearing detail.**
 | State | Window | Key? | Notes |
 |---|---|---|---|
 | Pill | `PillPanel` | **never** | ~28 pt tall, fully pilled, always visible |
-| Hover row | `PillPanel` (resized) | **never** | user's enabled buttons + custom button |
+| Hover row | `PillPanel` (resized) | **never** | Enabled saved buttons + pencil + available Reply |
 | Input bar | `PillPanel` (resized) | **yes** | needs typing; capture already done |
-| Generating | `GeneratingPanel` | never | separate window, per `generating.png` |
+| Generating | `GeneratingPanel` | never | separate edge-attached activity surface |
 | Result | `ResultPanel` | **yes** | Enter = Insert, Esc = dismiss |
 
-**The generating capsule and the result panel replace the bar, they do not stack
-on top of it.** Both anchor their *bottom* to `PillPanel.frame.minY` and the pill
-window is ordered out for the duration — `generating.png` and `result.png` both
-show one thing on the bottom edge, and a pill sitting under a result panel is a
-second control with nothing left to do. The hand-off is ordered so the edge is
-never momentarily bare: the bar returns before they leave and leaves after they
-arrive. Its frame stays valid while hidden, which is what they anchor to.
+**Generation and results replace the bar, rather than stacking on it.** The new
+surface is ordered before the outgoing one leaves. A stable snap-zone anchor and
+owning-screen work area position both windows: bottom grows up, notch/top grows down,
+and sides grow inward while retaining vertical center. Visible surface bounds and
+generation glow bounds are separate; glow padding must never introduce an attachment
+gap. The hidden pill retains its frame. Only the pill's four-slot picker changes the
+saved zone; results cannot be dragged freely.
 
 ### PillPanel
 
@@ -206,9 +218,10 @@ arrive. Its frame stays valid while hidden, which is what they anchor to.
   so it survives Spaces switches and full-screen apps.
 - `level = .statusBar`. High enough to sit over normal windows, below menu-bar
   dropdowns.
-- **Position**: bottom-centered, `bottomInset` (6 pt) above
-  `OverlayPlacement.workArea(on:).minY`. Not `visibleFrame` — read the next two
-  bullets before touching this, they are the whole reason the file exists.
+- **Position**: exactly four fixed destinations: bottom center, notch/top center,
+  left center, and right center. Bottom is the default and remains `bottomInset`
+  (6 pt) above the Dock-aware work area. There are no corner positions, free drops,
+  or horizontal bottom offsets.
 - **`NSScreen.visibleFrame` lies about the Dock, and this is the load-bearing
   fact of §4's placement.** Measured on a 1920×1080 display while a full-screen
   space had the Dock hidden: the Dock's own AX element reported its top edge at
@@ -222,12 +235,21 @@ arrive. Its frame stays valid while hidden, which is what they anchor to.
   question — is a bottom-oriented Dock actually on this screen. If yes,
   `workArea.minY` is `visibleFrame.minY` (which correctly includes the Dock's
   outer margin). If no, it runs to `screen.frame.minY` and the bar sits at the
-  very bottom of the display. Willow does the equivalent —
+  very bottom of the display. Before Accessibility is granted, use `visibleFrame`
+  conservatively: an unreadable Dock is not evidence that it is hidden. This keeps
+  first-launch landing above the Dock until the normal probe can run. Willow does the equivalent —
   `NewDockManager`, `lastDockPosition` and `lastDockSize` are in its binary.
-- **The Y is re-derived, never carried over.** `OverlayPlacement.anchorY` is the
-  only source of the bottom edge and every reposition goes through it.
-  Preserving the previous frame's `minY` across a resize is the second half of
-  the same bug: the Y computed at launch was the Y forever.
+- **The top tab joins the notch.** Read the housing width and center from
+  `auxiliaryTopLeftArea` / `auxiliaryTopRightArea`, and its bottom from
+  `safeAreaInsets.top`. The top tab is black, at least as wide as the housing,
+  flush with its bottom, and expands below it. Its exposed bottom corners use an
+  8 pt radius so edge actions remain clear. Displays without a notch use a
+  top-center tab under the menu bar. The work area still caps below the housing
+  so auxiliary panels cannot enter the camera cutout.
+- **The resting frame is re-derived from the zone on every resize.** Bottom grows
+  up, top grows down, and the two side positions remain vertically centered and
+  grow inward. Never preserve the previous X or Y when resizing: doing so restores
+  arbitrary placement and lets an expanded side control drift away from the edge.
 - **The 0.5 s poll is not belt-and-braces, it is the only mechanism that works
   for the Dock.** `didChangeScreenParametersNotification` covers the Dock being
   resized or its auto-hide setting changed; `NSWorkspace.activeSpaceDidChange`
@@ -243,21 +265,41 @@ arrive. Its frame stays valid while hidden, which is what they anchor to.
   changed the answer, re-anchored, and clamped the bar onto the other display at
   an X carried over from the one it left. `activeScreen()` is now used only for
   the very first placement, when there is no bar frame to ask about yet.
-- **Auxiliary panels clamp.** The generating capsule and the result card go
-  through `OverlayPlacement.auxiliaryFrame`, which centres them on the bar and
-  then clamps to the work area. They were unclamped, and the bar is draggable
-  with a persisted position, so parking it near an edge left a 420 pt card
-  hanging off the side. `clampToWorkArea` resolves the screen from the frame
-  rather than `NSWindow.screen`, which is nil once a window is fully off-screen —
-  exactly when the clamp matters.
+- **Replacement panels use explicit snap-zone geometry.** `CompanionGeometry` carries
+  the zone, captured bar anchor, owning-screen work area and notch width. The pure
+  `BarPlacement.attachedFrame` holds the appropriate edge (and center on the other
+  axis) as content changes. Never derive a result's next frame from its previous
+  measured frame. The work-area poll and screen notifications re-anchor visible
+  generation/results along with the bar. Size is capped to the owning work area
+  before clamping, so a panel cannot escape onto an adjacent display.
+- **Error toasts follow the selected zone.** Use the zone-aware `BarPlacement.stackedFrame`
+  with an 8 pt gap: above bottom, below top, right of left, and left of right. Center on
+  the other axis, cap the size and clamp inside the live anchor's owning-screen work area.
+  Remeasure/reposition after anchor movement or resizing, zone changes and Dock/display
+  changes; never cache an above/below decision or resolve the screen from the toast frame.
+  Reply context, update notice and snooze menu retain their roomy-side placement through
+  `OverlayPlacement.stackedFrame` and `BarPlacement.verticalSide`. Resolve screens from
+  anchor frames rather than `NSWindow.screen`, which can be nil off-screen.
 - **Which screen (first launch only)**: the one under the mouse cursor
   (`NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }`),
   falling back to `.main`. Same rule `prompt/src/core/window-manager.js`
   `positionOverlay()` uses.
-- **Draggable, position remembered.** Store the offset from
-  `visibleFrame.origin` (not an absolute point) in `UserDefaults`, so an
-  external display being unplugged doesn't strand the pill off-screen. Willow
-  ships an onboarding video for exactly this affordance.
+- **Four-slot drag picker.** Dragging shows one full-screen, never-key,
+  mouse-transparent `SnapOverlayPanel` on the dragged display. A 64% black scrim
+  dims the screen; four translucent white landing areas have dotted white borders.
+  A nearby target grows inward with a spring animation. Target selection uses the
+  unexpanded areas and a generous 120 pt rectangle gap, so the preview's growth
+  cannot change which zone qualifies. Release nearby animates into the exact slot;
+  release far away returns to the previous zone on the original display.
+  No arbitrary location is ever saved. Native tracking may consume mouse-up, so
+  `PillPanel.sendEvent` and a drag-scoped common-run-loop timer both end the drag
+  idempotently. Hover collapse, normal resize, and Dock re-anchoring pause during it.
+  Moving between displays changes the picker to that display.
+- **Position persistence.** Save only `overlay.pill.snapZone`. Legacy top corners
+  migrate to top center, bottom corners to bottom center, and old free offsets to
+  bottom center; retire `overlay.pill.offsetFromVisibleFrameOrigin`. Reset selects
+  bottom center and the position poll applies it even when the work area is unchanged.
+  Geometry and migration are pinned by `BarPlacementTests`.
 
 ### Hover
 
@@ -274,21 +316,20 @@ arrive. Its frame stays valid while hidden, which is what they anchor to.
   view: a borderless window clips its content.
 ### Input bar
 
-- **Fixed width (360 pt) — the one state that does not follow its measurement.**
+- **Fixed width (360 pt horizontally, 208 pt at a side) — the one state that does not follow its measurement.**
   A text field has no stable intrinsic width: it measures the placeholder while
   empty and the typed string after, so the window snapped narrower on the first
   keystroke and twitched on every one after it. And under
   `fixedSize(horizontal:)` its ideal width is unbounded, so a long prompt grew
   the window off the side of the screen rather than wrapping.
-- **The placeholder never wraps and never comes from AppKit.** `TextField` has an empty
+- **The horizontal placeholder never wraps, and placeholders never come from AppKit.** `TextField` has an empty
   native title; `InputBar` draws an explicit one-line `textSecondary` layer instead.
   This is both a colour invariant — the dark overlay does not inherit a black placeholder
   from the system appearance — and a geometry invariant: the shorter optional-reply hint
   cannot make an untouched composer taller than its 34 pt floor. The reply composer has
-  no second mode capsule beside the mascot; the placeholder already names the mode, and
-  the duplicate capsule compressed into an unlabeled dark shape. (`ReplyBar` keeps its
-  badge in the armed state, where there is no field or placeholder.)
-- **Only typed guidance wraps, up to `inputBarMaxLines` (3), and the window height
+  no second mode capsule beside the mascot; the placeholder already names the mode.
+  The attached source header adds 35 pt above the input after clicking Reply (§16).
+- **In the horizontal bar, only typed guidance wraps, up to `inputBarMaxLines` (3), and the window height
   follows.** §4's 28/34 pt are a floor, not a fixed height — `currentSize()` takes the
   larger of the measurement and the token.
 - **Cancellable, three ways**: Escape, clicking anywhere outside (the panel
@@ -312,36 +353,39 @@ arrive. Its frame stays valid while hidden, which is what they anchor to.
   Corollary: the collapsed pill's horizontal padding is load-bearing — without it
   the window measures 16 pt and the pill is a naked icon.
 
+### Side layouts
+
+Left and right use the same content in a vertical layout, mirrored at the attached
+edge. The idle tab is 24 × 56 pt. Hover opens a 144 pt-wide stack of the existing
+mascot, saved-button scroll region, and pencil action, with 8 pt horizontal insets.
+The multiple-button stack is 144 pt wide; available Reply includes its dismiss target;
+signed-out copy uses 176 pt so it wraps legibly. Side surfaces keep the dark
+overlay ramp, a straight attached edge,
+and 18 pt outer corners. Hover remains non-key and retains the 300 ms grace.
+
+The side composer is 208 × 252 pt (287 pt high with the attached reply-source header): mascot above, a fixed 160 pt instruction field,
+and a compact 28 pt arrow submit control aligned to the lower right below it.
+It uses the same captured target,
+scope-specific placeholder, submit rules, and Escape/outside-click cancellation as
+`InputBar`. The placeholder may wrap inside this fixed area; typed guidance scrolls
+after eight lines. Bottom and notch keep their horizontal composer and three-line
+limit. `AnyLayout` changes orientation without replacing the field's state when a
+composer moves between destinations. Window height follows the measured vertical
+content; expansion keeps the side edge and vertical center fixed.
+
 ### Hover row layout
 
-**`hovered.png` is Willow's own bar, not ours.** Its `27.3k words` readout and
-three icons are dictation affordances; no reference image shows our button row.
-The structure below keeps that image's *geometry* and replaces its contents.
+The expanded row contains enabled saved buttons in saved order, the brand mark,
+and the pencil. A bounded scroll region keeps every button reachable in horizontal
+and side layouts; utilities remain outside the scroll region. Constrain expanded
+surfaces to their owning screen's work area. Reply never replaces a saved button.
+The pill remains never-key, with capture-before-focus and 300 ms hover grace.
 
-```
-┌──────────────────────────────────────────────────┐
-│  ◈ │  敬語   要約   英訳   丁寧に  │  ✎           │   34 pt tall
-└──────────────────────────────────────────────────┘
-   ↑     ↑                              ↑
-  mark  the user's enabled prompts    custom input
-```
-
-- **Left**: the same mark shown on the collapsed pill, 16 pt, then a 1 pt
-  `#2e2b28` hairline. No word count, no status text — we have nothing to count.
-- **Center**: one pill per enabled `UserPrompt`, in `sort_order`. `UserPrompt.title`
-  as a text label, Inter 500 / 12 pt, `#fdfcfc`. 10 pt horizontal padding,
-  9999 pt radius, transparent until hover; hover fill `#2e2b28`.
-  Labels, not icons — a user's own buttons have arbitrary titles and no icon
-  vocabulary can carry them.
-- **Right**: hairline, then the custom button `✎`, same metrics as a prompt pill.
-- Row width is intrinsic. **No overflow handling.** Measured against live data
-  (3,270 users in `user_prompts`): enabled buttons average 3.99, median 4, p99 5,
-  max 7. Eight pills including `✎` fit a single row on any supported display.
-- Collapsed pill 28 pt → expanded row 34 pt. Animate the window frame (above).
-- **The bar is a capsule, at `pillRadius`.** `normal.png` and `hovered.png` show
-  Willow's bar as a flat-bottomed tab flush with the work area. That is *their*
-  shape; those images are cited here for placement behaviour, not for styling.
-  Do not re-derive our shape from them — it has been tried and reverted once.
+Saved-button requests freeze the button instruction, origin, builtin key and analytics
+purpose in the attempt. Regenerate/refine/result pages retain this snapshot. Release
+captures never resolve or emit universal writing styles. Automatic Reply is hard-off
+in Debug and Release, including old preferences and environment overrides. Do not
+start its bridge or embed the development native host in the app target.
 
 ### Errors
 
@@ -352,8 +396,8 @@ The structure below keeps that image's *geometry* and replaces its contents.
   with no editable field did **nothing at all**: no result, no message, no
   change. That is the most likely thing to happen on a first run.
 - Every failure path now goes through `present(message:)`, whatever the state.
-  The toast sits above whatever currently owns the bottom edge — the bar, the
-  capsule, or a result card — auto-dismisses after `errorToastDuration`, and
+  The toast sits inward from the live anchor — the bar, the capsule, or a result card —
+  according to the four-position rule above, auto-dismisses after `errorToastDuration`, and
   dismisses on click or when a rewrite actually starts. Never key: the failure usually
   left the user's own field focused and taking that to show an apology makes it
   worse.
@@ -384,30 +428,10 @@ The structure below keeps that image's *geometry* and replaces its contents.
   never what anyone was reading against. `transition` now clears the toast only on the
   way into `.generating` or `.result`; the duration is 8 s, the toast is 360 pt wide at
   13 pt, and it says it closes on click.
-- **Three empty rows, and only two of them are messages.** A failed `refreshPrompts`
-  that leaves nothing to show sets `promptsFailed`, and the row says so instead of
-  telling someone to go and make buttons they already have. Hovering retries —
-  `refreshPrompts` otherwise runs once at launch, so being offline at that moment left
-  the row empty for the session.
-
-  **Signed out is the third, and it is a button.** `refreshPrompts` catches
-  `RewriteError.notSignedIn` separately, drops the stale buttons (they belong to an
-  account that is no longer attached, so pressing one could only fail) and sets
-  `signedOut`. That row is 「サインインするとボタンが使えます」 plus a filled サインイン
-  pill, and it drops ✎ as well — every other control on the bar is inert until there is
-  an account, so the row holds the one action that changes that. Pressing it collapses
-  the row and calls `onSignInRequired`, the same callback a rewrite raises when it
-  discovers a missing session, so both routes land on アカウント in sign-in mode. It
-  used to report 「ボタンを読み込めませんでした」, which is a network apology for a
-  problem no retry can fix.
-
-  **Which needs `notSignedIn` to survive the store.** `UserPromptRemoteStore` used to
-  turn every failure into `RewriteError.backend`, so the row could not tell the two
-  apart. `authorize` now wraps a missing session the way `DesktopRewriteService.post`
-  already did, and 401/403 is mapped as well — `ensureFreshAccessToken` deliberately
-  falls back to the stored token when a refresh fails rather than signing the user out,
-  so a genuinely expired session reaches PostgREST and comes back rejected rather than
-  failing locally.
+- **Signed out is an action, not a prompt-fetch failure.** `refreshAccount` reads
+  local auth state and clears pending work and visible buttons on account changes.
+  The row offers Sign in, or loading/empty/retry states for account-backed buttons.
+  Scope asynchronous reads and multi-request writes to the account that initiated them.
 
 ### Capture ordering — the rule that makes this work
 
@@ -549,8 +573,8 @@ high in some app, that's a bug report, not a mystery.
 ## 6. Backend
 
 Shared Supabase project with the iOS app:
-`https://eercsucvxnszqletxued.supabase.co`. Shared login, shared buttons, shared
-billing. **Separate function, separate schema, separate analytics.**
+`https://eercsucvxnszqletxued.supabase.co`. Shared login and shared
+billing and shared saved buttons. **Separate function, separate schema, separate analytics.**
 
 **Two hosts, deliberately.** Auth alone is reached through the project's Supabase
 custom domain `https://auth.keigobutton.com`; REST and Functions stay on
@@ -567,7 +591,7 @@ host of the URL the app hands the session, so it used to quote
 |---|---|
 | `auth.users` | one identity across phone and laptop |
 | `profiles` | display name, subscription state. Four columns: `id`, `display_name` (NOT NULL, default `''`), `created_at`, and `platform` — see below |
-| `user_prompts` | the buttons — read and write (columns: `id, user_id, slot, builtin_key, origin, title, prompt, is_enabled, sort_order, created_at, updated_at`). **`id` is not its only unique key**: `user_prompts_user_builtin_unique (user_id, builtin_key) WHERE builtin_key IS NOT NULL` makes a builtin key an identity, and `handle_new_user()` seeds all four (`polite`, `natural`, `email`, `translateToEnglish`) at signup. Any write that mints a fresh id for an already-owned key is a 409 — see `UserPromptIdentity` |
+| `user_prompts` | Shared phone/Mac buttons with account RLS. Existing identities and wire contracts remain compatible. |
 | `user_ai_consent` | AI-improvement consent. Honored by iOS. **Not read by desktop as of 2026-09-18** — `desktop-rewrite`'s `fetchConsent` was removed along with the gate it fed; see `desktop.rewrite_events` below |
 
 #### `profiles.platform` — derived, and never written by a client
@@ -614,7 +638,7 @@ actually did.
 
 | Object | Purpose |
 |---|---|
-| `desktop.rewrite_events` | mirrors `ai_rewrite_events` in spirit, never in storage. **No consent gate** (decided 2026-09-18: no AI-consent screen exists on desktop, the data is not sold or shared, and full capture is needed for product improvement — migration `20260918211225`). `redact.ts` runs unconditionally on every text field instead, and is now the only mitigation on raw text — `consent_version` is left null going forward. Beyond `command_key` (the 4 raw builtin ids only) the row also carries `attempt_id` (joins to PostHog's `attempt_id`), `rewrite_type` (`RewriteType.rawValue` — the reliable signal `command_key IS NULL` never was; some builds, e.g. 0.1.9, logged a null `command_key` regardless of what was pressed), `button_key` (the privacy-safe saved-button label, richer than `command_key`), `instruction_text` (`RewriteRequest.prompt` — the actual instruction on every path: button prompt, typed custom text, or a refine instruction), `reply_source_text` (`RewriteRequest.replyTo`, reply mode only), and `previous_event_id` (links a regenerate/refine row back to the attempt it followed, from the client's `page.eventId`). All six are populated only by builds that include the 2026-09-18 `RewriteRequest`/`OverlayController` changes — older builds leave them null |
+| `desktop.rewrite_events` | mirrors `ai_rewrite_events` in spirit, never in storage. **No consent gate** (decided 2026-09-18: no AI-consent screen exists on desktop, the data is not sold or shared, and full capture is needed for product improvement — migration `20260918211225`). `redact.ts` runs unconditionally on every text field instead, and is now the only mitigation on raw text — `consent_version` preserves the local retention-basis labeling described below. Beyond `command_key` (the 4 raw builtin ids only) the row also carries `attempt_id` (joins to PostHog's `attempt_id`), `rewrite_type` (`RewriteType.rawValue` — the reliable signal `command_key IS NULL` never was; some builds, e.g. 0.1.9, logged a null `command_key` regardless of what was pressed), `button_key` (the privacy-safe saved-button label, richer than `command_key`), `instruction_text` (`RewriteRequest.prompt` — the actual instruction on every path: button prompt, typed custom text, or a refine instruction), `reply_source_text` (`RewriteRequest.replyTo`, reply mode only), and `previous_event_id` (links a regenerate/refine row back to the attempt it followed, from the client's `page.eventId`). All six are populated only by builds that include the 2026-09-18 `RewriteRequest`/`OverlayController` changes — older builds leave them null |
 | `desktop.usage_buckets` | per-user day/hour/minute counters. Shape from `web_rewrite_usage` |
 | `desktop.plan_limits` | the caps `desktop_reserve_usage` enforces and `desktop_get_entitlement` reports — **the authority, and the only place a limit changes.** `month` is the quota (free 30, Pro 1,000). `day` is **null on every plan**: there is no daily cap, and `desktop_reserve_usage` skips that arm when it is null. `hour`/`minute` (120/12) stay NOT NULL — they are burst protection against a stuck client, not a quota. `PlanPricing.freeMonthlyRewrites` / `proMonthlyRewrites` only mirror this row for copy shown before an entitlement loads |
 | `desktop.activations` | `(user_id, first_seen_at, last_seen_at, app_version)` — **how desktop counts stay honest.** `profiles` holds both platforms' users; desktop MAU comes from here and PostHog, never from counting `profiles` rows |
@@ -627,6 +651,28 @@ actually did.
 All five are `REVOKE EXECUTE`d from `public`, `anon`, `authenticated`; only
 `service_role` can call them. Verify with `has_function_privilege` after any change
 to this migration.
+
+#### Text retention diverges from iOS, and `consent_version` is what carries the difference
+
+**Desktop stores `input_text` / `output_text` on every successful rewrite, opt-in or
+not (2026-08-24).** iOS gates them behind `user_ai_consent` because that surface's text
+feeds AI improvement; the desktop's does not, and the rows exist only so we can read
+what people asked for and what came back. `redactPII` still runs on both columns, so an
+unconsented row holds the same best-effort-masked text a consented one would.
+
+**`consent_version` stopped meaning "text is here" and now means "on what basis".** It
+is the real consent version when `user_ai_consent.opt_in` is true and the literal
+`internal-analysis` when it is not, so the two populations stay separable in SQL after
+the fact — which is the only thing that keeps a future dataset or training job honest.
+**Filter on that column, never on `input_text IS NOT NULL`**, which is now true for
+everything. A failed `fetchConsent` collapses to `internal-analysis`, i.e. to the
+restrictive side.
+
+`logBlockedEvent` still carries no text at all: a blocked attempt has no output, and the
+input of one that produced nothing is not worth the retention surface.
+
+The published privacy policy lives in `../web` and on iOS, not here, and was **not**
+updated alongside this change.
 
 ### `desktop-rewrite` Edge Function
 
@@ -685,6 +731,50 @@ RLS-gated. Token refresh mirrors `CloudRewriteService.ensureFreshAccessToken()`
 Session storage is the **macOS Keychain**, not an App Group — App Groups are the
 iOS container↔extension mechanism and have no role here.
 
+### Universal style contract (experiment and additive backend compatibility only)
+
+The release does not emit this payload. Do not roll back deployed compatibility.
+Experiment requests include optional `writingStyle` version 1 with context, voice, exactly
+one context-specific second axis, notes (at most 500 Unicode scalars), resolver version
+and source. Validate before quota reservation/provider calls; unknown versions and
+cross-context values fail explicitly. Requests without it retain legacy behavior.
+The new branch returns one candidate and `X-Desktop-Style-Version: 1`; the native service
+requires this marker for styled requests. Deploy this additive function before shipping
+the new client. Never silently retry an unsupported contract as a paid legacy request.
+
+`style_modules.ts` contains static context-specific option modules; `style_prompt.ts`
+composes preservation, operation, context, voice and structure. Saved notes and current
+instructions are separate JSON user data, never system prompt interpolation. Current
+instructions outrank notes, which outrank selected presets, within factual and scope
+constraints. Style-only edits preserve all distinct facts; explicit summaries may omit
+details while preserving main meaning and material caveats. Inline selections omit
+body structure modules. UI language is never an implicit translation request.
+Universal requests omit the legacy full `browserURL`; classification stays local.
+Saved notes never enter `instruction_text` or analytics.
+
+Every universal style has a sendable-quality floor: fix grammar, awkward wording and
+accidental mixed register while preserving meaning, agency, social intent and commitment
+strength. The middle voices make messages naturally polite; preserving meaning never
+means preserving rough wording. Normal detail does not imply shortening. Work chat uses
+`concise / balanced / detailed`, with `balanced` in the middle; detail expands only supplied
+information. Local legacy work choices migrate `preserve`/`streamline` to `balanced` and
+`structure` to `detailed`, keeping voice, notes and mappings. The server still accepts old
+IDs. Detail preferences apply to whole drafts, composition and reply; fragments omit body
+formatting. Other keeps reports and notes in their own genre. Explicit instructions and
+saved preferences still take precedence. Prompt quality needs generated-output checks,
+not only assertions that the instruction strings are present.
+
+Whole-email universal requests produce a full email frame: salutation, spaced body,
+conventional closing and sender signature, across all nine email choices. Preserve
+existing greetings/signatures without duplication. A missing addressee uses `[宛名]様`
+or `[Recipient name]`; a missing sender uses `[あなたの名前]` or `[Your name]`.
+These user-approved name slots are the only default placeholder exception. Do not infer
+an addressee from a third-party mention. Ordinary whole-email polish now fetches the
+same authenticated profile name as composition/reply; names remain server-side data.
+Selections never acquire this frame. Body-only/current instructions and saved signature
+preferences override it. Legacy and non-email prompts retain their previous behavior.
+
+
 ### Sign-in
 
 `ASWebAuthenticationSession` against Supabase, returning through a custom URL
@@ -704,7 +794,7 @@ deferred.
 
 ## 7. Analytics
 
-`docs/analytics.md` is the authority — the dashboard's 21 tiles, the three
+`docs/analytics.md` is the authority — the dashboard's 24 cards, the three
 isolation layers and the manual project-creation step live there. This is the
 short version.
 
@@ -789,6 +879,32 @@ short version.
   properties where a target exists. **All 17 failures external users hit before this were
   capture failures**, not model or network errors, and only the Japanese toast string
   distinguished them.
+- **Retention is cards 22–24 (2026-08-26), and its return event is a real rewrite.**
+  The 2026-08-25 rebuild left the dashboard with no retention card; card 7 (Lifecycle)
+  does not fix a cohort and cannot replace one. **Never define return as
+  `Application Opened`** — the pill sits above the Dock and the app relaunches at login,
+  so an abandoned install "opens" every day forever. Return is
+  `desktop_rewrite_completed` outside `com.core7.keigobutton.mac`, i.e. `completed` and
+  not `inserted`: coming back is retention, and whether the result was usable is
+  acceptance, which cards 11 and 12 already own. **Two denominators, deliberately** —
+  card 22 counts from the install (GTM §6.3's W4 install retention, ≥30%) and card 23
+  from the first rewrite the person actually **took**, so a gap between them is an
+  onboarding or Accessibility failure rather than churn. Card 24 is stickiness, and
+  exists because a `retention_first_time` cohort cannot be read for weeks after it lands.
+- **Card 23's denominator is action 349908, and it is stricter than its numerator on
+  purpose.** Qualification asks whether the person ever got value out of the product once,
+  so it demands they took the output — insert, or a copy they took away — because a
+  rewrite generated and discarded proves the button was pressed, not that it helped.
+  Return stays `completed`, because pressing the button again *is* the return. A
+  `targetEntity` accepts one entity, so the union of the three matchers lives in an action.
+  **Its `no_destination` step carries no bundle-id filter, deliberately.** Practice implies
+  `com.core7.keigobutton.mac`, but **the converse is false**: a `scope: scratch` rewrite is
+  composed with the overlay focused and reports the same bundle id while being real — 2 of
+  the 3 copies in the project are that case. `reason` is the honest discriminator, since
+  practice always inserts into the app's own field and therefore always has a destination.
+  **All three still contain the owner accounts** — `$internal_or_test_user` is null on
+  every person, and on 2026-08-26 the owner is the only one in the project with more
+  than 2 taken-rewrite days, so an unfiltered curve reports the founder's habits.
 - **Dashboard cards 9–13 include onboarding practice (2026-08-25).** Practice is product
   usage and a context, not a fake rewrite: volume, type mix, exact acceptance and
   rewrites-per-user therefore use it. `is_tutorial` remains available as card 10's second
@@ -868,27 +984,35 @@ short version.
 
 ## 8. Design
 
-`design.md` is the authority, and **as of 2026-08-07 it holds Willow's system, not
-ElevenLabs'.** It is measured from the three screenshots in `reference/` rather than
-described from a website, so almost all of it maps directly; the parts that do not are
-listed at the end of this section.
+`design.md` is the visual authority for the Aside-inspired desktop direction. Its
+reference inventory distinguishes observed screenshot pixels from proposed native tokens
+and inferred materials. Native light surfaces implement this system. Existing code is not the visual
+authority when it conflicts with the specification. `docs/design.md` is historical.
 
-**This was a replacement, not a re-skin.** The old system and the new one disagree on
-six of seven defining choices — warm eggshell vs cool white, taupe fill-differentiated
-cards vs white border-differentiated ones, whisper-300 display type vs weight-600 UI
-type, pills everywhere vs 8 pt controls, accents banned from all chrome vs one indigo
-running the chrome, and a flush content pane vs a floating panel. Anything in this repo
-still reasoning from "97% achromatic", "eggshell", "taupe" or "Waldenburg" is stale.
+This file remains the architectural authority. The redesign changes visual treatment,
+not account ownership, capture ordering, overlay placement, authentication, billing,
+localization, or first-run state. The landing page and iOS app are outside this migration.
+
+**Change scope:** retain the bar's existing compact, usability-first design and font.
+The bar and notices use smoked glass; generation/results attach to the selected edge
+and answers use an opaque reading surface (§8). Preserve capture, focus and insertion
+behavior, and the main dashboard's working layouts, navigation, content order and groupings. Its
+Aside adaptation is a refinement of color, fonts, sizing, spacing and component details,
+not a structural redesign. Start from existing dimensions and adjust locally only
+where there is a clear benefit. `design.md` records this scope per surface.
 
 ### Two ramps
 
-**Main window — published system verbatim.** Shell `#f2f2f4`, sidebar `#f5f6f7`, a
-white content panel floating inside the shell with a 4 pt margin and a 12 pt radius,
-white cards bounded by `#ececee` hairlines, text `#4e4d51`, indigo `#5a57ba` on filled
-buttons / switches / links / badges / selection, green `#46a588` for completion.
-`Tokens.Window` is that table and nothing else.
+**Main window and onboarding — Aside-inspired light system.** Translucent desktop-glass app
+navigation, a pale secondary plane, almost-white workspace, and opaque white controls.
+The default primary action is near-black; blue marks links, focus, selection and progress.
+The app-level selected navigation row lifts to white on glass; local preferences selection
+uses a gray-blue fill. Shared components must distinguish action from selection rather
+than simply replacing the old indigo constant. Values, dimensions, state treatments and
+asset recipes live in `design.md`; do not duplicate a second light-token table here.
 
-**Overlay — its own dark ramp.** Unchanged by the restyle:
+**Overlay — its own dark ramp.** The notch-attached top tab uses pure black to join
+the hardware housing; the other overlay surfaces use this ramp:
 
 | Role | Value |
 |---|---|
@@ -899,11 +1023,22 @@ buttons / switches / links / badges / selection, green `#46a588` for completion.
 | overlay text secondary | `#a59f97` |
 | overlay text tertiary | `#777169` |
 
-These values used to be justified as a derivation of the light palette's warmth. That
-palette is gone; the numbers did not move, and the honest reason they are what they are
-is that this is the ramp the bar is drawn from. Restyling the overlay against Willow's
-own bar was considered and **deferred by decision** — it is the one path that has run
-end to end, and the window was the thing that needed fixing.
+The bar with its attached copied-message header, explicit reply context capsule, error toast,
+snooze menu, update notice, and intro pill share a 78–84% opaque charcoal tint with a restrained edge reflection
+(`SmokedGlassSurface`). A shape-masked native behind-window material at 70% view alpha
+softens background detail beneath the tint. Use `glassBlurBlend = 0.70` consistently across
+shared overlay glass while retaining the charcoal tint and crisp foreground controls. The notch attachment remains opaque black.
+Reduce Transparency or Increase Contrast replaces glass with opaque charcoal. All these
+surfaces share `Tokens.Overlay.glassBlurBlend`. Inset fields and controls retain solid
+dark fills for legibility; only generation carries the colored activity rim. Results
+use the same `SmokedGlassSurface` at bottom and side positions, with their edge-specific
+shape and exposed-edge border. Notch/top results remain pure black. Layout changes
+must not replace the shared result material with an opaque canvas fill.
+
+The overlay is retained as an independent system because it sits over arbitrary apps
+and wallpapers. No scenic imagery or pale-blue glass enters it. Shared light-window
+font/token changes must not silently change overlay call sites. The retained exceptions
+below describe its native rendering and interaction requirements.
 
 ### Sanctioned deviations from design.md — and only these
 
@@ -918,9 +1053,9 @@ end to end, and the window was the thing that needed fixing.
    `false`; the bloom already separates the capsule from the wallpaper, which is the
    whole job deviation 1 exists for. Any future overlay window whose content fades out
    near its own edges needs the same treatment.
-1. **Elevation.** The system's near-invisible shadows (`0.04` alpha) assume a
+1. **Elevation.** The light system's restrained shadows assume a
    controlled canvas. The overlay floats over arbitrary wallpapers and needs a
-   real shadow to read at all. Overlay only; the main window keeps hairlines.
+   real shadow to read at all. Overlay only; light-surface elevation follows `design.md`.
    **It has to be `NSWindow.hasShadow`, not a SwiftUI `.shadow`.** Every overlay
    window is sized exactly to its content, so a SwiftUI shadow is clipped to the
    frame and the only part that survives is a grey smear in the corners — the
@@ -928,65 +1063,49 @@ end to end, and the window was the thing that needed fixing.
    from the content's alpha and draws it outside the frame. It caches that
    outline, so `invalidateShadow()` is required after every resize or the
    collapsed pill keeps wearing the expanded row's silhouette.
-2. **Density.** `card-padding: 20px` on a ~420 pt result panel still leaves the
-   overlay too little room. The overlay uses a compact scale: 11/12/13 pt labels,
+2. **Density.** Light-window density must not dictate a ~420 pt result panel.
+   The overlay uses a compact scale: 11/12/13 pt labels,
    14 pt/1.5 result body, 12–16 pt padding. The main window uses the
    published scale unchanged.
-3. **Input radius.** The system says `inputs: 8px`; overlay inputs use 10 pt so a
-   field inside the 20 pt result card does not read as a chip.
-4. **The generating capsule is the overlay's only colour, and it is measured.** The
-   border used to be an animated violet→orange (`#0447ff` → `#ff4704`) carried over
-   from the ElevenLabs system — but `generating.png` does not show two colours. Sampling
-   the ring's peak-chroma pixel every 10° around the capsule gives a hue that sweeps a
-   full circle: cyan at 3 o'clock, blue at 6, violet and magenta up the left side, pink
-   at 10, coral at 12, then amber and green back to cyan. `Tokens.Overlay.generatingGradient`
-   is that sweep, and its saturation is measured too — scaled down to the reference
-   capsule's own size the ring there peaks at a chroma of 89, where a full-strength
-   spectrum peaks at 154, so the stops are HSL 58 % / 46 %. One rotation takes 2.6 s: it
-   is a waiting indicator, and at the 1.6 s it shipped with it read as urgency.
-   Nothing of the old palette survives anywhere in the app now.
+3. **Input radius.** Overlay inputs retain 10 pt inside the 20 pt result card.
+   This is an independent geometry contract even where the light system shares a radius.
+4. **Generation uses the upstream BorderBeam SwiftUI port.** `Vendor/BorderBeamKit`
+   contains the pinned MIT-licensed native source, provenance and license. Xcode builds
+   its Metal shaders; npm/React is not part of the native app. The `.md` colorful rainbow beam
+   runs at 3.6 seconds, full strength, 1.8 brightness and 1.5 saturation, with no hue
+   cycling. A 1.5 pt rainbow rim at 85% opacity keeps the activity color visible
+   throughout the animation. Both sit behind text and Cancel. Only generation mounts
+   the effect. Reduce Motion keeps the static colored rim and
+   a still mascot, because upstream's rotating presets do not stop for that preference.
+   Generation says 生成中 / Writing… (or the Reply equivalent), never the action's name.
+5. **Glow must reach zero before the native window boundary.** Bottom generation has
+   24 pt at the free edge and sides, 6 pt at the bottom. Top and side generation have
+   zero padding at the attached edge and 24 pt at exposed edges. Fade only the activity
+   layer over the outermost 4 pt; fading the shell would open a gap against the edge.
+6. **Use the package's shader-driven beam, not a rotating surface.** The stationary
+   bottom capsule is 176 × 36 pt. Side status panels are 176 × 60 pt with straight
+   attached edges and 18 pt exposed corners. Top status is `max(208, notch width)` ×
+   40 pt, opaque black, square at the top and 8 pt at the bottom. Extend the rounded
+   beam beyond an attached edge to hide its seam/corners outside the window, retaining
+   the exposed outline. Effects are noninteractive and remain behind text and Cancel.
 
-   **The capsule says 生成中, not the button's name.** It was labelled with
-   `buttonTitle`, so pressing 差し替え put 「差し替え」 on a capsule that is not replacing
-   anything: nothing has been written back at that point and the rewrite may still fail.
-   The one thing true while it is on screen is that a candidate is being generated —
-   「返信を生成中」 in reply mode.
-5. **The capsule's border is a bloom, and the window is padded to hold it.** Measured
-   perpendicular to the ring in `generating.png`, the core is a **single pixel** on a
-   capsule the same height as ours, with ~8 pt of falloff either side: almost all of
-   what reads as a border there is glow. So the crisp stroke is 1 pt, and behind it sit
-   two blurred copies — a 3 pt chromatic halo at radius 9, and a tight white
-   `strokeBorder` at radius 2.5 and 30 % — because the reference's ring is white at the
-   core and coloured in the spill. The window carries transparent margin for it to fall
-   on, and that margin is **asymmetric**: `generatingGlowPadding` (6) at the bottom
-   because `bottomInset` is the only slack there is — hanging 6 pt of window below the
-   capsule is what keeps the *capsule's* bottom edge, not the window's, on the bar's
-   line — and `generatingGlowSpread` (11) above and to the sides, where the halo is
-   actually seen. The bottom of a glow sitting on the Dock is not worth a 2 pt jump.
-6. **What rotates is a square of gradient, never the shape.** The original spun a
-   stroked capsule with `rotationEffect` and masked it back to its own un-rotated
-   outline. That only holds while the two overlap, and a 176×36 capsule turned 90° is
-   a 36×176 one: the border thinned to a few stray pixels and vanished twice per
-   revolution. It went unnoticed because the capsule is on screen for a second at a
-   time. The gradient is now a square sized to the capsule's diagonal, rotated behind
-   a capsule-shaped mask. It has to be a rotating *view* rather than an
-   `AngularGradient(angle:)` rebuilt per frame, because a gradient is not `Animatable`
-   and the spin would jump straight to 360°.
+### Adapting Aside to the native product
 
-### What the window deliberately does not take from the reference
-
-- **Vibrancy.** 【推測】the reference's sidebar is an `NSVisualEffectView` sidebar
-  material — `#f5f6f7` against a `#f2f2f4` window edge is what that looks like over a
-  light desktop. Ours is a flat fill at the measured value, so it cannot shift with the
-  wallpaper behind it. `window.appearance` is pinned to `.aqua` for the same reason:
-  the palette is light-only, and the system-drawn halves (switches, carets, the
-  titlebar) would otherwise come from a dark appearance on a Mac in dark mode.
-- **The plan card and the promo pill** above the sidebar's account row. `profiles` has
-  no plan column (§14) and there is no billing surface to put there.
-- **The settings modal's search field and its Help Center / Support Community links.**
-  Six switches do not need a search box and we have no help centre — a control that
-  never finds or opens anything reads as broken.
-- **The share button** at the top-right of the home page.
+- Use the supplied mountain and glow imagery according to `design.md`. The actual
+  source filename is `public/moutain.png`. Native asset-catalog integration is still
+  implementation work; a `public/` directory is not automatically a bundle resource.
+- The sidebar uses a 78% opaque pale scrim with subtle static grain. Like the
+  onboarding intro’s dim layer, it reveals the actual background through alpha;
+  it does not blur it. Native `.sidebar` material washed out too much of the background.
+  Keep the main window clear/nonopaque and `.aqua`, the content pane opaque, and
+  Reduce Transparency / Increase Contrast on an opaque neutral fallback. The
+  reference’s blue comes from the user’s wallpaper, not a bundled landscape.
+- Aside's address bar, browser tabs, chat list, provider picker, logo and website
+  composition do not transfer to this writing companion.
+- Keep the existing preferences modal rather than copying Aside's embedded settings
+  page as a new navigation destination. Borrow its internal surface hierarchy.
+- Do not add search or external links without working destinations. Billing surfaces
+  use actual desktop entitlement data, never invented fields on `profiles`.
 
 ### Icons
 
@@ -1007,13 +1126,13 @@ from `NSWorkspace` in full colour, because they are the user's apps and not our 
 **The product mark is not Reicon.** The artwork in `public/`
 (a keycap, off-white with a black keyline and two black eyes) replaced
 `wand.and.sparkles` everywhere on 2026-08-07. Four raster assets were cut from it —
-`icon-brand` (the full-bleed purple tile, the window's `AppMark`), `icon-mark` (line
-art, template), `icon-mark-filled` (the full colour art) and `AppIcon`. Three
+`KeigoAppMark` (the full-bleed blue tile, the window's `AppMark`), `icon-mark` (line
+art, template), `icon-mark-filled` (the full colour art) and `KeigoAppIcon`. Three
 Higgsfield-derived animation atlases now carry the overlay states. The catalog's README carries the derivation:
 
 | Surface | Cut | Why |
 |---|---|---|
-| sidebar, onboarding (`AppMark`) | the full-bleed default artwork — the keycap on its purple field — clipped to a rounded tile (22.5 % continuous radius) | the brand row shows the same icon the Dock and Finder show; the radius is derived from the size, not baked into the asset |
+| sidebar, onboarding (`AppMark`) | the full-bleed default artwork — the keycap on its blue field — clipped to a rounded tile (22.5 % continuous radius) | the brand row shows the same icon the Dock and Finder show; the radius is derived from the size, not baked into the asset |
 | menu-bar status item | line art, `isTemplate = true` | the menu bar inverts its contents for dark mode and for selection, which only works on alpha |
 | overlay bar (`BrandGlyph` → `BrandMark`) | idle atlas | 16 transparent frames at 4 fps: a restrained bob and blink, legible at 16 pt |
 | expanded/reply/input bar | engaged atlas | a pronounced pop, lean and blink that survives at 16 pt |
@@ -1031,111 +1150,66 @@ so changing state does not change scale.
 
 `AppIcon` did not exist before this — `project.yml` had pointed
 `ASSETCATALOG_COMPILER_APPICON_NAME` at an `AppIcon` that was never in the catalog, so
-the app wore the generic one. `public/default.png` is full-bleed and macOS does **not**
+the app wore the generic one. `public/generated/keigo-icon-cyan-v2.png` is full-bleed and macOS does **not**
 mask app icons the way iOS does, so it is inset to the 824/1024 grid and squircle-masked
-rather than shipped square.
+rather than shipped square. `scripts/prepare-app-icon.swift` also regenerates the legacy
+`AppIcon` and `icon-brand` names as blue aliases; no purple icon remains in the shipped catalog.
 
 ### Type
 
-Inter carries everything, and the hierarchy is **weight**: 600 for page titles and stat
-numbers, 500 for row labels and buttons, 400 for prose, at 11–20 pt. Geist Mono 400 at
-12 pt for timestamps and version strings. Both OFL. `Tokens.Font.display` is the same
-face as `body`, heavier — not a separate display face; the previous system's
-whisper-weight 300 display type is gone with the rest of it.
+The target light-window system uses the native system font with Japanese/Chinese
+fallbacks, regular body text and medium headings/labels, as specified in `design.md`.
+`Tokens.LightFont` owns system typography on light surfaces and the desktop introduction.
+`Tokens.Font` retains Inter/Geist and the existing optical metrics exclusively for the
+unchanged overlay. Light controls use their own baseline metrics; font changes must
+never propagate into the overlay implicitly.
 
-### Result panel, per `result.png`
+### Edge-attached result panel
 
-Header `‹ 1/1 ›` pager + `✕`; the submitted prompt echoed in an editable field
-at top; scrollable body with a bottom fade; footer with regenerate / copy / 👍 /
-👎 and a primary `Insert ⏎`. (`result.png` also puts a chevron button in the fade;
-ours is deliberately gone — see below.)
+Results are 320 pt wide at the sides and 420 pt at bottom/top (at least the notch
+width at the top), capped to their owning work area. Bottom has 20 pt corners; sides have a straight attached edge and 18 pt
+exposed corners; notch/top is pure black with square top corners and 8 pt bottom
+corners. Side results retain a horizontal reading layout. Keep 14 pt answer text,
+existing line spacing and 16 pt horizontal insets. Generation/result handoffs use a
+brief opacity transition without scaling text; Reduce Motion is immediate.
 
-**Regenerate keeps two meanings inside one morphing control.** At rest the footer is
-unchanged. Hovering ↻ expands that control left-to-right across the footer's existing
-28 pt slot, visually covering copy, feedback and Insert while their untouched row fades
-under it. The panel and result viewport do not change height. The ↻ stays attached to
-the growing right edge and becomes an upward Send control at the far right; sending an
-empty field performs the same plain regeneration as before. The Send disc is 20 pt
-inside a 28 pt hit target. The field has no native placeholder: a separate
-`textSecondary` layer supplies it, so AppKit cannot replace its colour with black. The
-surface and content are clipped before a constant `hairline` is overlaid; never clip the
-stroke itself, and never promote it to a bright focus ring. Pointer departure restores
-the normal actions after 140 ms, while field focus pins the bar so moving the pointer
-away cannot destroy typed guidance. Escape clears and collapses it. The field is one
-line and scrolls horizontally because this is a short correction to an answer already
-on screen, not the general-purpose ✎ path.
+The hierarchy is a quiet `‹ 1 / 1 ›` pager, context label and Close; the selectable
+answer; and the destination notice/action footer. No prompt summary or separate
+instruction editor appears above the answer.
+The pager has no filled capsule. Secondary buttons have bounded hover/focus feedback;
+the destination-aware white Insert/Copy button remains the dominant action.
 
-The model source and the write destination must remain separate for a guided run.
-`PendingRewrite.requestText` is the candidate being refined, while
-`PendingRewrite.captured` remains the original AX/clipboard target. Conflating them would
-make generation look right and Insert write to nowhere useful. Reply mode uses the same
-split naturally: the candidate becomes `<existing_draft>` and the typed text remains
-`<reply_guidance>`, while `replyTo` is carried unchanged. A plain ↻ after that reruns
-the same candidate + guidance pair rather than going back to the first draft.
+The footer regenerate control is the sole place to rerun or add guidance. The selected
+page retains its request and local instruction metadata through plain regeneration;
+refinement replaces guidance without changing the captured destination.
 
-**The pager is always shown, `1 / 1` included, and regeneration grows it.** Hiding it
-below two pages was tried and reverted: `result.png` shows `‹ 1/1 ›`, and the readout is
-the promise that another attempt will not destroy this one. Every completed plain or
-guided regeneration appends to the current panel session and selects the first new page,
-so the sequence becomes `2 / 2`, `3 / 3`, and the arrows revisit every earlier answer.
-The echoed prompt changes with the page. Regenerating or refining after navigating back
-branches from the answer currently on screen but still appends at the end; it never
-truncates the later pages. Cancel and failure restore the session that existed before
-the request. `ResultPage` owns its request, event id, response-local candidate index and
-history id so Insert and feedback follow the selected answer rather than the latest one.
-The desktop still requests one candidate per call (§6), though the pager also accepts
-all candidates if the server policy changes later (up to `MAX_CANDIDATES`, 5).
+**Regeneration/refinement retain their existing semantics.** Hovering ↻ expands the
+28 pt footer slot into a one-line guidance field, covering the other actions without
+changing card height. Focus pins it open; leaving without focus closes after 140 ms.
+Escape clears/collapses. Empty Send regenerates; nonempty Send refines. Native placeholders
+remain empty, with an explicit secondary-text placeholder layer.
 
-**The panel's height follows its content, the same way the pill's width does.**
-SwiftUI measures the assembled card, `ResultPanel.applyContentHeight` resizes the
-window, and the bottom edge stays put so it grows upward away from the screen
-edge. The body scrolls past `resultBodyMaxHeight` (240 pt) and the panel stops at
-`resultPanelMaxHeight` (440 pt). A constant height instead put a one-line rewrite
-in the middle of a 440 pt slab of `canvas`, which is what `debug.png` shows.
+The model source and write destination remain separate: refining uses the selected
+candidate as `requestText`, while `captured` retains the original destination. Reply
+source/context survives regeneration. Every successful generation appends pages without
+truncating later attempts when branching from an earlier page. Cancel/failure restores
+the previous session. Each page owns its request, event/candidate/history identity, so
+Insert and feedback act on the selected answer.
 
-**The card has to be `clipShape`d, not just given a rounded background.** The
-footer paints its own `canvas` fill, and that rectangle is square — it covered the
-two bottom corners, leaving a card rounded on top and cut off at the bottom. The
-fill is still needed with the hairline gone: it is what the body's fade resolves
-*to*.
+**Height follows measured content, not a minimum slab.** The answer viewport caps at
+240 pt and the complete panel at 440 pt for bottom/top. Sides allow a 320 pt answer
+viewport and a 520 pt panel so narrower prose can grow vertically. Both cap to the
+available work-area height. Measure header and footer first, and reduce the answer viewport when necessary to
+keep actions visible. Always derive the resized frame from the stable attachment.
+`NSHostingView.sizingOptions = []` keeps window geometry owned by the panel.
 
-**There is no divider above the footer.** It had a 1 pt `hairline` across the top;
-`result.png` has nothing there — the body text simply dissolves into the footer.
-On a card carrying no other rules, one rule under the body read as a table.
-
-The bottom fade renders **only when the body actually overflows**. Unconditional,
-it is an affordance pointing at empty canvas — visible in `debug.png` a good 200 pt
-above the end of the text. This is also why removing the hairline is safe: when the
-body does not overflow, the text ends short of the footer and there is nothing to
-separate.
-
-**The chevron is gone, and it should not come back as decoration.** `result.png`
-has one sitting in the fade and we copied it, but ours was
-`allowsHitTesting(false)` — it looked like a button and clicking it did nothing.
-The fade already carries the whole message ("there is more below") and the body
-scrolls, so it was a control promising an action that did not exist. Restore it
-only with a scroll-to-bottom action behind it, and then it goes **on top of** the
-fade, never in the flow with it.
-
-**Which is the other half of the bug the fade shipped with.** The chevron used to
-sit in a `VStack` under the gradient, so it laid out *below* the gradient and
-pushed it up by its own height (26 + 6 pt). The gradient stopped 32 pt short of the
-scroll viewport's bottom edge, and text scrolling through that strip drew at full
-opacity: the last line faded out, then reappeared solid underneath its own fade,
-above the footer. It was in every overflowing result and survived two passes over
-this panel because the fade was only ever reasoned about, never watched — the band
-*looks* right in isolation, and nothing in the code reads as wrong until you ask
-what sets the gradient's bottom edge. A fade has to be anchored to the same edge as
-the thing it is fading and cover it completely.
-
-**The stops are eased, not linear**, which is the difference between the
-reference's look and a band. Alpha on a straight clear→canvas ramp does most of its
-perceptual work in the first third, so the top of the band has a visible edge and
-reads as a scrim laid over the text. Holding it near zero through the first half
-(`0 → 0.15 → 0.55 → 1` at `0 / 0.5 / 0.75 / 1`) over 64 pt puts the change where
-the text is already thinning out. 64 is safe against the viewport because
-`overflows` is only true past `resultBodyMaxHeight` (240), so the band is never
-taller than the area it sits in.
+Only overflowing text fades at the bottom, with the fade anchored to the viewport.
+The fade disappears at the end of scrolling so the last line is readable. There is no
+decorative chevron or footer divider. Clip the entire assembled card to its edge shape.
+Reserve the localized, wrapping destination notice's measured height so live destination
+changes cannot move the action under the pointer. Keep the existing action-freeze and
+write-in-flight protection. A change to appearance is not permission to change focus,
+capture, write destination, copy fallback, or recovery behavior.
 
 ---
 
@@ -1144,12 +1218,19 @@ taller than the area it sits in.
 - macOS 14.0 minimum (matches Willow, and `../Japanese/Package.swift`'s
   `.macOS(.v14)`).
 - XcodeGen (`project.yml`), mirroring the iOS repo's setup.
-- SPM: `supabase-swift`, `PostHog`, `Sparkle`. Nothing else without a reason.
+- SPM: `supabase-swift`, `PostHog`, `Sparkle`, and the locally pinned `BorderBeamKit`
+  used for the requested native generation-effect experiment. Its shaders require the
+  Xcode Metal Toolchain. Nothing else without a reason.
 - `NSApp.setActivationPolicy(.accessory)` — no Dock icon; the main window (§14) is
   reachable from the menu-bar item. (Willow keeps a Dock icon; we don't need one
   for a hover-driven app.) **The policy never flips**, not even while the window
   is open: `.regular` would give it a Dock icon and a ⌘Tab entry, and the
   transition activates the app, which is exactly the focus theft §4 forbids.
+- The shared DMG uses a pale-cyan background, a white icon area, and a blue drag arrow.
+  Finder background images cannot switch language on mount, so installation and opening
+  instructions appear in English and Japanese together. The volume
+  name is `KeigoButton`; native bundle labels follow macOS localization. Regenerate the
+  background from its SVG/native-text renderer during packaging.
 - Launch at login via `SMAppService.mainApp.register()`.
 - Info.plist: `NSAccessibilityUsageDescription` is required and user-visible —
   write it plainly, it is the string that appears in the permission dialog.
@@ -1173,11 +1254,37 @@ taller than the area it sits in.
 
 ---
 
+### Release introductions
+
+The main window's What's new card is a 780 × 540 pt in-window modal using the light
+design system. `ReleaseHighlights` defines the currently bundled introduction and its
+stable ID; change that ID only when shipping new educational content, not for every
+patch. `ReleaseIntroductionStore` tracks acknowledgements per Mac independently of
+Sparkle's pending update. First-time users learn through onboarding; existing users
+see the introduction on a deliberate main-window opening when the overlay is idle
+and no settings modal or onboarding window is active. Background update discovery
+never opens this modal. About can reopen it. Closing, finishing, or following its
+feature action acknowledges the introduction; closing the main window does too.
+
+All headings, instructions, demo labels and accessibility text follow `tr(ja, en, zh)`.
+Demonstrations use bundled artwork and local sample text, never capture, clipboard,
+AI requests or setup progress. Mountain/glow stages and pink/orange illustration
+accents are permitted here under `design.md`; the real dark overlay is unchanged.
+Escape/outside-click/Close dismiss, the underlying workspace is disabled while modal,
+and returning from About restores that settings pane.
+
+Sparkle still owns installation and signature verification. The release workflow
+publishes `appcast-ja.xml`, `appcast-en.xml` and `appcast-zh-Hans.xml` for clients that
+select notes using the app language, and retains `appcast.xml` for older clients.
+Never switch release assets or signatures when localizing descriptions. See
+`docs/releasing.md` for authoring and preview instructions.
+
 ## 10. Out of scope for v1
 
 Tracked so they don't creep in:
 
-- Screen context. Willow links `ScreenCaptureKit` + `Vision` for on-screen OCR,
+- Screenshot/OCR context remains deferred. The development-only explicit Reply path
+  in §16 adds bounded Accessibility text capture, without screenshot permission. Willow links `ScreenCaptureKit` + `Vision` for on-screen OCR,
   and `prompt/` has a working screenshot→analyze pipeline
   (`context-service.js`). Both are deferred: they add a permission, a vision
   call on the critical path, and a much larger privacy surface.
@@ -1223,13 +1330,12 @@ convention — `bundleIdPrefix: com.core7.keigobutton`, `DEVELOPMENT_TEAM: 4KS6Y
   computed reset date; a Pro user who hits 1,000 gets a message and no paywall, because
   there is no tier above (§9 rows 41–42). 「iPhone版はこれからも無料」 is on the plan
   card, so the two quotas are stated rather than merely true.
-- **Brand relationship.** The iOS container uses the Bikey design system (purple
-  + Liquid Glass); this app uses `design.md`, whose accent is now Willow's indigo
-  `#5a57ba` **verbatim** — taken by decision on 2026-08-07 over the alternative of
-  keeping Willow's structure with the phone's own hue. Two surfaces of one product
-  therefore still do not look like one product, and the desktop's accent is now
-  another company's. Worth a decision before launch rather than after; changing it
-  later is one constant in `Tokens.Palette`.
+- **Brand relationship.** The desktop visual direction is Aside-inspired atmosphere,
+  white working surfaces, black primary actions and blue interaction signals. The
+  iOS Bikey palette is outside this migration. Preserve the shared keycap identity and
+  existing app icon; desktop colors do not authorize recoloring the phone or replacing
+  brand assets. The current blue icon tile is a bounded identity asset, not a source
+  for the new desktop chrome palette.
 - **Migration file ownership.** The project's migration history lives in
   `../Japanese/supabase/migrations/`. If the `desktop` schema is applied from
   this repo, that history diverges. Recommendation: the migration file lands in
@@ -1240,7 +1346,7 @@ convention — `bundleIdPrefix: com.core7.keigobutton`, `DEVELOPMENT_TEAM: 4KS6Y
   and the migration lands in the iOS repo per the point above. Worth deciding
   before a user has two Macs and two different streaks.
 - **Whether the phone should get the same button editor.** §14 writes
-  `user_prompts` from the desktop, so the two surfaces now both author buttons.
+  shared saved buttons from the desktop; the phone and Mac use the same configuration.
   Nothing reconciles a simultaneous edit — last write wins, per row.
 
 ---
@@ -1260,80 +1366,52 @@ Inherited from `../Japanese/CLAUDE.md`, and they apply here unchanged:
 
 ## 14. The main window
 
-The light surface. `App/Main/`, one `NSWindow` at 1000×700 (min 920×640), a 218 pt
-sidebar on the grey shell with the content as a **white panel floating inside it** —
-inset 4 pt on three sides, 12 pt radius, its own soft shadow, and no divider line
-anywhere. `design.md`'s published system unchanged; §8's deviations are overlay-only.
+The light surface in `App/Main/` is one `NSWindow` at 1000×700 (minimum 920×640),
+with a persistent 218 pt sidebar and an independently owned desktop overlay. Those
+native dimensions and lifetime rules remain unchanged. `design.md` specifies the new
+Aside-inspired materials, spacing, selection and component treatment; the current
+Swift views still implement the previous light palette pending migration.
 
-The minimum width is set by the preferences modal, not by the pages: it is a 780 pt
-card centred *inside* the window (§14's ⚙︎ block), so a narrower window would clip it.
+Preserve the current dashboard composition and page layouts. Refine color, type,
+local sizing and details in place; keep existing sidebar/pane widths, content order
+and groupings unless a specific local fit or readability issue warrants adjustment.
 
-### Reference and what was *not* copied
+The minimum width accommodates the existing 780×540 preferences modal inside the
+window. Preserve full-size-content safe-area handling and traffic-light clearance.
 
-Three Willow screenshots in `reference/` set the shape: persistent left sidebar,
-account pinned bottom-left, a modal sheet for low-level prefs, one stat card row
-above a searchable history. What is ours and not theirs:
+### Reference and product adaptation
 
-| Willow has | We have | Why |
-|---|---|---|
-| "Time saved — 4 hrs 50 min" | nothing | Theirs is dictated words ÷ typing wpm, real arithmetic. A rewrite tool has no ground truth for it; the figure would need an invented seconds-per-rewrite coefficient, and it would be the biggest number on the page and the only made-up one |
-| Dictated words, average wpm | 書き換え回数, 書き換えた文字数 | Counted, not modelled |
-| Purple Upgrade card, promo pill, plan badge | nothing | The accent itself we now take (see "Where the colour is"); the billing surfaces we do not — `profiles` has no plan column, so there is nothing true to put in that block |
-| Dictionary, Style Matching, Collaboration, Team Members | ホーム / ボタン / アカウント | We have no team object, no dictionary, and no per-app tone model. Empty destinations are worse than absent ones |
-| Learning Center | compact setup recovery | First-run teaching moved to the dedicated flow in §15; Home only repairs a lost session or Accessibility grant |
+`reference/aside/` supplies visual hierarchy, not a new product model. Keep Home,
+Buttons, account, and the existing preferences sections. Home counts actual
+rewrites/characters and local activity rather than estimating time saved. Billing
+and offers come from desktop entitlement data; `profiles` is not a subscription model.
+Setup recovery remains conditional; dedicated first-run teaching lives in §15.
+Do not add Aside's browser tabs, provider choices, chat features, or dead destinations.
 
 ### Where the colour is
 
-**This section used to say the opposite, and the reversal is the point.** The old
-system forbade its accents on buttons, links, badges and focus rings, so every
-coloured pixel in the window had to be artwork and `App/Design/BrandVisuals.swift`
-existed to quarantine it. `design.md` puts indigo `#5a57ba` **on the chrome**:
+Light surfaces follow the semantic roles in `design.md`: black primary actions,
+blue links/focus/selection/progress, neutral icon and avatar plates, white cards and
+fields, and a translucent glass sidebar with white active navigation. Green indicates
+confirmed completion or permission, not a selected style. Keep official app logos and
+the existing keycap identity; their artwork does not define control colors.
 
-| Where | What |
-|---|---|
-| Primary buttons | accent fill, white text (`ActionButton(style: .primary)`) |
-| Switches | accent when on, `#d9d9da` when off (`View.accentSwitch()`) |
-| Links | `#5856b5` (`LinkButton`) |
-| Badges and chips | `#e4e5f0` / `#edeefa` plate with `#5856b5` text — the メイン badge, the history label, the バー keycap |
-| Selection | onboarding progress, the settings modal's active row |
-| Focus rings | accent border on `FieldBackground` — the rule this most directly reverses |
-| Sidebar mark, avatar, icon plates | `Avatar`, `IconPlate` — flat accent, no gradients; `AppMark` is the full-colour default artwork on its purple field |
-| Overlay generating capsule | §8 deviation 4, the spectrum measured off `generating.png` |
+The supplied mountain supplies onboarding-stage atmosphere, and the cyan glow supplies a
+bounded mascot illustration stage. Neither goes behind history, writing samples or
+editable text. The target Home stat card is plain white; its old lavender `StatsBackdrop`
+is an implementation detail to retire during the restyle. Asset roles and crop recipes
+are centralized in `design.md`.
 
-Green `#46a588` is the only other colour and marks one thing: done. Stat numbers,
-sidebar selection and body text stay achromatic. `BrandVisuals.swift` still exists but
-is no longer load-bearing — it is just the shapes that are not text or a control, and
-its gradients are gone.
+### Buttons settings
 
-The Home stat row uses `StatsBackdrop`, a generated 5:1 raster derived from the window's
-own white / fog / indigo-tint ramp. It has no motif and is composited at 55% over white;
-dark text, hairline border and column rules remain the card's structure. It replaces the
-saturated indigo→violet code gradient that made the card look like promotional AI art.
-
-### Reordering is explicit
-
-The button list does not drag. It was tried both ways: the hand-rolled `DragGesture`
-moved a row while changing the `ForEach` beneath it and shook; SwiftUI's native
-`.draggable` lifted an opaque 340 pt preview out of a much wider row, so the thing being
-moved looked unrelated to its destination. For a live list of four to seven items,
-up/down arrows are faster to understand and remove every ambiguous intermediate state.
-
-Each row has Reicon AngleUp / AngleDown controls in a 26 pt-wide vertical pair on the
-left. One click swaps with one adjacent row, the arrow at either list boundary is
-visibly disabled, and the list eases to its new order over 0.16 s. There is no drag
-preview, hidden drop target or pointer-following offset.
-
-There is one visible list. Its first row is the `main` slot and every later row is
-`sub`; moving another button to the top replaces the phone's main button. The pure
-`UserPromptOrder` normalizer owns this invariant and is unit-tested. Writes are serial:
-rapid arrow clicks coalesce to the newest pending snapshot instead of racing older
-responses against newer ones. Each snapshot PATCHes secondary rows first and the new
-main last, so a partial write cannot create two main rows.
-
-Deleting is an `IconButton` on the row behind a confirmation alert — not buried
-in the editor, which is where it was and where nobody found it.
-
-No server write happens until an arrow has selected the next complete order.
+The Aside Buttons page has an ordered list on the left and a selected name/multiline
+instruction editor on the right. Text edits require explicit Save/Cancel and nonblank
+values. Add creates a local draft only until Save. Selection, page navigation, settings
+and closing the window must handle unsaved edits. Confirm deletion with phone-sync copy.
+Drag handles and accessible up/down controls change order; toggles change enabled state.
+Serialize/coalesce reorder writes, demote old main rows before promoting a new main,
+and reload after failures. Account switches invalidate pending responses and writes.
+Language realignment is explicit and preserves customized/user-authored buttons.
 
 ### Five things that are easy to leave out and obvious when missing
 
@@ -1390,10 +1468,10 @@ No server write happens until an arrow has selected the next complete order.
    1.5 pt `strokeBorder` insets its path by 0.75 pt, so its horizontal edge and curved
    corners rasterize onto different device-pixel rows and the corners look doubled.
    Focus used to thicken to ink instead — weight rather than colour — because the old
-   system forbade accents on focus rings. `design.md` colours them. The **unfocused**
-   field has no border at all: it is a `#f7f7f8` fill, which is also why
-   `PromptEditor` sits on the card's white rather than on a grey panel of its own —
-   grey fields inside a grey panel is one container too many.
+   system forbade accents on focus rings. The target `design.md` keeps a visible
+   blue focus edge and replaces the old borderless fog field with a white field and
+   quiet control outline. Preserve focus ownership and constant geometry while
+   migrating the visual treatment; do not add a redundant panel around an editor.
 4. **The titlebar's safe-area inset.** `NSHostingView` inside a `fullSizeContentView`
    window hands SwiftUI a top safe-area inset the height of the titlebar, and it is
    added to whatever padding the view already has. The panel's 32 pt top read as ~60
@@ -1426,36 +1504,28 @@ column hugging the left edge of a 940 pt window. The signed-out form used to be 
 deliberate exception, pinned to a 460 pt column beside a marketing panel; it is not
 one any more — see "The signed-out form is the same page, not a different one".
 
-**Badges are one object.** `Badge` is `design.md`'s 9999 pt `#e4e5f0` plate with
-`#5856b5` 12/500 text and 8/4 `opticalPadding`. The メイン slot marker and the history
-list's button label were written separately and had drifted to 11/7/1 and 12/8/2 — two
-sizes, two paddings, one role, and neither of them the 12–13 px the system specifies.
+**Badges are one shared component.** Use `design.md`'s neutral and semantic roles,
+12 pt label, and 8/4 pt optical padding. Do not fork separate sizes for history labels,
+keycaps and state markers without a real role distinction. Remeasure optical padding
+when changing type; shifting text inside its plate does not fix the plate's geometry.
 
 ### Structure
 
-- **Sidebar** — ホーム / ボタン, then the account block pinned bottom with a ⚙︎
-  that opens the preferences modal. Active rows **darken** to `#ededef`; they used to
-  lift to the canvas, and `design.md` does the opposite — on a near-white sidebar
-  there is no lighter step left to take. The sidebar runs under the transparent
-  titlebar and reserves 36 pt for the traffic lights; the panel reserves 32 pt,
-  because the titlebar's drag region runs the full width of the window.
-- **ホーム** — opens with the **usage row**, not a page title: `design.md`'s home leads
-  with the gesture that runs the product ("Hold F1 to dictate on ⟨apps⟩") and so does
-  ours, with the icons of the apps this Mac has actually rewritten in beside it. Then
-  the four-column stat card, a compact recovery card only when sign-in or Accessibility
-  is missing, then history grouped by day under a search pill. Rows expand in place.
-- **ボタン** — one ordered list for the hover row. The first row is the main button;
-  every row can be enabled/disabled, moved with its compact left-side arrows, retitled,
-  reworded, added and deleted.
-- **アカウント** — display name (editable), address, join date, sign in, **sign
-  up**, Google, sign out. Groups are captioned from above, never titled from inside.
-- **⚙︎ modal** — 780×540, two panes (一般 / 履歴 / このアプリ), captioned row groups on
-  the right, ✕ in a grey disc. **An overlay inside the window, not an `NSWindow`
-  sheet**: `design.md`'s modal is centred behind a 40 % scrim and closes when you click
-  away from it, and a real sheet does none of those three things. Escape is wired twice
-  — `onExitCommand` plus an invisible `.cancelAction` button — because a focused text
-  field elsewhere in the window swallows it often enough that neither alone is
-  dependable.
+- **Sidebar** — Home / Buttons, account pinned below, and settings entry.
+  Target selection is white on glass, with native traffic-light clearance. Keep
+  the full-size-content safe-area handling; do not double the titlebar inset.
+- **Home** — usage hint and real used-app icons, applicable update notice, counted
+  statistics, entitlement-backed offer/quota information, conditional setup recovery,
+  then searchable history grouped by day. Rows expand in place. Preserve actual
+  insertion/copy status, offer validity and server-derived quota/reset dates.
+- **Buttons** — the ordered account-backed list and explicit text editor described above.
+- **Account** — actual profile fields and supported authentication/recovery actions,
+  presented as one settings page in both signed-in and signed-out states.
+- **Preferences modal** — existing 780×540 centered in-window overlay, with General /
+  Plan / History / About. `design.md` specifies the pale local navigation and white
+  content treatment. Keep Escape and outside-click dismissal, scrolling and focus
+  behavior. It remains an overlay, not a titlebar-attached sheet. Escape retains both
+  `onExitCommand` and the `.cancelAction` shortcut because focused fields may consume it.
 
 ### Closing the window does not close the app
 
@@ -1467,33 +1537,11 @@ instance so reopening returns to the same page, and
 only way out of the app is 終了 — in the menu-bar menu or at the foot of the
 sheet.
 
-### Buttons are written, not just read
+### Experiment style ownership
 
-`UserPromptRemoteStore` gained `create` / `update` / `delete`. §2 already called
-`user_prompts` the one shared read-write table; this is the surface that uses it.
-Three things about that table are load-bearing and were read off the live project
-rather than assumed:
-
-1. **`user_id` is `NOT NULL` with no default.** PostgREST will not fill it from
-   the JWT — the insert has to carry it, which is why `create` reads
-   `auth.currentSession?.userId` first and fails cleanly if there is none.
-2. **`builtin_key` is CHECK-constrained** to `polite | natural | email |
-   translateToEnglish`. Desktop-authored rows leave it null and set
-   `origin = user_authored`, matching what the phone writes for a hand-made
-   button.
-3. **Every row is deletable, including a builtin.** The desktop sends a real DELETE;
-   deleting the current main immediately promotes and persists the next row. Existing
-   phone builds may re-seed a missing `builtin_key`, so permanent cross-client builtin
-   deletion still needs an iOS-side tombstone contract rather than another desktop UI
-   condition.
-
-Reordering normalizes the whole list: index zero becomes `main` at order zero, and the
-remaining `sub` rows are numbered from zero. `UserPromptRemoteStore.update` sends the
-slot as well as `sort_order`; without that field a main replacement would look right
-locally and revert on the next reload.
-
-Every mutation ends by reloading from the server and re-pushing the hover row, so
-a rejected write cannot survive in the list.
+Only `codex/universal-button-experiment` initializes account-scoped local style files.
+The release leaves those files untouched. Recover original mixed implementations from
+recovery tags before changing experiment ownership or migrations.
 
 ### History and stats are local, and hold real text
 
@@ -1557,9 +1605,9 @@ The **first** was the shape a sign-in page takes when nobody opens `design.md`: 
 icon plate and a bold heading **inside** a card, placeholder-only inputs, a small button,
 and a 「または」 rule separating it from a Google button that was sitting right underneath
 anyway — all wrapped in a full-width card clamped to a 380 pt column, so half of the card
-was empty. `design.md` names four of those in its Don'ts: don't title a card from inside
-it when a caption above it will do, don't leave a card's width unused, carry hierarchy
-with weight rather than ornament, and don't put a rule where nothing needs separating.
+was empty. The durable rules are to caption groups clearly, use available width,
+label fields explicitly, and avoid dividers that do not separate distinct tasks.
+The current component treatment is specified in `design.md`.
 
 The **second** overcorrected into a two-column split: a marketing panel on the left
 (badge, 17 pt heading, three icon-plate benefits) and the form on the right in a fixed
@@ -1585,10 +1633,57 @@ width went with the 460 pt column that justified it.
 
 ## 15. First-run onboarding
 
+The first launch starts with a native desktop introduction before Language. Eligibility
+is `OnboardingProgressStore.shouldPresentIntro`: incomplete setup with no saved step.
+Save Language before presentation so an interrupted run resumes there. Keep completion
+version 2 and all saved step identifiers; returning and already-started users bypass the
+cinematic. The debug-only `--replay-onboarding-intro` argument uses read-only onboarding
+progress, the existing replay flow, and temporary pill placement that never persists drags.
+
+`OnboardingWindowController` owns `OnboardingIntroController`, a cancellable
+`OnboardingIntroSequence`, and a borderless transparent dimming panel. The real desktop
+shows through 88% black. The existing `PillPanel` is the character's temporary full-display
+canvas, remains never-key, then shrinks to its normal bottom-center frame without being
+ordered out. Only the dimming panel takes intro keyboard input; Escape advances to the
+landing/reveal. Native geometry and motion stay separate from `IntroCharacterView`, whose
+existing portrait/movie/sprite assets can later be replaced by Rive. Rive is not currently
+a dependency. Nine seconds of fully visible reading time, split across two sentences,
+precede landing; the pill explanation
+lasts three seconds. Reduce Motion substitutes fades and a static portrait. No extra copy,
+intro card, new onboarding flow, or new completion preference belongs here.
+
+All introductory copy, including the landing/drag guidance, uses `tr(ja, en, zh)`.
+Before language selection it follows the Mac’s preferred supported language; a saved
+app-language choice takes precedence.
+
+The opening character and copy share one measured composition in `IntroPillView`,
+centred slightly above the screen midpoint. Reserve a 140 pt character slot,
+then 24 pt to the copy and 12 pt between text blocks in a 460 pt column. Normalize the
+portrait/movie's transparent margins against their resting alpha bounds, allowing the
+movie's small bounce to overflow without clipping; never space
+the character and text using independent screen-height percentages. Intro copy uses
+system type at 32/20 pt. The heading stays visible while the two supporting sentences
+take turns in one shared slot: four seconds for the first, a 250 ms fade out, a 350 ms
+fade in, then five seconds for the second. Both sentences participate in layout so the
+mascot and heading never shift during the swap. Hide inactive copy from accessibility.
+The cancellable intro clock owns both fades, including under Reduce Motion.
+The character travels from its measured layout anchor to the real pill; the entrance
+and landing preserve its proportions. Keep the normal overlay's typography independent.
+
+Prepare the production pill hidden at startup. During cinematic ownership, suspend normal
+resize/reanchoring, hover, product actions, and clipboard arming. After landing reuse normal
+four-slot dragging; suppress the snap picker's second scrim while the intro scrim is up.
+Keep the pill visible but passive through Language/account/style/access; existing discovery
+and practice gates resume at the first rewrite lesson. Reveal the already-created onboarding window
+behind the pill by overlapping opacity animations. Deactivation, sleep, screen/Space changes,
+and closing cancel the intro and remove its blocking surface without reactivating the app.
+Reopening resumes Language. Screen coordinates are logical points with the selected display's
+origin accounted for, using an existing key product window's display or the main display.
+
 `App/Onboarding/` is a dedicated, non-resizable **1080×700** window with no settings
-sidebar. Its twelve steps are アカウント → **名前** → 用途 → ボタン → アクセス → the pill →
-書き換え → カスタム → 返信 → きっかけ → **オファー** → 完了 — eleven of which the progress
-rail counts. The rail deliberately does not count the offer: it counts setting the app
+sidebar. After language selection, its steps are アカウント → **名前** → スタイル →
+アクセス → 書き換え → カスタム → 返信 → きっかけ → **オファー** → 完了.
+Nine setup steps count toward the progress rail. The rail deliberately does not count the offer: it counts setting the app
 up, and paying for it is not a step of installation. The frame does not follow the intrinsic size of whichever step happens to be
 visible: `.resizable` is absent from the style mask, the `NSHostingView` has
 `sizingOptions = []`, and both `contentMinSize` and `contentMaxSize` are applied at
@@ -1596,16 +1691,27 @@ visible: `.resizable` is absent from the style mask, the `NSHostingView` has
 `.standardBounds` reflects SwiftUI's changing measurements into the window and can
 overwrite min/max values that were assigned before `contentView`.
 
-The whole flow uses `design.md`'s dashboard system rather than a separate onboarding
-theme: a `#f2f2f4` shell, one white panel inset 4 pt, a shared 920 pt content grid with
-48 pt outer gutters, white cards separated by hairlines, fog-filled inputs, and indigo
-only for progress, selected state and the primary action. Routine page titles stay at
-20 pt. Explanatory pages use one consistent question-left / visual-right composition.
-The right visual is a reusable lavender stage taken from the landing page's desktop
-scene: `#efecfa → #ddd8f2 → #c8c1e8` with white light at the upper-left and `#a99ed4`
-at the lower-right. It is an illustration surface, not a new window palette: controls,
-cards and the surrounding panel still use `Tokens.Window`. Every glyph is Reicon except
-the product mark, traffic-light circles and the official full-colour Google G.
+The flow uses `design.md`'s light desktop system: a pale atmospheric environment,
+white working surfaces, dark primary actions, blue interaction states, and the supplied
+mountain/glow art confined to illustration stages. This replaces the former
+Willow shell and lavender stage without changing setup state.
+Onboarding uses a 1016 pt composition grid (32 pt side margins), 48 pt top clearance,
+and a stationary 58 pt navigation shelf with 24 pt bottom clearance. The content ends
+16 pt above the shelf. Split pages use 420 pt copy, a 32 pt gap and a 564 pt stage.
+Use 40 pt welcome type, 32 pt medium page headings, 20 pt section headings, 18 pt
+practice editor text, 16 pt body/actions and 13 pt metadata. `design.md` owns the
+shared spacing and component roles. Language adds a small static mascot above its
+heading and grouped choices with script glyphs, semibold endonyms, secondary captions,
+and a pale selected row. Account sign-in uses a white group with 20 pt padding and
+16 pt corners, directly beneath its introduction with no flexible spacer. Stronger
+weight belongs to page/action headings and choice labels, not every line of prose.
+
+The old labeled top rail is replaced by quiet bottom-center progress markers, retaining
+nine counted steps and Offer anchor. Language, attribution and offer use centered
+white choice groups; account/name/access/completion use shared split compositions.
+Writing style keeps its heading and tabs above a scrolling editor. The mountain supports
+native teaching scenes; the glow supports the existing alpha mascot. The first practice
+teaches hovering over the real overlay. Dashboard layouts and overlay fonts remain unchanged.
 
 The visual stage contains code-native, shared desktop primitives rather than screenshots:
 a Mail composer with window chrome, toolbar, addressing rows and an editable body; the
@@ -1617,20 +1723,18 @@ shared bottom shelf, so a switch or toolbar button that looks plausible never be
 dead competing action.
 
 Its vertical extent is a layout invariant, not content measurement. On every split page
-the stage consumes the full height offered between the progress rail and navigation
-shelf, inset 10 pt at the top and bottom. Its width may change for a button editor or
+the stage consumes the full height offered between the 48 pt top clearance and the content’s bottom above the navigation
+shelf, with no additional per-step vertical insets. Its width may change for a
 choice grid, but its top and bottom edges do not jump with the mock inside it.
 Explanatory columns are vertically centred against that stable stage so the two sides
-carry comparable visual weight. **Every left column is centred, including the working
-ones** — ボタン used to be the exception on the grounds that a list fills the region
-anyway, which was only true at the largest set it allows. A column can only be centred
-if it has a natural height, so the one construct that never has one, a `ScrollView`, is
-capped rather than left to take everything it is offered (§15's ボタン paragraph).
+carry comparable visual weight. The Writing style page has a fixed heading/tabs and a scrollable full-width editor, while the other
+split pages retain their centered columns and stable visual stage.
 
 After authentication, navigation is one shared 58 pt shelf pinned to the bottom of that
 grid. Back stays at the left edge, skip actions are text links beside the forward action,
-and exactly one filled indigo action ends at the lower-right edge. Individual steps do
-not place their own Next button inside their content, so changing from a short page to a
+and exactly one primary action ends at the lower-right edge (near-black in the
+Aside visual target). Individual steps do not place their own Next button inside their
+content, so changing from a short page to a
 tall one never moves the primary action or changes which control owns the hierarchy.
 The signed-out account form is the deliberate exception: Google is the action that
 authenticates, so it remains attached to the form rather than masquerading as page
@@ -1644,64 +1748,28 @@ Seedance 2.0 job `101892b2-3fdc-4a81-b054-24a8b5708091`, made from
 asks only for a blink, glance and restrained keypress-like bounce because video models
 are not trusted with readable text or exact interface geometry.
 
-**The clip carries its own alpha channel, and that is the third attempt at removing its
-white field.** The generated master is a keycap on flat white. `.blendMode(.multiply)`
-removed the field by also multiplying the keycap's off-white body into the lavender, so
-the mascot came out dark (0.1.1). Feathering the outer edge with a blurred mask kept the
-body's colour but only faded the field's *edges*, which is the white glow that sat behind
-the mark until 2026-08-24. Neither is fixable in a blend mode: the subject is lighter than
-the stage in some channels and the field has to vanish in all of them, so the field has to
-be alpha, not a blend. The bundled `OnboardingMascotLoop.mov` is HEVC with premultiplied
-alpha, keyed off the master and cut once, offline:
+**The movie carries its own alpha channel.** The opaque master has a white field.
+Prepare its matte offline with `scripts/prepare-onboarding-mascot.swift`: flood only
+background pixels connected to the frame boundary, stopping at the closed black outline.
+Unmatte the exterior antialiasing to black with partial alpha, keeping the enclosed face
+and eyes fully opaque. A global white colorkey leaves a pale fringe and removes bright
+interior antialiasing; eroding that matte makes the interior damage worse. Do not use
+multiply blending or feathered rectangular masks, which tint the body or leave a halo.
 
-```
-ffmpeg -i OnboardingMascotLoop.mp4 \
-  -vf "colorkey=color=0xFFFFFF:similarity=0.045:blend=0.015,format=yuva420p" \
-  -c:v hevc_videotoolbox -alpha_quality 0.85 -allow_sw 1 -q:v 55 -tag:v hvc1 -an \
-  OnboardingMascotLoop.mov
-```
+The script outputs 960×960 BGRA frames at the master's 24 fps for HEVC-with-alpha encoding.
+The repeatable command is in `docs/reports/onboarding-visual-polish.md`. The master
+`OnboardingMascotLoop.mp4` remains in `App/Resources/` and excluded from the target;
+only the alpha `.mov` ships. The intro and gradient stage both use that same corrected
+movie through `AVPlayerLayer`, with no per-frame filtering or added runtime dependency.
 
-The key holds because the field is 254 and the keycap body is 235 — a 19-level margin
-that `similarity=0.045` sits inside, so nothing inside the cap is punched out. **The
-master `.mp4` stays in `App/Resources/` and is excluded from the target in `project.yml`**:
-the Higgsfield job is the only other copy of it and jobs do not last, while shipping both
-files would put 800 KB in every download for a resource nothing loads. `AVPlayerLayer`
-draws the alpha without any configuration; the view must simply not paint a background
-behind it.
+Purpose/preset selection is followed by button review/customization. Returning accounts
+use their current buttons by default; replacing them requires an explicit preset choice.
+Replay uses in-memory drafts and never writes replacement buttons. Practice teaches an
+actual saved button, pencil composition and copy → focus destination → hover → Reply.
+Keep raw step IDs and completion version 2. Unfinished `writingStyle` (13) resumes at
+`purpose` (1); the retired `bar` step resumes at `practice`. Completed users stay complete.
 
-用途 offers five practical, four-button configurations: the general starter set, work,
-international communication, Japanese polishing, and social/chat. The starter remains
-敬語 / メール / 英訳 / 自然に and retains the four shared `builtin_key` values. The
-other packs use standing context that can genuinely live on a reusable button (for
-example 上司向け, 取引先, 仕事英語, 校正, LINE), not one-off message content or
-gimmicks such as emoji and hashtag insertion. Existing synced buttons are a sixth choice
-when present. The grid is vertically centred when all choices fit and becomes scrollable
-without changing that alignment contract when they do not.
-
-ボタン is a required confirmation page. It shows the actual bottom-bar preview and lets
-the user rename, rewrite the instruction, reorder, add or delete before proceeding. The
-first row is the shared `main` slot. Confirmation upserts the reviewed rows before
-deleting obsolete owner rows, then fetches the server result and refreshes the overlay;
-a failed second request may leave an extra row but cannot empty the account. Drafts and
-the selected pack survive an unfinished close in `OnboardingProgressStore`.
-
-Its layout is three rules, and the first one is what the other two are for. **The list is
-capped at the height its rows occupy closed** — `rowHeight` (74, applied to the row rather
-than assumed of it) × the count, plus the gaps — and stays flexible below that cap. That
-is the only way the column has a natural height, and a natural height is the only way it
-can be vertically centred like every other left column; below the cap the parent still
-compresses it, so a seven-button set scrolls exactly as before. Because the cap is
-computed from the *count* and not measured from the content, **opening a row cannot
-resize anything outside the list**: the editor grows inside a viewport whose height did
-not change, and the heading, the 追加 action and the preview column stay where they are.
-The row is scrolled to the top of that viewport in the same animation, which is what
-makes an expanded editor legible in a viewport it can nearly fill. The editor only fades
-in; sliding it down from the row's top edge as well described one event twice while the
-row was already growing. And the preview column reads nothing about the left one — it
-used to flip from centred to top-aligned whenever a row opened, which moved the one thing
-on screen the user had not touched.
-
-Sign-in, Accessibility and **the name** are hard gates, and バー and 練習 are the only
+Sign-in, Accessibility and **the name** are hard gates, and the three practice pages are the only
 pages that can be skipped at all. 「あとで始める」 declines **one exercise** — it moves to
 the next page in `DesktopOnboardingStep.flow` via `skippingEducation`, which answers nil
 for everything outside `educationSteps`. It must never call `finish()` again: きっかけ and
@@ -1726,7 +1794,7 @@ stacked under アカウント's sign-in until 2026-08-23, where a hard gate read
 field of the form above it — something to fill in because a form was asking, rather than
 the name every reply the app writes will be signed with. The page carries one field and
 **no Save button**: Continue is what saves the draft (`saveDisplayNameForContinuation`)
-and then loads the account's buttons, so a Save beside the field would be the second
+and then loads this account’s saved buttons, so a Save beside the field would be the second
 action on one value the shelf rule above exists to prevent, and ⏎ in the field runs
 Continue for the same reason. It is also the one page whose field is focused on
 appearance — `SettingsField(autofocus:)`, off everywhere else, because a form of several
@@ -1735,9 +1803,9 @@ that introduces the writer by name, redrawn as the field is typed and showing �
 in tertiary until there is a name to draw; the written text stays Japanese in the Chinese
 interface, per §17. The window is centred at a fixed height instead of filling the stage
 like the practices' composer — nothing is typed into this one, so its height is the
-height of the four lines it holds. The name itself is bold rather than tinted: §8 keeps
-indigo for progress, selection and the primary action. Both of Continue's failures —
-saving the name, loading the buttons — are read on this page, because this is the page
+height of the four lines it holds. The name itself is bold rather than tinted: the new
+visual system reserves blue for interaction signals. Both of Continue's failures —
+saving the name, loading saved buttons — are read on this page, because this is the page
 that presses it. `name` is appended at raw value 12 and `currentVersion` stays 2, so an
 unfinished saved step still resolves and nobody who has already answered the question is
 asked it again.
@@ -1749,46 +1817,53 @@ body is still the live `TextEditor`, not text painted into the mock. The real ba
 outside the onboarding window at the screen edge; no simulated bar competes with it.
 The editor carries no artificial focus ring; its content has explicit vertical inset so
 the first line clears the Mail body's top edge rather than clipping against it.
-`OverlayController.beginTutorial` exposes every reviewed button (with the old 敬語
-tutorial prompt only as a defensive fallback when there are none), while
-`OnboardingPracticeSample` selects a draft from the main button's builtin key, title and
-instruction so 英訳, 校正, 社内チャット and other reviewed main buttons receive a
-matching input rather than the old 敬語-only sentence. It then
-captures the focused training editor, calls `desktop-rewrite`, presents the production
-result card, and completes only after Insert writes successfully. The sample rewrite
-never enters local history or statistics. The window does not resize or extend toward
-the overlay for this step: a compact instruction points below the window to the real
-screen-edge bar and names the actual tutorial button. On a successful Insert, the
-result panel is dismissed before the completion callback runs, then the onboarding
-window is made key again. Its editor is also the only production AX target owned by this
-process: a same-process selected-range setter enters AppKit directly and must run on
-`MainActor`, while every ordinary cross-process AX write stays on `AXTextIO`'s actor.
+Each practice shows one instruction at a time in a compact header: 28 pt semibold action,
+16 pt secondary explanation, and a 104 pt minimum height aligned toward the stage. Longer
+localized text may grow instead of clipping. Keep a 16 pt gap to the stage and uniform
+24 pt practice-scene insets. `OnboardingLesson` is a Foundation-only state machine;
+session IDs prevent old capture, generation, focus, or completion events from advancing
+a different lesson. Practice teaches hover before enabling its action; there is no
+standalone bar-discovery page. Raw step 4 remains reserved and resumes at practice,
+without changing completion version 2. Discovery stays latched for the current run.
 
-カスタム is a second full-width Mail practice with the focused live editor and the real
-screen-edge overlay. Its draft asks to move a 15:00 client meeting because the materials
-will not be ready, and the suggested one-off guidance asks for a concise client email
-that opens with an apology. The instructions identify the rightmost ✎ as the place for
-one-off directions. `beginCustomTutorial` marks only ✎ submissions as tutorial work:
-saved buttons may still run but cannot complete the page, blank guidance cannot submit,
-generation never reaches local history/statistics, and only a successful Insert clears
-the tutorial and restores the onboarding window.
+The real bar keeps its normal geometry. During discovery all rewrite entry actions are
+disabled; during each practice only that lesson’s entry action is enabled, with the other
+buttons dimmed in place. The same restriction is enforced at controller entry points.
+The guide is a separate never-key, mouse-transparent white callout with a fine neutral
+border, modest shadow, and small joined pointer. Use the light onboarding body font and
+measure localized text for compact bounds; no accent outline or repeating pulse.
+It measures the actual bar/control geometry, follows all four snap positions, avoids
+reply/result chrome, and hides during dragging, generation, errors, deactivation, and
+minimization. Moving the onboarding window to the bar’s
+display never changes the bar’s saved placement. Guide and action restrictions end when
+the lesson exits.
 
-返信 is a third real practice page, not a tour card. Its Slack-style scene has a live
-copy action and a live empty composer. The copy is placed on the pasteboard and explicitly
-armed through the production reply state so the lesson still works when a replaying user
-has disabled clipboard watching; from `.replyArmed` onward it is the same hover, capture,
-free-text instruction, generation, result and Insert path as §16. The reply rewrite is
-marked as a tutorial, so it neither enters history nor increments local statistics, and
-the page completes only after the same-process AX write succeeds. `replyPractice` remains
-raw value 7, `complete` remains 6, and `customPractice` is appended at 8;
-`DesktopOnboardingStep.flow` owns their visual order and Back navigation without
-invalidating unfinished saved steps. `currentVersion` remains 2, so completed users reach
-the expanded lesson through 「使い方を見る」 rather than being forced through first run.
+Practice still captures the live training editor, calls `desktop-rewrite`, and presents
+the production result card. Its rewrites never enter local history or statistics. Only
+successful insertion reports that the sample was replaced. The existing Copy fallback
+also enables continuation, but reports a distinct copied outcome and asks the user to
+paste with ⌘V. The result panel is dismissed before restoring the onboarding window.
+Same-process AX writes remain on `MainActor`; ordinary cross-process writes stay on the
+`AXTextIO` actor. Editor focus is requested once on entry/restoration, never on every
+SwiftUI update, so changing an instruction cannot steal focus from the overlay composer.
+Lost focus prompts a click in the sample; an emptied rewrite sample offers Restore sample.
+
+カスタム keeps its Mail scene and live editor. The user opens the pencil, types a short
+instruction (the suggested example is “Make it shorter”), generates, then inserts. Any
+nonblank guidance works. The lesson does not prefill or submit an instruction for them.
+
+返信 keeps its Slack scene, live copy action, and empty reply editor. Copying the
+practice message explicitly makes Reply available, including when clipboard
+watching is disabled. Hover reveals the actions and clicking Reply opens guidance entry; insertion completes the lesson while
+reply guidance remains optional. Mail and Slack decoration remains
+recognizable but carries no interactive accessibility roles or button affordances; only
+the actual editor and source action accept input. Existing raw step values and progress
+version remain unchanged, and replay continues to use in-memory button drafts.
 
 きっかけ was the only page that asks for something instead of teaching something, and it
 sits **third from last**: 完了 hands the app over, and nothing should be asked after that.
-It reuses 用途's composition exactly — question left, choice grid on the lavender stage,
-the same card metrics and selection dot — because a survey that invents its own layout
+It uses the shared centered heading / two-column choice composition, with the card metrics and
+selection treatment from `design.md`, because a survey that invents its own layout
 reads as a different product's page. Eight options: X, YouTube, Instagram and TikTok
 carry their real App Store artwork, and Web検索 / 知人にすすめられて / 記事・ブログ /
 その他 are Reicon on a plate, the same full-colour-beside-Reicon pairing the sign-in
@@ -1853,14 +1928,33 @@ finished first run is replayed into it.
 
 ## 16. Reply mode
 
-Copy a message, go to where you are answering it, hover the bar: it opens an input box
-for *how* you want to reply, and the rewrite comes back as the reply. Two new
-`OverlayState` cases, one clipboard poll, and one reply-specific AX capture policy.
-Everything from the generating capsule onward is §4 unchanged.
+### Shipping behavior and deferred context capture
+
+Both Debug and Release use **copy-to-reply**. Copy a message, focus its reply field,
+hover the bar, then click Reply to enter optional guidance. `ReplyContextFeature.isEnabled` stays
+false on the working branch; old `KEIGO_REPLY_CONTEXT` and `development.replyContext`
+overrides must not reactivate automatic capture. Settings and onboarding teach the
+copy-triggered flow, including its existing enable/disable and snooze controls.
+
+Automatic AX/DOM conversation detection is preserved on
+`codex/reply-context-experiment`. Continue that work there. Its implementation and
+manual acceptance requirements live in `docs/reply-context-implementation.md` and
+`docs/reply-context-dom-implementation.md`. The working app must not instantiate its
+browser bridge, embed the development native host, or show its diagnostic export action.
+Retained structured-context types/backend compatibility are dormant; legacy replies
+send `replyTo` and do not call `desktop-reply-context`.
+
+### Copy-to-reply
+
+Copy a message, go to where you are answering it, hover the bar, and click Reply.
+The composer accepts optional guidance and the result is a reply to the copied source.
+`availableReplySource` is independent of `OverlayState`: copying does not enter a mode.
+Only clicking Reply creates `.replyInput`. Everything from generation onward is §4
+unchanged.
 
 `desktop-rewrite` accepts legacy `replyTo` or desktop-only `replyContext` v1.
-The native overlay still sends the legacy form; explicit context capture is not yet
-wired. Structured requests include `draftReadStatus`, preserve participants, quotes,
+The working native overlay sends the legacy form; automatic context capture is
+deferred to the experiment branch. Structured requests include `draftReadStatus`, preserve participants, quotes,
 selected messages and audience separately, and reject malformed/ambiguous context
 before provider or quota work. Do not send both forms. Prompt construction lives in
 `prompt.ts`; parsing and context validation are independently testable. The legacy fields mean:
@@ -1899,12 +1993,12 @@ may contain multiple speakers or quotes. Structured identity assignments require
 evidence references; unknown identities stay unknown. Structural validation does
 not establish the semantic accuracy of an interpreter.
 The system prompt forbids switching to the sender's perspective, addressing the account
-user as their own recipient, signing with the sender's name, or emitting `[name]`-style
-placeholders. Blank/missing profile rows are non-fatal and explicitly mean “write a
-name-free reply.” Chat defaults to no greeting/signature; email preserves an existing
-closing and may use only the account user's name when a named sign-off is actually
-called for. The same trusted identity is supplied to compose-from-nothing so an email
-request can end correctly without adding a client wire field.
+user as their own recipient, or signing with the sender's name. Legacy and non-email
+replies forbid name placeholders and use a name-free fallback when identity is missing.
+Universal whole-email replies instead use the explicit name-slot and full-email rules in
+§6. Blank/missing profile rows remain non-fatal. Chat defaults to no greeting/signature.
+The same trusted identity is supplied to compose-from-nothing and universal whole-email
+polish without adding a client wire field.
 
 ### ⌘C is the trigger, and selection is not
 
@@ -1954,11 +2048,13 @@ field" is carried by the strategy, and `.none` cannot reach the clipboard writer
 so ⌘A + ⌘V still cannot land in the Finder. What used to be the difference between working
 and refusing is now the difference between 挿入 and コピー.
 
-### Capture happens on hover, because that is the last moment it can
+### Capture happens when Reply is clicked
 
-The input box takes key, so by the time anything is typed `AXFocusedUIElement` is our
-own field — the same reason `pressCustomInput` captures on the press (§4). Hover is the
-last instant the user's app still owns focus.
+The pill and hover actions never take key. Clicking Reply captures the destination and
+snapshots user focus before `.replyInput` may take key, just like the pencil action.
+A capture ID, account revision, lesson ID, current state and frontmost PID guard async
+completion. Dismissal, expiry, another action, hiding or an account change invalidates
+pending capture. New clipboard traffic cannot change the source after the click.
 
 That instant may still be on the incoming message because copying usually requires a
 selection. Reply capture therefore compares the focused `kAXSelectedText` with the full
@@ -1975,40 +2071,29 @@ There is no clipboard fallback in this path. Reply mode already owns the clipboa
 discover an empty reply box. General rewrite capture remains AX → clipboard, so a
 selection without a new copy remains an ordinary highlighted-fragment rewrite.
 
-Two consequences:
+### Availability, cancellation, and expiry
 
-- `replyCaptureInFlight` guards it. Hover fires again on re-entry and the capture is a
-  cross-process AX call, so a cursor jittering on the bar's edge would otherwise start
-  several.
-- A capture failure used to toast **once per armed copy** (`warnedNoReplyTarget`), because
-  hover is passive and a message on every pass of the cursor would be worse than the
-  missing field it reported. Both are gone: with `allowScratch` (§18) the composer opens
-  regardless and the reply comes back to the clipboard, which is what that message was
-  telling the user to arrange by hand. Only the permission failure toasts now, and that
-  one is worth every repetition.
-
-### The rest of the state machine
-
-`.replyArmed` is a **parallel resting state**, not a sixth step: it stands in for
-`.pill` while a copy is live, and hovering it goes straight to `.replyInput` where
-hovering the pill goes to `.hoverRow`.
-
-- `armReply` only fires from `.pill` or `.replyArmed`. Arming over an open input bar, a
-  running rewrite or a result card would replace something the user is in the middle of.
-- Escape from `.replyInput` returns to `.replyArmed`, not `.pill` — the copy is still
-  live and discarding it means copying again. Deliberately **without** §4's
-  cursor-still-over-the-bar courtesy: `.replyArmed` is the state hover opens the input
-  box from, so re-opening it under a stationary cursor is a loop Escape cannot break.
-- `PendingRewrite.replyTo` is carried rather than read off the state, because ↻
-  regenerates from `pending` alone. Dropping it would turn a regenerated reply into a
-  rewrite of the user's draft — for the usual empty box, a rewrite of nothing.
-- History records `replyTo` as `originalText`. The user's draft is the honest "before"
-  for a rewrite and a blank for a reply, and 「返信」 as the button title keeps the row
-  out of the ✎ rewrites it is not.
-- Expiry (`ReplySource.lifetime`, 180 s) only disarms from `.replyArmed`. Past
-  `.replyInput` the copy is in use and the clock stops mattering.
-- The watcher stops when the bar is hidden. Watching while hidden would arm a state with
-  no window to show it in, then surface a minutes-old copy the moment the bar returned.
+- A qualifying copy while the bar is resting or showing actions updates the available
+  source. The collapsed pill stays exactly the same size, with a static neutral 4 pt dot
+  by the mascot. There is no separate source window, animation, or automatic expansion.
+- Hover always opens the normal non-key action row. Reply and its adjacent × are one
+  compact group; saved buttons and the pencil remain accessible. All four positions share this.
+- × clears availability and any pending capture without touching the system clipboard.
+  From the hover row it stays on that row. From the composer it returns to actions if
+  the pointer is still over the bar, otherwise to the collapsed pill.
+- Escape/outside-click leaves the composer while retaining its source for another
+  180 seconds. It uses the same pointer-sensitive return as the custom composer.
+- Unused availability expires after `ReplySource.lifetime` (180 seconds), including
+  while the action row is open. A new nonqualifying copy clears the old availability.
+  During capture or composition the chosen source is frozen; later copies cannot
+  replace it. Expiry no longer applies once the source belongs to `.replyInput`.
+- Copying during another composer, generation or result does not replace that work.
+  Existing unused availability may expire independently while a saved-button rewrite is in progress.
+- Hiding the bar, ending a tutorial, account changes and disabling the copy trigger
+  clear unused availability. Watching stops while hidden. Self-written pasteboard
+  traffic remains suppressed, including result Copy and clipboard insertion/recovery.
+- `PendingRewrite.replyTo` retains the source for regeneration; history uses it as
+  `originalText` and labels the action Reply. The full source remains the wire payload.
 
 ### The threshold is set by Japanese, and it is the one filter
 
@@ -2021,112 +2106,29 @@ cases — which is the failure that matters.
 The price is known and pinned by `testLongNonMessageCopyStillArms`: a copied URL or
 path over 12 characters arms the bar. ✕ is the answer. Filtering it properly means
 guessing at the *shape* of the text, and a rule that silently declines is far harder to
-explain than a bar that occasionally appears when it need not have.
+explain than a quietly available action that can be dismissed.
 
 `ReplySource` is pure and lives in `DesktopRewriteKit` for that reason — `ClipboardWatcher`
 needs a real pasteboard and a runloop, so everything that *decides* is tested instead.
 
-### The message is a second window, up the whole time
+### The source is attached only after choosing Reply
 
-**Two wrong cuts preceded this, and both are worth knowing because both looked right.**
+The copied message is rendered once, in `CopiedReplyHeader` inside `PillPanel`, above
+`InputBar` with a subtle divider. It is a bounded 34 pt header plus a 1 pt divider,
+with a one-line excerpt and a 28 × 28 pt dismiss target. `ReplySource.contextText`
+flattens newlines and limits layout to 500 characters; the full text remains in `replyTo`.
+The excerpt has an accessible source label and a tooltip. There is no detached
+`ReplyContextPanel` in the shipping copy flow; that window remains for dormant explicit
+context capture only.
 
-The first put the copied message *in* the `.replyArmed` bar and nowhere else. The only
-way to reach the input box is to hover, and hovering replaces the bar with the input
-box — so the message was legible in the one state where there was nothing to do with it
-and gone in the state where you were writing against it.
-
-The second added `ReplyContextPanel` but scoped it to `.replyInput`, leaving the armed
-bar's preview in place. That was still wrong in the same direction and it shipped two
-visible bugs, which had **one cause between them**: `applyMeasuredSize` returns early
-when the measurement has not changed, so the hover into the composer frequently never
-called `resize` — and `resize` was the only thing that re-derived the card's position.
-The card stayed pinned to where the *armed* bar's top edge had been, the taller input
-bar grew up through it, and it appeared to "only work once you start typing", because
-typing changed the measured width and finally triggered a resize.
-
-Now: **the card is up from the moment a copy arms**, spanning `.replyArmed` and
-`.replyInput`, and the bar underneath carries no copy of the message at all — only a
-返信 badge saying what hovering will do. One rendering, one owner, and the handover that
-used to flicker no longer exists because nothing is handed over.
-
-`OverlayState.replySource` is what makes that one question instead of two.
-
-**A second window rather than more rows inside the bar.** The bar is a capsule sized
-exactly to its content (§4), so a four-line message inside it is a 120 pt lozenge, and
-the input bar's fixed 360 pt width exists for a reason a message body does not share.
-`ErrorPanel` is the exact precedent — the one other thing that stacks above the bar
-while the bar is still visible and still key — and `ResultPanel` supplies the
-measure-then-clamp-then-scroll contract the body uses.
-
-### The height had to be a constant, and that is the third correction
-
-The card was a measured two-row block, and it overlapped the bar on screen. **The cause
-is already written down in this file's own codebase** — `ErrorPanel` carries it:
-
-> *"with an unbounded measurement the window went to 721 pt, and a 721 pt window
-> anchored near the bottom of the screen puts its bottom-aligned card 653 pt below the
-> display."*
-
-`ErrorPanel` was fixed with `errorToastMinHeight` / `errorToastMaxHeight`. The context
-card was written afterwards, against the *pre-fix* version of that file, and inherited
-the same unbounded `applyContentHeight`. The mechanism: an inflated measurement makes
-the window taller than the space above the bar, `clampToWorkArea` slides that window
-**down** to keep it on screen, and because the content is bottom-aligned inside it the
-card draws lower than its own anchor — on top of the bar.
-
-It is now **one line at `replyContextHeight` (30 pt)**: icon, the message in italic,
-✕. No measurement at all, so the position is a pure function of the bar's frame and a
-30 pt window can never trigger the downward clamp. The two-row card, its `ScrollView`,
-its overflow fade and both of its preference keys are gone.
-
-Checked by hand rather than by eye, because eye is what got this wrong twice: armed bar
-spans `[minY+6, minY+40]`, pill sits at `minY+48`, gap 8 — the same 8 `ErrorPanel` uses.
-
-The cost is that a long message is truncated rather than scrolled. `replyTo` still
-carries the full text; only the display is cut. `contextText` also **flattens** newlines
-now, because `lineLimit(1)` on its own cuts at the first one — and the messages worth
-replying to open with a greeting, so that is the line it would have shown.
-
-Five things about it are load-bearing:
-
-1. **A constant height, per the above.** Anything that reintroduces a measured height
-   here reintroduces the overlap.
-2. **Never key.** `panelResignedKey` cancels the composer when `PillPanel` loses key, so
-   a pill that could take focus would close the input bar the moment anyone clicked the
-   message they were reading. `canBecomeKey` returns false, so AppKit leaves key where
-   it is and the click is inert. The ✕ is safe for the same reason: `dismissReply` lands
-   on `.pill`, so the resign it causes finds a state `cancelInput` ignores.
-3. **It follows the bar.** The input bar wraps to `inputBarMaxLines` as the user types,
-   so the thing the pill sits on gets taller *during* composition. Every `setFrame` on
-   the bar goes through `resize`, which re-anchors first — against the **target** frame,
-   not the current one, or the pill would be grown into by the second line for the
-   length of the 0.16 s animation. `persistPosition` re-anchors too, and so does
-   `applyMeasuredSize`'s **early return** — see the comment there, it is the exact hole
-   that produced the first two rounds of this bug. **The one gap left is mid-drag**:
-   `isMovableByWindowBackground` moves the window without going through `resize`, so the
-   pill catches up on mouseUp rather than following the pointer.
-4. **`setVisible(false)` takes it down by hand.** That path assigns `state` directly
-   instead of calling `transition`, so the sync that normally owns the pill never runs.
-5. **The error toast stacks above it**, not under it — `showErrorToast`'s anchor chain
-   gained `replyContextPanel?.frame`.
-
-The card goes away for `.generating` and `.result`: the capsule and the result panel
-replace the bar rather than stacking on it (§4), and a 440 pt result card with a message
-card above it runs off the top of a short display. Whether the original should be
-visible while judging the reply is open.
-
-### One rendering of the message
-
-`ReplySource.contextText` is the only place the copied message is drawn. There used to
-be a second — a single-line preview inside the armed bar — and deleting it went with the
-pill becoming permanent: two renderings of one string meant truncating it at two
-different widths and keeping both in step for no gain.
-
-`contextCharacters` (500) is the only bound on it, and it exists so SwiftUI is never
-handed a 10,000-character string to lay out; the visible truncation is the pill's width
-and `truncationMode(.tail)`. Neither touches the wire payload — `replyTo` carries the
-full text and `desktop-rewrite` has its own limit, which is also why the flattening
-happens in `contextText` and not in `text`.
+Bottom grows upward, notch/top grows downward, left grows rightward, and right grows
+leftward. The header stays above the field in reading order at every position; side
+composers retain the 208 pt width and fixed 160 pt guidance field. The complete surface
+stays vertically centered at the sides. Top retains its black notch attachment; the
+bottom reply composer uses 20 pt corners, and side/top retain their edge-specific
+corners. Source/header sizing is bounded and measured as part of the bar, never as an
+independently reanchored window. Preserve capture-before-key, the normal hover grace,
+and all Dock/notch/multidisplay placement rules.
 
 ### 返信モード is a switch, on by default
 
@@ -2134,34 +2136,16 @@ It works by watching what the user copies, which is worth saying out loud rather
 burying — the same reasoning as 履歴を保存する (§14). `ClipboardWatcher.isEnabled` is
 consulted on every poll, so `MainModel` needs no wiring to the overlay it does not own.
 
-### Not verified
+### Validation boundaries
 
-`swift test` passes 103 tests, `xcodebuild` succeeds, and six Deno prompt tests plus
-`deno check` / `deno lint` pass, with no new warnings. `desktop-rewrite` v9 is ACTIVE
-with `verify_jwt = true`; the downloaded deployed source matches local hashes, and the
-six authenticated quality cases described at the top of this file passed.
+Native layout checks must exercise collapsed availability, hover, dismissal, composition,
+source retention, expiry and all four positions in all three languages. Verify that the
+collapsed frame is unchanged, hover remains non-key and no detached source window is
+created. A scratch fixture validates presentation but does not establish that live
+cross-app capture or insertion works. Exercise copy → focus destination → hover → Reply
+→ compose → Insert in a real editor separately; preserve the source-selection exclusion
+and full-draft capture rules above.
 
-**Every correction in this section came from the owner running it, none from reading
-code — that is the pattern to expect here, and it is worth taking literally.** The
-overlap in particular was diagnosable from a file already in this repo (`ErrorPanel`'s
-own comment describes the exact failure) and was instead reasoned about twice from the
-creation path, which looked correct and was. The measured height was the problem, two
-call sites downstream. When something in the overlay is mispositioned, read what the
-other panels had to fix before theorising about this one.
-
-Still unwatched by anyone: the ten-step onboarding window, both real custom/reply Insert
-paths, the one-line reply pill, the gap holding as the input bar wraps to a second line,
-an empty-field capture in a real Mail or Slack compose box, and the write of a composed
-reply. `scripts/axdiag.swift` is the tool for the last.
-
-### Open — the primary flow pays for this
-
-**While a copy is armed, the user's own buttons are unreachable without pressing ✕.**
-Hover opens the input box, which is what §16 is for and what was asked for, but for up
-to 180 seconds it is also the only thing hover does. The ✕ is on the context card, which
-is on screen for both reply states — so it is one click from either, which is as far as
-this can be taken without contradicting "hovering just opens the input box". Whether
-that is enough is a question for a running build, not for this file.
 
 ---
 
@@ -2277,33 +2261,23 @@ answer for them, and that is why it exists.
   hidden with `.opacity(0)` rather than removed, because the window cannot resize
   and dropping it would move every page for one step and back again.
 
-### English is a different product surface, not a translated one
+### English writing styles
 
-敬語 has no English counterpart: the register a Japanese user needs a button for is
-grammatical, and the equivalent English problem is tone, length and correctness. So
-the starter pack's four axes replace the four honorific levels — **Polite / Email /
-Shorten / Proofread**: how it sounds, what shape it takes, how long it is, whether
-it is right. The other four packs are Work, Outreach, Polish and Social.
-
-Two things about those packs are load-bearing:
-
-1. **Titles are nine characters or fewer.** The hover row has *no overflow
-   handling* (§4) — it is intrinsically sized and simply gets wider. Nine characters
-   keeps a four-button English row within a few points of a Japanese one, and
-   `testEnglishButtonTitlesStayShortEnoughForTheHoverRow` pins it.
-2. **Polite and Email keep their `builtin_key`s.** `handle_new_user()` seeds every
-   account with all four keys and `user_prompts_user_builtin_unique` makes a key an
-   *identity* (§6), so an English pack claiming none of them would leave the seeded
-   Japanese rows to be deleted and re-created rather than reused.
-
-`outreach` and `polish` exist only in English; the Japanese branch resolves them to
-the nearest pack that does exist there, so a pack saved before a language change
-still yields four buttons rather than an empty list.
-
-**The practice drafts are wrong on purpose.** Each English sample carries the defect
-its button fixes — blunt for Polite, padded for Shorten, misspelled for Proofread,
-translated-sounding for Natural. A clean sample ends the lesson with a rewrite
-indistinguishable from the input.
+The same semantic style IDs serve all interface languages, with Japanese, English and
+Chinese labels and authored preview examples. Model modules describe Japanese register
+and English courtesy separately; a translated UI label is never the server instruction.
+`english_style.ts` supplies English-only editing and context/voice guidance alongside
+the shared modules. Apply it to the requested output language, not the interface or
+`writingLanguage` alone; Japanese drafts and explicit translations retain the language
+contract. English middle tones are Professional email and Natural work/personal/general
+writing. Contractions are normal in everyday professional English; higher formality
+does not imply padding, weakened requests or added deference. Preserve dialect, regional
+spelling, agency, uncertainty and deadlines. Work Standard retains normal detail;
+Detailed unpacks supplied information without new facts. Email uses its complete frame;
+chat has no letter frame, and notes/reports retain their genre. The English email cards
+are body excerpts, labeled as such; missing names use the authorized placeholders.
+The tutorial still uses deliberately rough practice prose so polishing is visible.
+Legacy preset catalogs remain only for compatibility and historical sample tests.
 
 ### `writingLanguage` on the wire
 
@@ -2351,49 +2325,14 @@ saying "Japanese" and only one of them was wrong to.**
    defaults to English. Both additions are `"en"`-only for §17's original reason: an
    absent or `"ja"` request stays byte-identical, and a Deno test asserts it.
 
-### Buttons do not follow the language, and now they offer to
+### Writing styles and language
 
-The two questions this section opens with are stored in two places that nothing kept
-in agreement. The interface language is `UserDefaults` on one Mac; the buttons are
-`user_prompts` rows on the server, shared with the phone. Switching language never
-touched them — the ⚙︎ 一般 row promised exactly that — so an English interface could
-sit above four buttons whose instructions ask for Japanese.
-
-There are three ways in, and only the first was ever closed:
-
-- Onboarding's pack step reads `available(for:)` and writes the right language. Fine.
-- **`handle_new_user()` seeds Japanese-writing prompts to every account regardless of
-  language**, and it cannot be fixed there: it is the iOS signup path, in the database
-  both surfaces share, and it predates this app. So the Mac reconciles after the fact.
-- **⚙︎ 一般 and the language page**, for anyone who switched later.
-
-`StockButtonLanguage` is the reconciliation, and its two rules are the design:
-
-- **Detection is exact string matching**, against every preset body in both languages
-  (`OnboardingPresetPack.stockPromptBodies(writtenIn:)`) plus the four `handle_new_user`
-  seed strings copied verbatim. A wording change upstream makes the offer stop
-  appearing; a script or language detector would eventually flag a button the user
-  wrote on purpose — an English speaker in Japan with one 敬語 button — and propose
-  deleting it. Under-offering is the safe direction. Editing a preset's text makes it
-  the user's, and it stops being flagged.
-- **It offers, it never repairs.** ボタン raises a banner and its picker asks which pack;
-  nothing is written until one is chosen. The packs are not translations of each other,
-  which is the same reason this cannot map button by button — there is no English
-  counterpart to 英訳 to convert it *into*.
-
-`replacement(choosing:keeping:whenWriting:)` returns the pack **plus every button that
-is not stock text**, and that second half is load-bearing:
-`UserPromptRemoteStore.replaceAll` deletes any row absent from what it is handed, so
-returning the pack alone would destroy hand-made buttons — the one outcome a fix for
-"my buttons are in the wrong language" must not produce. It routes through
-`applyOnboardingButtons`, because that is already the only path that reconciles
-`builtin_key` identities before upserting (§6) and a second whole-set writer would be a
-second place for that 409 to come back.
-
-`drafts(writtenIn:)` and `stockPromptBodies(writtenIn:)` take the language as an
-argument instead of reading `AppLanguageState`. That is not tidiness: code that decides
-what the *other* language's buttons look like by consulting the language the app is
-currently in would be the same class of bug it exists to fix.
+Language changes never replace saved style choices or notes. The universal contract
+preserves the draft’s language unless a current instruction or saved preference asks
+for translation. New composition uses `writingLanguage` (English for English UI,
+Japanese for Japanese/Chinese UI); reply without a draft uses the conversation language.
+Stock-prompt helpers support explicit preset selection and language realignment.
+They never replace customized buttons during startup, auth refresh or language changes.
 
 ### The field is logged now
 
@@ -2551,8 +2490,8 @@ Japanese sees an English permission dialog. That is the correct trade and there 
 mechanism that would do better without forcing `AppleLanguages`, which would drag
 every system-drawn control with it.
 
-Open, and a decision rather than a bug: `user_prompts` is shared with the phone
-(§2), so an English user's English button titles appear in the iOS keyboard.
+UI-language changes never silently replace buttons. Explicit button edits and confirmed
+realignment sync to the phone (§2).
 
 ---
 
@@ -2624,6 +2563,14 @@ not a second source from which a draft can be learned.
 of the Finder** — §16's invariant, enforced by the strategy instead of by refusing to
 capture. `TextIOCoordinator.write` throws `.noDestination` rather than synthesizing
 anything, and Insert never calls it in that state.
+
+**Saved buttons** require nonempty text. Capture still accepts blank/scratch targets to
+identify the appropriate guidance, but rejects them before focus changes or generation.
+A missing target says to click a writing field or select text and retry; an empty or
+whitespace-only field says to type text or use the pencil to compose. Both messages use
+the existing never-key error toast, localized in all three interface languages. Excluded
+controls and Accessibility permission errors retain their specific guidance. Selected
+text remains supported independently of the write strategy.
 
 A **saved button** still requires text, and that is not a regression to fix: 敬語 applied
 to nothing is not a request. What changed is the message, which names the control that
@@ -3000,7 +2947,7 @@ message floating over a hole.
 The file's own doctrine was right and its implementation did not follow it — "deriving the
 origin from the anchor makes the position the same no matter who resized last" is only true
 if you keep the *anchor*, not a rectangle it once had. It now holds the window weakly,
-re-derives `desiredBottom` on every layout, and observes the anchor's resize **and** move
+re-derives the zone-aware toast frame on every measurement, and observes the anchor's resize **and** move
 notifications: a result panel shrinking keeps its bottom edge and reports only a resize,
 while the bar being dragged reports only a move.
 

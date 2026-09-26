@@ -49,10 +49,10 @@ struct Icon: View {
         /// `icon-mark` and `icon-mark-color`, and warns about the collision.
         static let markFilled = "icon-mark-filled"
 
-        /// The full-bleed default artwork — the keycap on its purple field, the same
-        /// cut `AppIcon` is derived from. Not a template, so it cannot be an `Icon`;
+        /// The full-bleed cyan artwork — the existing keycap mascot, the same
+        /// cut `KeigoAppIcon` is derived from. Not a template, so it cannot be an `Icon`;
         /// `AppMark` draws it clipped to a rounded tile.
-        static let brand = "icon-brand"
+        static let brand = "KeigoAppMark"
     }
 
     let name: Name

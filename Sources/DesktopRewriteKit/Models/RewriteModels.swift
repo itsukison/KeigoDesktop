@@ -34,6 +34,7 @@ public enum CaptureMode: String, Codable, Sendable {
 }
 
 public struct RewriteRequest: Codable, Sendable {
+    public let writingStyle: ResolvedWritingStyle?
     public let prompt: String
     public let text: String
     /// The message being replied to (reply mode). When present the backend
@@ -143,8 +144,10 @@ public struct RewriteRequest: Codable, Sendable {
         buttonAnalyticsKey: String? = nil,
         previousEventId: String? = nil,
         replyContext: ReplyContext? = nil,
-        draftReadStatus: ReplyDraftReadStatus? = nil
+        draftReadStatus: ReplyDraftReadStatus? = nil,
+        writingStyle: ResolvedWritingStyle? = nil
     ) {
+        self.writingStyle = writingStyle
         self.prompt = prompt
         self.text = text
         self.replyTo = replyTo

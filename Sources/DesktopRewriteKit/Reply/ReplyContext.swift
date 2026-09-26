@@ -1,6 +1,6 @@
 import Foundation
 
-// Desktop-only v1 wire models. Runtime validation is enforced by the backend.
+// Desktop-only capture v1–v3 and writer context v1–v2 wire models. Runtime validation is enforced by the backend.
 // Shared JSON fixtures in Tests/Fixtures/ReplyContext pin cross-runtime parity.
 
 public enum ReplyDraftReadStatus: String, Codable, Equatable, Sendable {
@@ -79,8 +79,64 @@ public struct ReplySourceBlock: Codable, Equatable, Sendable {
     }
 }
 
+/// Structural observations only. Region membership is not a claim about conversation identity.
+public struct ReplyCaptureRegion: Codable, Equatable, Sendable {
+    public let id: String
+    public let parentId: String?
+    public let role: String
+    public let containsFocus: Bool
+    public let bounds: [Double]?
+
+    public init(id: String, parentId: String? = nil, role: String, containsFocus: Bool, bounds: [Double]? = nil) {
+        self.id = id; self.parentId = parentId; self.role = role
+        self.containsFocus = containsFocus; self.bounds = bounds
+    }
+}
+
+public struct ReplyCaptureObservation: Codable, Equatable, Sendable {
+    public let regionId: String
+    public let blockId: String?
+    public let role: String
+    public let kind: String
+    public let bounds: [Double]?
+    public let containsFocus: Bool
+    public let selected: Bool?
+    public let expanded: Bool?
+    public let sourceAttribute: String?
+
+    public init(regionId: String, blockId: String? = nil, role: String, kind: String,
+                bounds: [Double]? = nil, containsFocus: Bool = false, selected: Bool? = nil,
+                expanded: Bool? = nil, sourceAttribute: String? = nil) {
+        self.regionId = regionId; self.blockId = blockId; self.role = role; self.kind = kind
+        self.bounds = bounds; self.containsFocus = containsFocus; self.selected = selected
+        self.expanded = expanded; self.sourceAttribute = sourceAttribute
+    }
+}
+
+public struct ReplyCaptureDiagnostics: Codable, Equatable, Sendable {
+    public var clippedTextNodes: Int? = nil
+    public var textCandidates: Int? = nil
+    public var textReads: Int? = nil
+    public var skippedCurrentTextNodes: Int? = nil
+    public var sampledNodes = 0
+    public var pendingPeak = 0
+    public var childPages = 0
+    public var attributeFailures = 0
+    public var childFailures = 0
+    public var focusPathLength = 0
+    public var focusPathRead = 0
+    public var focusReachesRoot = false
+    public var elapsedMs = 0
+    public var axErrorCodes: [Int] = []
+    public init() {}
+}
+
 public struct CapturedReplyEvidence: Codable, Equatable, Sendable {
     public let version: Int
+    public let dom: ReplyDOMSnapshot?
+    public let regions: [ReplyCaptureRegion]?
+    public let observations: [ReplyCaptureObservation]?
+    public let diagnostics: ReplyCaptureDiagnostics?
     public let snapshotId: String
     public let blocks: [ReplySourceBlock]
     public let status: ReplyCaptureStatus
@@ -91,13 +147,21 @@ public struct CapturedReplyEvidence: Codable, Equatable, Sendable {
         snapshotId: String,
         blocks: [ReplySourceBlock],
         status: ReplyCaptureStatus,
-        truncationReasons: [String]
+        truncationReasons: [String],
+        regions: [ReplyCaptureRegion]? = nil,
+        observations: [ReplyCaptureObservation]? = nil,
+        diagnostics: ReplyCaptureDiagnostics? = nil,
+        dom: ReplyDOMSnapshot? = nil
     ) {
         self.version = version
+        self.dom = dom
         self.snapshotId = snapshotId
         self.blocks = blocks
         self.status = status
         self.truncationReasons = truncationReasons
+        self.regions = regions
+        self.observations = observations
+        self.diagnostics = diagnostics
     }
 }
 

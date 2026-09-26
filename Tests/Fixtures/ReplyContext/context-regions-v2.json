@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "snapshotId": "region-fixture",
+  "conversationId": "pane",
+  "sourceBlocks": [
+    {
+      "id": "b0",
+      "conversationId": "pane",
+      "text": "田中さんとの会話",
+      "order": 0,
+      "role": "AXHeading"
+    },
+    {
+      "id": "b1",
+      "conversationId": "history",
+      "text": "明日の15時は空いていますか？",
+      "order": 1,
+      "role": "AXStaticText"
+    }
+  ],
+  "participants": [],
+  "messages": [
+    {
+      "id": "m1",
+      "text": "明日の15時は空いていますか？",
+      "sourceBlockIds": [
+        "b1"
+      ],
+      "order": 1,
+      "kind": "message"
+    }
+  ],
+  "targetMessageIds": [
+    "m1"
+  ],
+  "audience": {
+    "kind": "direct",
+    "participantIds": []
+  },
+  "completeness": "partial",
+  "uncertainties": []
+}

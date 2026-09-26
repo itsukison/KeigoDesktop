@@ -8,23 +8,16 @@ final class ResultPanel: NSPanel {
 
     private let context: CurrentValueBox<ResultContext>
 
-    init(anchor: NSRect, controller: OverlayController, context: ResultContext) {
+    private let geometry: CurrentValueBox<CompanionGeometry>
+    private var measuredHeight: CGFloat = Tokens.Geometry.resultPanelMaxHeight
+
+    init(geometry: CompanionGeometry, controller: OverlayController, context: ResultContext) {
         let box = CurrentValueBox(context)
         self.context = box
-
-        let size = NSSize(
-            width: Tokens.Geometry.resultPanelWidth,
-            height: Tokens.Geometry.resultPanelMaxHeight
-        )
-        // Takes the bar's place rather than stacking on top of it, per `result.png` —
-        // the bar is hidden for the duration — and clamped, because the bar is
-        // draggable and 420 pt of card centred on a bar parked near the screen edge
-        // used to hang straight off the side.
+        self.geometry = CurrentValueBox(geometry)
         super.init(
-            contentRect: OverlayPlacement.auxiliaryFrame(size: size, anchoredTo: anchor),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
+            contentRect: geometry.frame(size: NSSize(width: geometry.resultWidth, height: geometry.resultMaxHeight)),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
 
         isFloatingPanel = true
@@ -34,11 +27,11 @@ final class ResultPanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true          // §8 deviation 1, drawn outside the frame
-        isMovableByWindowBackground = true
+        isMovableByWindowBackground = false
         animationBehavior = .none
 
         let hostingView = NSHostingView(
-            rootView: ResultView(controller: controller, box: box) { [weak self] height in
+            rootView: ResultView(controller: controller, box: box, geometry: self.geometry) { [weak self] height in
                 self?.applyContentHeight(height)
             }
         )
@@ -56,25 +49,20 @@ final class ResultPanel: NSPanel {
         self.context.value = context
     }
 
-    /// The window follows SwiftUI's measurement, same as the pill follows its width.
-    /// Sizing the panel to a constant is what put a one-line rewrite in the middle of
-    /// a 440 pt slab of `canvas`.
-    ///
-    /// The **bottom** edge stays put so the panel grows upward, away from the screen
-    /// edge it is anchored to.
+    func reanchor(_ geometry: CompanionGeometry) {
+        self.geometry.value = geometry
+        applyContentHeight(measuredHeight)
+    }
+
     func applyContentHeight(_ height: CGFloat) {
-        let clamped = min(
-            max(height, Tokens.Geometry.resultPanelMinHeight),
-            Tokens.Geometry.resultPanelMaxHeight
-        )
-        guard abs(frame.height - clamped) > 0.5 else { return }
-        var target = frame
-        target.size.height = clamped
-        // Not `screen?.visibleFrame`: `NSWindow.screen` is nil once the window is
-        // fully off-screen, so the old guard silently skipped the clamp in exactly
-        // the case that needed it. And `visibleFrame` still reserves a Dock that may
-        // not be there (§4) — `workArea` is the corrected one.
-        setFrame(OverlayPlacement.clampToWorkArea(target), display: true)
+        guard height.isFinite, height > 0 else { return }
+        measuredHeight = height
+        let placement = geometry.value
+        let size = NSSize(width: placement.resultWidth,
+                          height: min(height, placement.resultMaxHeight))
+        let target = placement.frame(size: size)
+        guard target != frame else { return }
+        setFrame(target, display: true)
         invalidateShadow()
     }
 
@@ -106,18 +94,19 @@ final class CurrentValueBox<Value>: ObservableObject {
     init(_ value: Value) { self.value = value }
 }
 
-/// Layout per `result.png`: pager + ✕ header, the submitted prompt echoed in an
-/// editable field, scrollable body with a bottom fade, footer with
-/// regenerate / copy / 👍 / 👎 and a primary `Insert ⏎`.
-///
-/// Not copied: their `Rewrite F1 + F2` chip — that is a push-to-talk dictation
-/// binding and has no meaning here.
 struct ResultView: View {
     @ObservedObject var controller: OverlayController
     @ObservedObject var box: CurrentValueBox<ResultContext>
+    @ObservedObject var geometry: CurrentValueBox<CompanionGeometry>
     let onHeightChange: (CGFloat) -> Void
 
-    @State private var promptEcho: String = ""
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+    @State private var appeared = false
+    @State private var topHeight: CGFloat = 50
+    @State private var bottomHeight: CGFloat = 90
+    @State private var bodyBottom: CGFloat = 0
+
     @State private var refinementText: String = ""
     @State private var showsRefinement = false
     @State private var refinementHovered = false
@@ -139,79 +128,68 @@ struct ResultView: View {
 
     private var context: ResultContext { box.value }
 
+    private var zone: SnapZone { geometry.value.zone }
     private var bodyHeight: CGFloat {
-        min(
-            max(bodyIntrinsic, Tokens.Geometry.resultBodyMinHeight),
-            Tokens.Geometry.resultBodyMaxHeight
-        )
+        let available = max(0, geometry.value.resultMaxHeight - topHeight - bottomHeight)
+        return min(max(bodyIntrinsic, Tokens.Geometry.resultBodyMinHeight), geometry.value.resultBodyMaxHeight, available)
     }
-
-    private var overflows: Bool {
-        bodyIntrinsic > Tokens.Geometry.resultBodyMaxHeight + 0.5
-    }
+    private var overflows: Bool { bodyIntrinsic > bodyHeight + 0.5 }
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            promptField
-            body_
-            notice
-            footer
-        }
-        .background(
-            RoundedRectangle(cornerRadius: Tokens.Overlay.panelRadius, style: .continuous)
-                .fill(Tokens.Overlay.canvas)
-        )
-        // The footer paints its own `canvas` background to sit under the hairline, and
-        // that rectangle is square — it was covering the rounded background's two
-        // bottom corners, so the card read as rounded on top and cut off at the
-        // bottom. Clipping the assembled card is what actually gives it four corners.
-        .clipShape(
-            RoundedRectangle(cornerRadius: Tokens.Overlay.panelRadius, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Tokens.Overlay.panelRadius, style: .continuous)
-                .strokeBorder(Tokens.Overlay.hairline, lineWidth: 1)
-        )
-        // Elevation comes from `hasShadow` on the window, not from here — see
-        // `PillPanel` for why a SwiftUI shadow only produces corner smears.
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(key: PanelHeightKey.self, value: proxy.size.height)
+            VStack(spacing: 0) {
+                header
             }
-        )
-        // Takes exactly its ideal height instead of stretching to whatever the window
-        // currently is, and sits on the window's bottom edge for the one layout pass
-        // before the window catches up — the edge it is anchored to anyway.
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxHeight: .infinity, alignment: .bottom)
-        .onPreferenceChange(PanelHeightKey.self) { height in
-            onHeightChange(height)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: ResultTopHeightKey.self, value: proxy.size.height)
+            })
+            body_
+            VStack(spacing: 0) {
+                notice
+                footer
+            }
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: ResultBottomHeightKey.self, value: proxy.size.height)
+            })
         }
-        .onAppear { promptEcho = context.selectedPage?.pending.promptText ?? "" }
+        .frame(width: geometry.value.resultWidth)
+        .clipShape(zone.companionShape())
+        .opacity(appeared ? 1 : 0.85)
+        // Keep the native backdrop outside SwiftUI's content clipping and fade.
+        // SmokedGlassSurface masks its own visual-effect view to this shape.
+        .background(SmokedGlassSurface(
+            shape: zone.companionShape(), joinsNotch: zone == .topCenter, showsBorder: false
+        ))
+        .overlay(zone.companionShape().strokeBorder(
+            contrast == .increased ? Tokens.Overlay.textSecondary : Tokens.Overlay.hairline, lineWidth: 1)
+            .mask(ExposedPanelEdges(zone: zone)))
+        .background(GeometryReader { proxy in
+            Color.clear.preference(key: PanelHeightKey.self, value: proxy.size.height)
+        })
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxHeight: .infinity, alignment: zone.companionAlignment)
+        .onPreferenceChange(PanelHeightKey.self, perform: onHeightChange)
+        .onPreferenceChange(ResultTopHeightKey.self) { topHeight = $0 }
+        .onPreferenceChange(ResultBottomHeightKey.self) { bottomHeight = $0 }
+        .onAppear {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.14)) { appeared = true }
+        }
         .onChange(of: context.selectedIndex) { _, _ in
-            // Each regenerated page can carry a different refinement instruction.
-            // The echoed prompt must travel with the body when the pager moves.
-            promptEcho = context.selectedPage?.pending.promptText ?? ""
+            hideRefinement()
         }
         .onDisappear { refinementCloseTask?.cancel() }
-        .onExitCommand {
-            if showsRefinement {
-                hideRefinement()
-            } else {
-                controller.dismiss()
-            }
-        }
+        .onExitCommand { escape() }
+    }
+
+    private func escape() {
+        if showsRefinement { hideRefinement() }
+        else { controller.dismiss() }
     }
 
     // MARK: Header
 
     private var header: some View {
         HStack(spacing: 10) {
-            // Always shown, `1 / 1` included — `result.png` shows the readout with a
-            // single candidate. It is not only a pager: every regeneration appends a
-            // page, so the count is also the user's assurance that an earlier answer
-            // remains reachable after asking for another one.
             HStack(spacing: 6) {
                 pagerButton("chevron.left", enabled: context.selectedIndex > 0) {
                     controller.selectResult(offsetBy: -1)
@@ -229,18 +207,16 @@ struct ResultView: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 24)
-            .background(Capsule().fill(Tokens.Overlay.surface))
 
             Spacer()
-
             Button { controller.dismiss() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Tokens.Overlay.textSecondary)
                     .frame(width: 24, height: 24)
-                    .background(Circle().fill(Tokens.Overlay.surface))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(QuietOverlayButtonStyle())
+            .accessibilityLabel(tr("閉じる", "Close", "关闭"))
             .cursor(.pointingHand)
         }
         .padding(.horizontal, 16)
@@ -257,10 +233,11 @@ struct ResultView: View {
             Image(systemName: symbol)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(enabled ? Tokens.Overlay.textPrimary : Tokens.Overlay.textTertiary)
-                .frame(width: 16, height: 16)
+                .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(QuietOverlayButtonStyle())
+        .accessibilityLabel(symbol == "chevron.left" ? tr("前の結果", "Previous result", "上一个结果") : tr("次の結果", "Next result", "下一个结果"))
         .disabled(!enabled)
         // §14's rule, and it applies to the overlay too: a disabled control keeps the
         // arrow. With one page both pager arrows are dead, and a hand over them would
@@ -268,108 +245,54 @@ struct ResultView: View {
         .cursor(enabled ? .pointingHand : .arrow)
     }
 
-    // MARK: Prompt echo
-
-    private var promptField: some View {
-        TextField("", text: $promptEcho, axis: .vertical)
-            .textFieldStyle(.plain)
-            .font(Tokens.Font.body(Tokens.Overlay.labelLarge))
-            .foregroundStyle(Tokens.Overlay.textPrimary)
-            .lineLimit(1...3)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
-                    .fill(Tokens.Overlay.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
-                    .strokeBorder(Tokens.Overlay.hairline, lineWidth: 1)
-            )
-            .padding(.horizontal, 16)
-            .onSubmit { regenerateWithEditedPrompt() }
-    }
-
     // MARK: Body
 
     private var body_: some View {
-        ZStack(alignment: .bottom) {
-            ScrollView {
-                Text(context.candidate?.replacement ?? "")
-                    .font(Tokens.Font.body(Tokens.Overlay.bodySize))
-                    .lineSpacing(Tokens.Overlay.bodyLineSpacing)
-                    .foregroundStyle(Tokens.Overlay.textPrimary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(
-                        GeometryReader { proxy in
-                            Color.clear
-                                .preference(key: BodyHeightKey.self, value: proxy.size.height)
-                        }
-                    )
-            }
-            .scrollIndicators(.never)
-            .scrollDisabled(!overflows)
-            .frame(height: bodyHeight)
-
-            // Bottom fade, per `result.png` — without it there is no signal that the
-            // text continues below the cut. With nothing below the cut it is the
-            // opposite: a gradient over empty canvas, which is what `debug.png` shows.
-            //
-            // `result.png` also has a chevron button sitting in the fade, and **ours is
-            // deliberately gone.** It was `allowsHitTesting(false)` decoration: it
-            // looked like a button, and clicking it did nothing. The fade already says
-            // "there is more below" and the body scrolls, so the chevron was carrying
-            // no information the fade wasn't. Restore it only with a scroll-to-bottom
-            // action behind it — and then it belongs on top of the fade, not in it.
-            //
-            // **The fade must be anchored to the viewport's own bottom edge.** It used
-            // to sit in a `VStack` above the chevron, which laid the chevron out *below*
-            // the gradient and pushed the gradient up by its height (26 + 6 pt). The
-            // gradient stopped 32 pt short of the viewport and the last line of text
-            // scrolled through that strip at full opacity — text fading out and then
-            // reappearing, solid, underneath its own fade. Bottom-aligned in this
-            // `ZStack` it terminates exactly where the viewport does.
-            //
-            // **The stops are eased, not linear.** A straight clear→canvas ramp puts
-            // its steepest perceptual change at the top of the band, so it reads as a
-            // soft-edged bar laid over the text rather than the text dissolving;
-            // holding the alpha low over the first half and letting it run late is what
-            // makes it disappear.
-            if overflows {
-                LinearGradient(
-                    stops: [
-                        .init(color: Tokens.Overlay.canvas.opacity(0), location: 0),
-                        .init(color: Tokens.Overlay.canvas.opacity(0.15), location: 0.5),
-                        .init(color: Tokens.Overlay.canvas.opacity(0.55), location: 0.75),
-                        .init(color: Tokens.Overlay.canvas, location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
+        ScrollView {
+            Text(context.candidate?.replacement ?? "")
+                .font(Tokens.Font.body(Tokens.Overlay.bodySize))
+                .lineSpacing(Tokens.Overlay.bodyLineSpacing)
+                .foregroundStyle(Tokens.Overlay.textPrimary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear
+                            .preference(key: BodyHeightKey.self, value: proxy.size.height)
+                            .preference(key: ResultBodyBottomKey.self, value: proxy.frame(in: .named("resultBody")).maxY)
+                    }
                 )
-                .frame(height: 64)
-                .allowsHitTesting(false)
+        }
+        .coordinateSpace(name: "resultBody")
+        .scrollIndicators(.never)
+        .scrollDisabled(!overflows)
+        .frame(height: bodyHeight)
+        .mask {
+            if overflows && bodyBottom > bodyHeight + 1 {
+                VStack(spacing: 0) {
+                    Rectangle()
+                    LinearGradient(stops: [
+                        .init(color: .white, location: 0),
+                        .init(color: .white.opacity(0.85), location: 0.5),
+                        .init(color: .white.opacity(0.45), location: 0.75),
+                        .init(color: .clear, location: 1)
+                    ], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 64)
+                }
+            } else {
+                Rectangle()
             }
         }
         .onPreferenceChange(BodyHeightKey.self) { bodyIntrinsic = $0 }
+        .onPreferenceChange(ResultBodyBottomKey.self) { bodyBottom = $0 }
+        .id(context.selectedIndex)
     }
 
     // MARK: Notice
 
-    /// Why the primary button says コピー.
-    ///
-    /// This started as a 4-character capsule in the header and was, correctly, called
-    /// hard to see: it sat at the opposite end of the card from the button it explains,
-    /// in the corner the eye leaves first. A result panel is read top to bottom and acted
-    /// on at the bottom, so the explanation belongs on the last line before the action —
-    /// where it is also impossible to reach the button without passing it.
-    ///
-    /// The slot is always present even though its contents are shown only for
-    /// `.copyOnly`. Focus can change while the card is open; reserving one line keeps
-    /// that live change from making the entire result panel jump taller or shorter.
-    /// A visible line under a working 挿入 would be commentary on the normal case.
+    // Reserve the localized notice's measured height so destination polling cannot move actions.
     private var notice: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Image(systemName: "info.circle")
@@ -380,11 +303,10 @@ struct ResultView: View {
                 "光标当前不在输入框中。可以复制文本，或先点击输入框再插入。"
             ))
             .font(Tokens.Font.body(Tokens.Overlay.labelMedium))
-            .lineLimit(1)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .foregroundStyle(Tokens.Overlay.textSecondary)
-        .frame(height: 16)
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .opacity(action == .copyOnly ? 1 : 0)
@@ -397,6 +319,7 @@ struct ResultView: View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 standardFooterRow
+                    .accessibilityHidden(showsRefinement)
                     .opacity(showsRefinement ? 0 : 1)
                     .allowsHitTesting(!showsRefinement)
 
@@ -407,11 +330,7 @@ struct ResultView: View {
         .frame(height: 28)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Tokens.Overlay.canvas)
-        .animation(.easeOut(duration: 0.18), value: showsRefinement)
-        // No divider. `result.png` separates the footer from the body with nothing at
-        // all — the text simply dissolves into it (see `body_`'s fade). A hairline
-        // there read as a table rule across a card that has no other rules on it.
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: showsRefinement)
     }
 
     private var standardFooterRow: some View {
@@ -424,10 +343,10 @@ struct ResultView: View {
             // one of them labelled and one of them an icon, only raise the question of
             // how they differ.
             if action != .copyOnly {
-                footerButton("doc.on.doc") { controller.copyToClipboard() }
+                footerButton("doc.on.doc", label: tr("コピー", "Copy", "复制")) { controller.copyToClipboard() }
             }
-            footerButton("hand.thumbsup") { controller.vote(up: true) }
-            footerButton("hand.thumbsdown") { controller.vote(up: false) }
+            footerButton("hand.thumbsup", label: tr("良い結果", "Good result", "好结果")) { controller.vote(up: true) }
+            footerButton("hand.thumbsdown", label: tr("良くない結果", "Poor result", "不好的结果")) { controller.vote(up: false) }
 
             Spacer()
 
@@ -449,9 +368,10 @@ struct ResultView: View {
                 .background(Capsule().fill(Tokens.Overlay.textPrimary))
             }
             .buttonStyle(.plain)
-            .keyboardShortcut(.defaultAction)
+            .keyboardShortcut(showsRefinement ? KeyboardShortcut?.none : .defaultAction)
             .cursor(.pointingHand)
             .help(insertHelp)
+            .background(LessonAnchorReader(anchor: .result, controller: controller))
         }
         // Freezing the whole row, not just the button: the pointer has to cross the row
         // to reach the button, and a label that changes on the way there is the same
@@ -546,12 +466,13 @@ struct ResultView: View {
                     Circle()
                         .fill(showsRefinement
                             ? Tokens.Overlay.textPrimary
-                            : Tokens.Overlay.surface)
+                            : Color.clear)
                         .frame(width: showsRefinement ? 20 : 28,
                                height: showsRefinement ? 20 : 28)
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(QuietOverlayButtonStyle())
+            .accessibilityLabel(showsRefinement ? tr("送信", "Send", "发送") : tr("再生成", "Regenerate", "重新生成"))
             .cursor(.pointingHand)
             .help(showsRefinement
                 ? tr("送信", "Send", "发送")
@@ -569,7 +490,7 @@ struct ResultView: View {
         )
         .background(
             RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
-                .fill(Tokens.Overlay.surface)
+                .fill(showsRefinement ? Tokens.Overlay.surface : Color.clear)
         )
         // Clip only the fill and the contents. Drawing the stroke before this clip
         // shaved its anti-aliased outer pixels during the width animation, which made
@@ -608,21 +529,16 @@ struct ResultView: View {
         )
     }
 
-    private func footerButton(
-        _ symbol: String,
-        action: @escaping () -> Void
-    ) -> some View {
+    private func footerButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Tokens.Overlay.textSecondary)
                 .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Tokens.Overlay.surface)
-                )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(QuietOverlayButtonStyle())
+        .accessibilityLabel(label)
+        .help(label)
         .cursor(.pointingHand)
     }
 
@@ -630,7 +546,7 @@ struct ResultView: View {
         refinementCloseTask?.cancel()
         refinementCloseTask = nil
         guard !showsRefinement else { return }
-        withAnimation(.easeOut(duration: 0.16)) { showsRefinement = true }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) { showsRefinement = true }
     }
 
     private func scheduleRefinementClose() {
@@ -648,7 +564,7 @@ struct ResultView: View {
         refinementCloseTask = nil
         refinementFocused = false
         refinementText = ""
-        withAnimation(.easeOut(duration: 0.12)) { showsRefinement = false }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) { showsRefinement = false }
     }
 
     private func submitRefinement() {
@@ -660,12 +576,45 @@ struct ResultView: View {
         }
     }
 
-    /// Editing the echoed prompt and pressing Enter re-runs against the same captured
-    /// target — the field is editable in `result.png`, and a field that looks editable
-    /// but does nothing is worse than a read-only one.
-    private func regenerateWithEditedPrompt() {
-        let edited = promptEcho.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !edited.isEmpty else { return }
-        controller.regenerate(promptText: edited)
+
+}
+
+
+private struct ResultTopHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+private struct ResultBottomHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+private struct ResultBodyBottomKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct QuietOverlayButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.isFocused) private var focused
+    @State private var hovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(2)
+            .background(RoundedRectangle(cornerRadius: 8).fill(
+                enabled && (hovered || focused || configuration.isPressed) ? Tokens.Overlay.surface : Color.clear))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(
+                focused ? Tokens.Overlay.textSecondary : Color.clear, lineWidth: 1))
+            .contentShape(Rectangle())
+            .onHover { hovered = $0 }
+    }
+}
+
+struct ExposedPanelEdges: View {
+    let zone: SnapZone
+    var body: some View {
+        Rectangle().padding(.top, zone == .topCenter ? 1 : 0)
+            .padding(.leading, zone == .left ? 1 : 0)
+            .padding(.trailing, zone == .right ? 1 : 0)
     }
 }

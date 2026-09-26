@@ -82,17 +82,19 @@ public struct ClipboardTextIO: Sendable {
     public func write(
         _ replacement: String,
         toFrontmost pid: pid_t,
-        mode: CaptureMode
+        mode: CaptureMode,
+        beforePaste: (@Sendable () async throws -> Void)? = nil
     ) async throws {
         let original = pasteboard.readString()
         pasteboard.write(replacement)
+        defer { if let original { pasteboard.write(original) } }
 
         guard activator.activate(pid: pid) else {
-            if let original { pasteboard.write(original) }
             throw TextIOError.writeFailed
         }
         await sleeper(Self.activateSettleNanos)
 
+        try await beforePaste?()
         if mode != .selection {
             keystrokes.sendCommandA()
             // The app needs a beat to apply the selection before ⌘V lands, or the
@@ -100,11 +102,11 @@ public struct ClipboardTextIO: Sendable {
             await sleeper(Self.selectAllSettleNanos)
         }
 
+        try await beforePaste?()
         keystrokes.sendCommandV()
 
         // Give the paste time to consume the pasteboard before restoring. Without
         // this the app can read the *restored* contents and paste the wrong thing.
         await sleeper(Self.copySettleNanos)
-        if let original { pasteboard.write(original) }
     }
 }

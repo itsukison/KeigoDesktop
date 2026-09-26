@@ -56,14 +56,17 @@ final class UpdateNoticePanel: NSPanel {
         )
     }
 
+    /// `replyContextGap` beyond the bar's near edge, centred on it — on whichever
+    /// side has more room, the same decision every stacked panel makes through
+    /// `OverlayPlacement.stackedFrame`.
     static func frame(anchoredTo anchor: NSRect) -> NSRect {
-        OverlayPlacement.clampToWorkArea(
-            NSRect(
-                x: anchor.midX - Tokens.Geometry.updateNoticeWidth / 2,
-                y: anchor.maxY + Tokens.Geometry.replyContextGap,
+        OverlayPlacement.stackedFrame(
+            size: NSSize(
                 width: Tokens.Geometry.updateNoticeWidth,
                 height: Tokens.Geometry.updateNoticeHeight
-            )
+            ),
+            gap: Tokens.Geometry.replyContextGap,
+            anchoredTo: anchor
         )
     }
 
@@ -140,6 +143,6 @@ struct UpdateNoticeCard: View {
             width: Tokens.Geometry.updateNoticeWidth,
             height: Tokens.Geometry.updateNoticeHeight
         )
-        .background(Capsule().fill(Tokens.Overlay.canvas))
+        .background(SmokedGlassSurface(shape: Capsule()))
     }
 }

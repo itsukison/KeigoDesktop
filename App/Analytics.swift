@@ -15,6 +15,8 @@ enum CopyReason: String, Sendable {
 }
 
 protocol Analytics: Sendable {
+    func styleApplied(_ style: ResolvedWritingStyle, attemptID: UUID, isTutorial: Bool)
+
     /// The attempt denominator. Emitted once per generation request, before the network
     /// call, so that a failure or an abandonment still has something to be a fraction of.
     func rewriteStarted(_ attempt: RewriteAttempt, target: TextTarget?)
@@ -126,7 +128,15 @@ private func targetProperties(_ target: TextTarget?) -> [String: Any] {
 }
 
 struct PostHogAnalytics: Analytics {
-
+    func styleApplied(_ style: ResolvedWritingStyle, attemptID: UUID, isTutorial: Bool) {
+        PostHogSDK.shared.capture("desktop_style_applied", properties: [
+            "attempt_id": attemptID.uuidString, "is_tutorial": isTutorial,
+            "style_version": 1, "resolver_version": 1,
+            "context_kind": style.profile.context.rawValue, "context_source": style.source.rawValue,
+            "voice": style.profile.voice, "presentation_axis": style.profile.context.detailKey,
+            "presentation_choice": style.profile.detail,
+        ])
+    }
     func rewriteStarted(_ attempt: RewriteAttempt, target: TextTarget?) {
         PostHogSDK.shared.capture("desktop_rewrite_started", properties:
             targetProperties(target)

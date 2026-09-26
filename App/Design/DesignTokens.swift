@@ -2,107 +2,101 @@ import SwiftUI
 
 /// Two ramps, per AGENTS.md §8.
 ///
-/// `Window` is `design.md`'s published system — Willow's, sampled from
-/// `reference/`. `Overlay` is the dark ramp the bar, the capsule and the result
+/// `Window` implements the Aside light system in `design.md`. `Overlay` is the dark ramp the bar, the capsule and the result
 /// card are drawn from; it is its own ramp, not a derivation of the light one.
 enum Tokens {
 
-    // MARK: - design.md palette, verbatim
-
-    /// Measured off `reference/Screenshot 2026-08-07 at 19.14.*.png` rather than
-    /// eyeballed — the values with a pixel behind them are marked in `design.md`.
-    enum Palette {
-        /// The window itself, visible as a margin around the content panel.
-        static let shell = Color(hex: 0xf2f2f4)
-        /// The sidebar's own fill. It sits under an `.sidebar` vibrancy material,
-        /// so this is the value it lands on over a light desktop.
-        static let sidebar = Color(hex: 0xf5f6f7)
-        /// The content panel and every card on it. Pure white, not an off-white.
-        static let white = Color(hex: 0xffffff)
-        /// Search fields, icon plates, quiet fills.
-        static let mist = Color(hex: 0xf5f5f5)
-        /// Grouped containers that hold cards of their own.
-        static let fog = Color(hex: 0xf7f7f8)
-        /// The active sidebar row. Willow's selection **darkens**; it does not lift.
-        static let cloud = Color(hex: 0xededef)
-        /// Card borders and separators. Cards read by their border, not their fill.
-        static let hairline = Color(hex: 0xececee)
-
-        static let ink = Color(hex: 0x4e4d51)
-        static let slate = Color(hex: 0x8a8a90)
-        static let ash = Color(hex: 0xb3b3b8)
-
-        /// The accent, and it is UI chrome: filled buttons, toggles, links, badges,
-        /// selection. This is the single largest break from the system this file
-        /// used to hold, where the accents were forbidden on all four of those.
-        static let indigo = Color(hex: 0x5a57ba)
-        /// The same hue as type — links and badge labels, where the fill weight of
-        /// `indigo` would be too heavy.
-        static let indigoText = Color(hex: 0x5856b5)
-        /// Filled accent surfaces: the plan card, an active tint.
-        static let indigoTint = Color(hex: 0xedeefa)
-        /// The lighter tint a switch's track takes when it is on.
-        static let indigoTrack = Color(hex: 0xe6e5fd)
-        /// Badge plates — a step greyer than `indigoTint`.
-        static let indigoPlate = Color(hex: 0xe4e5f0)
-
-        /// Completed, granted, connected. The one non-accent colour in the system.
-        static let green = Color(hex: 0x46a588)
-        /// A switch that is off, and any control track behind one.
-        static let controlOff = Color(hex: 0xd9d9da)
-    }
-
-    // MARK: - Window (the published system)
+    // MARK: - Aside light surfaces
 
     enum Window {
-        static let shell = Palette.shell
-        static let sidebar = Palette.sidebar
-        static let canvas = Palette.white
-        static let surface = Palette.mist
-        static let group = Palette.fog
-        static let rowActive = Palette.cloud
-        static let hairline = Palette.hairline
-
-        static let textPrimary = Palette.ink
-        static let textSecondary = Palette.slate
-        static let textTertiary = Palette.ash
-
-        static let accent = Palette.indigo
-        static let accentText = Palette.indigoText
-        static let accentTint = Palette.indigoTint
-        static let accentTrack = Palette.indigoTrack
-        static let accentPlate = Palette.indigoPlate
-        static let success = Palette.green
-        static let controlOff = Palette.controlOff
-
-        /// The content panel floats inside the window with the shell showing around
-        /// it — measured at 4 pt on three sides, with the sidebar taking the fourth.
+        static let environment = Color(hex: 0xedfaff)
+        static let shell = environment
+        static let sidebar = Color(hex: 0xeff1f2)
+        static let sidebarGlassTint = Color(hex: 0xeff6fa).opacity(0.93)
+        static let secondaryPanel = Color(hex: 0xf1f9fc)
+        static let canvas = Color(hex: 0xfcfefe)
+        static let surface = Color.white
+        static let surfaceHover = Color(hex: 0xf3f8fa)
+        static let group = secondaryPanel
+        static let rowActive = Color.white
+        static let selectionLocal = Color(hex: 0xe6edf0)
+        static let hairline = Color(hex: 0x111111).opacity(0.08)
+        static let borderControl = Color(hex: 0x111111).opacity(0.12)
+        static let textPrimary = Color(hex: 0x111111)
+        static let textSecondary = Color(hex: 0x606a70)
+        static let textTertiary = Color(hex: 0x6f7578)
+        static let textOnSidebar = Color(hex: 0x27343b)
+        static let actionPrimary = Color(hex: 0x171919)
+        static let actionHover = Color(hex: 0x2b3032)
+        static let actionPressed = Color(hex: 0x080a0b)
+        static let accent = Color(hex: 0x009af5)
+        static let accentText = Color(hex: 0x006fc9)
+        static let accentTint = Color(hex: 0xe5f4fe)
+        static let accentTrack = accent
+        static let accentPlate = accentTint
+        static let success = Color(hex: 0x26735c)
+        static let warning = Color(hex: 0x8a5700)
+        static let error = Color(hex: 0xb42332)
+        static let controlOff = Color(hex: 0xdde4e7)
+        static let disabledSurface = Color(hex: 0xe6ecef)
+        static let disabledText = Color(hex: 0x77838a)
         static let panelInset: CGFloat = 4
-        static let panelRadius: CGFloat = 12
+        static let panelRadius: CGFloat = 16
         static let sidebarWidth: CGFloat = 218
-
         static let cardRadius: CGFloat = 16
         static let smallCardRadius: CGFloat = 12
-        static let rowRadius: CGFloat = 8
-        static let buttonRadius: CGFloat = 8
-        static let inputRadius: CGFloat = 8
-        static let sheetRadius: CGFloat = 24
+        static let rowRadius: CGFloat = 10
+        static let buttonRadius: CGFloat = 10
+        static let inputRadius: CGFloat = 10
+        static let sheetRadius: CGFloat = 20
         static let pillRadius: CGFloat = 9999
-
         static let cardPadding: CGFloat = 20
         static let pagePadding: CGFloat = 32
+        static let scrim = Color.black.opacity(0.24)
+    }
 
-        /// The modal scrim. Willow's settings sheet dims the window to `#919191`
-        /// over white, which is 40% black.
-        static let scrim = Color.black.opacity(0.4)
+    enum Spacing {
+        static let small: CGFloat = 8
+        static let compact: CGFloat = 12
+        static let regular: CGFloat = 16
+        static let section: CGFloat = 24
+        static let large: CGFloat = 32
+        static let spacious: CGFloat = 48
+    }
+
+    /// System type for light windows only. The overlay retains `Font` below.
+    enum LightFont {
+        static func body(_ size: CGFloat, weight: SwiftUI.Font.Weight = .regular) -> SwiftUI.Font {
+            .system(size: size, weight: weight)
+        }
+        static func display(_ size: CGFloat, weight: SwiftUI.Font.Weight = .medium) -> SwiftUI.Font {
+            .system(size: size, weight: weight)
+        }
+        static func mono(_ size: CGFloat = 13) -> SwiftUI.Font { .system(size: size, design: .monospaced) }
+        static func displayTracking(_ size: CGFloat) -> CGFloat { size >= 22 ? -0.02 * size : 0 }
+        static let opticalNudge: CGFloat = 0
+        static let pageTitle = body(22, weight: .medium)
+        static let sectionTitle = body(16, weight: .medium)
+        static let body = body(14)
+        static let caption = body(12)
+        enum Onboarding {
+            static let hero = LightFont.body(40)
+            static let title = LightFont.body(32)
+            static let section = LightFont.body(20, weight: .medium)
+            static let instruction = LightFont.body(18)
+            static let body = LightFont.body(16)
+            static let caption = LightFont.body(13)
+            static let action = LightFont.body(16, weight: .medium)
+        }
     }
 
     // MARK: - Overlay (dark ramp)
 
-    /// Unchanged by the restyle. The bar is the one path that has run end to end,
-    /// and it is drawn over arbitrary wallpaper rather than over `Window.canvas`,
-    /// so it answers to nothing in the ramp above.
+    /// Shared by the dark bar and companion panels, independently of the light window.
     enum Overlay {
+        // Blends the native blur material, not its radius. 0 = clear; 1 = full material.
+        static let glassBlurBlend: CGFloat = 0.70
+
         static let canvas = Color(hex: 0x141312)
         static let surface = Color(hex: 0x1e1c1a)
         static let hairline = Color(hex: 0x2e2b28)
@@ -249,29 +243,36 @@ enum Tokens {
         /// edge when there is a Dock, the screen edge when there is not.
         static let bottomInset: CGFloat = 6
 
+        static let snapTopInset: CGFloat = 0
+        static let snapSideInset: CGFloat = 0
+        static let snapEdgeThreshold: CGFloat = 120
+        static let sideTabWidth: CGFloat = 24
+        static let sideTabHeight: CGFloat = 56
+        static let sideActionsWidth: CGFloat = 72
+        static let sideActionsPadding: CGFloat = 8
+        static let sideInputWidth: CGFloat = 208
+        static let sideEditorHeight: CGFloat = 160
+        static let sideInputMaxLines = 8
+        static let sideCornerRadius: CGFloat = 18
+        static let topCornerRadius: CGFloat = 8
+
         /// §4: without a grace delay, a diagonal path toward a far button
         /// collapses the row mid-travel.
         static let collapseGrace: TimeInterval = 0.3
 
+        static let sideResultPanelWidth: CGFloat = 320
+        static let sideResultPanelMaxHeight: CGFloat = 520
+        static let sideResultBodyMaxHeight: CGFloat = 320
+        static let sideGeneratingWidth: CGFloat = 176
+        static let sideGeneratingHeight: CGFloat = 60
         static let resultPanelWidth: CGFloat = 420
         static let resultPanelMaxHeight: CGFloat = 440
         static let generatingCapsuleHeight: CGFloat = 36
         static let generatingCapsuleWidth: CGFloat = 176
 
-        /// Room around the capsule for its glow to fall on. `generating.png`'s border
-        /// is a bloom, not a hairline — measured perpendicular to the ring, the core is
-        /// one pixel with ~8 pt of falloff either side — and the window is otherwise
-        /// sized exactly to the capsule, so without this the glow is clipped to the
-        /// shape that casts it.
-        ///
-        /// **Asymmetric, and that is the point.** The bottom is pinned to `bottomInset`
-        /// because that is the only slack there is: the bar sits 6 pt above the work
-        /// area, so 6 pt of window can hang below the capsule and still leave the
-        /// capsule's own bottom edge on the bar's line. Above and to the sides there is
-        /// no such limit, and that is where the halo is actually seen — the bottom of
-        /// it is against the Dock or the screen edge either way.
+        // Keep the visible capsule on the bar's line; the tight edge fits the Dock gap.
         static let generatingGlowPadding: CGFloat = 6
-        static let generatingGlowSpread: CGFloat = 11
+        static let generatingGlowSpread: CGFloat = 24
 
         static let errorToastWidth: CGFloat = 360
 
@@ -303,10 +304,6 @@ enum Tokens {
         static let resultBodyMaxHeight: CGFloat = 240
         static let resultBodyMinHeight: CGFloat = 44
 
-        /// Floor for the **whole card**, not the body. Header, prompt echo and footer
-        /// alone come to roughly 180 pt, so flooring the window at `resultBodyMinHeight`
-        /// was flooring it at a third of its own chrome.
-        static let resultPanelMinHeight: CGFloat = 160
     }
 }
 

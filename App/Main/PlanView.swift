@@ -46,7 +46,7 @@ struct PlanView: View {
 
             if let error = model.entitlementError {
                 Text(error)
-                    .font(Tokens.Font.body(12))
+                    .font(Tokens.LightFont.body(12))
                     .foregroundStyle(Tokens.Window.textTertiary)
             }
         }
@@ -89,10 +89,10 @@ struct PlanView: View {
         return Button { interval = value } label: {
             HStack(spacing: 6) {
                 Text(title)
-                    .font(Tokens.Font.body(13, weight: isOn ? .medium : .regular))
+                    .font(Tokens.LightFont.body(13, weight: isOn ? .medium : .regular))
                 if let badge {
                     Text(badge)
-                        .font(Tokens.Font.body(11, weight: .medium))
+                        .font(Tokens.LightFont.body(11, weight: .medium))
                         .foregroundStyle(Tokens.Window.accentText)
                 }
             }
@@ -123,7 +123,7 @@ struct PlanView: View {
                         "\(PlanPricing.freeMonthlyRewrites) rewrites a month",
                         "每月\(PlanPricing.freeMonthlyRewrites)次改写"
                     ),
-                    tr("自分のボタンをそのまま同期", "Your own buttons, synced", "同步你自己的按钮"),
+                    tr("使う場所に合う文章スタイル", "Writing styles for each context", "适合不同场景的写作风格"),
                     tr("どのアプリでも使える", "Works in every app", "在任何应用中都能使用"),
                 ],
                 highlighted: false,
@@ -277,17 +277,17 @@ struct PlanView: View {
             Card(padding: 16, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
                     Text("\(entitlement.used) / \(entitlement.monthLimit)")
-                        .font(Tokens.Font.display(20))
+                        .font(Tokens.LightFont.display(20))
                         .foregroundStyle(Tokens.Window.textPrimary)
                     Text(tr("回", "rewrites", "次"))
-                        .font(Tokens.Font.body(12))
+                        .font(Tokens.LightFont.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                     Spacer()
                     Text({
                         let date = Self.resetFormatter.string(from: entitlement.resetsAt)
                         return tr("\(date)にリセット", "Resets on \(date)", "\(date)重置")
                     }())
-                        .font(Tokens.Font.body(12))
+                        .font(Tokens.LightFont.body(12))
                         .foregroundStyle(Tokens.Window.textSecondary)
                 }
 
@@ -370,7 +370,7 @@ struct PlanView: View {
                 "The price shown is the amount you are charged.",
                 "所示价格即为实际收费金额。"
             ))
-                .font(Tokens.Font.body(12))
+                .font(Tokens.LightFont.body(12))
                 .foregroundStyle(Tokens.Window.textTertiary)
 
             Text(tr(
@@ -378,7 +378,7 @@ struct PlanView: View {
                 "The iPhone keyboard stays free, with its own separate limit.",
                 "iPhone 版「敬語ボタン」将持续免费，上限也不会改变。"
             ))
-                .font(Tokens.Font.body(12))
+                .font(Tokens.LightFont.body(12))
                 .foregroundStyle(Tokens.Window.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -395,7 +395,7 @@ struct PlanView: View {
         HStack(spacing: 12) {
             if let message {
                 Text(message)
-                    .font(Tokens.Font.body(12))
+                    .font(Tokens.LightFont.body(12))
                     .foregroundStyle(Tokens.Window.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -411,7 +411,7 @@ struct PlanView: View {
     private var signedOutNotice: some View {
         Card {
             Text(tr("プランを表示するにはサインインしてください。", "Sign in to see your plan.", "请登录后查看套餐。"))
-                .font(Tokens.Font.body(13))
+                .font(Tokens.LightFont.body(13))
                 .foregroundStyle(Tokens.Window.textSecondary)
         }
     }
@@ -461,20 +461,20 @@ private struct PlanCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     if let flag {
                         Text(flag)
-                            .font(Tokens.Font.body(11, weight: .medium))
+                            .font(Tokens.LightFont.body(11, weight: .medium))
                             .foregroundStyle(Tokens.Window.accentText)
                     }
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text(price)
-                            .font(Tokens.Font.display(24))
+                            .font(Tokens.LightFont.display(24))
                             .foregroundStyle(Tokens.Window.textPrimary)
                         Text(unit)
-                            .font(Tokens.Font.body(12))
+                            .font(Tokens.LightFont.body(12))
                             .foregroundStyle(Tokens.Window.textSecondary)
                     }
                     if let caption {
                         Text(caption)
-                            .font(Tokens.Font.body(11))
+                            .font(Tokens.LightFont.body(11))
                             .foregroundStyle(Tokens.Window.textTertiary)
                     }
                 }
@@ -486,7 +486,7 @@ private struct PlanCard: View {
                                 .foregroundStyle(Tokens.Window.accent)
                                 .padding(.top, 1)
                             Text(feature)
-                                .font(Tokens.Font.body(12))
+                                .font(Tokens.LightFont.body(12))
                                 .foregroundStyle(Tokens.Window.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -523,7 +523,7 @@ private struct PlanCard: View {
     private var header: some View {
         HStack {
             Text(name)
-                .font(Tokens.Font.body(13, weight: .medium))
+                .font(Tokens.LightFont.body(13, weight: .medium))
                 .foregroundStyle(highlighted ? Tokens.Window.accentText : Tokens.Window.textPrimary)
             Spacer()
         }
@@ -537,7 +537,7 @@ private struct PlanCard: View {
         switch action {
         case .current:
             Text(tr("現在のプラン", "Current plan", "当前套餐"))
-                .font(Tokens.Font.body(13, weight: .medium))
+                .font(Tokens.LightFont.body(13, weight: .medium))
                 .foregroundStyle(Tokens.Window.textTertiary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 34)

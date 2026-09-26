@@ -12,38 +12,21 @@ import SwiftUI
 /// field focused, and stealing that to show an apology would make it worse.
 final class ErrorPanel: NSPanel {
 
-    /// The window the toast sits on top of — the bar, the generating capsule, or the
-    /// result card.
-    ///
-    /// **A reference, not the rectangle it had at the time, and that was the bug.** The
-    /// result panel is created at `resultPanelMaxHeight` (440) and only then measures its
-    /// content and shrinks, bottom-fixed, to as little as 160. An insert failure raises
-    /// this toast in the same turn as it re-creates that panel, so a snapshot of the
-    /// anchor was always the 440 pt guess: the toast settled up to 280 pt above a card
-    /// that had since shrunk out from under it, which is the floating message with a hole
-    /// beneath it. Weak, because the anchor can be ordered out while the toast is still
-    /// up — the last known bottom is then the right thing to keep.
     private weak var anchorWindow: NSWindow?
-    private var desiredBottom: CGFloat
+    private var anchorFrame: NSRect
+    private var zone: SnapZone
+    private var measuredHeight: CGFloat = 62
+    private var host: NSHostingView<ErrorToast>?
 
-    init(anchor: NSWindow, message: String, onDismiss: @escaping () -> Void) {
-        // A first guess only — `applyContentHeight` measures the wrapped message and
-        // resizes. Close to the one-line case so the toast does not visibly settle.
-        let size = NSSize(width: Tokens.Geometry.errorToastWidth, height: 62)
-        let frame = anchor.frame
+    init(anchor: NSWindow, zone: SnapZone, message: String, onDismiss: @escaping () -> Void) {
         anchorWindow = anchor
-        desiredBottom = frame.maxY + 8
+        anchorFrame = anchor.frame
+        self.zone = zone
+        let area = OverlayPlacement.workArea(on: OverlayPlacement.screen(containing: anchor.frame))
+        let size = NSSize(width: min(Tokens.Geometry.errorToastWidth, area.width), height: 62)
         super.init(
-            contentRect: OverlayPlacement.clampToWorkArea(
-                NSRect(
-                    x: frame.midX - size.width / 2,
-                    // Above whatever is currently holding the bottom edge — the bar,
-                    // the generating capsule, or a result card up to 440 pt tall.
-                    y: frame.maxY + 8,
-                    width: size.width,
-                    height: size.height
-                )
-            ),
+            contentRect: BarPlacement.stackedFrame(size: size, gap: 8, zone: zone,
+                anchor: anchor.frame, workArea: area),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -58,11 +41,13 @@ final class ErrorPanel: NSPanel {
         hasShadow = true
         animationBehavior = .none
 
-        contentView = NSHostingView(
-            rootView: ErrorToast(message: message, onDismiss: onDismiss) { [weak self] height in
+        let host = NSHostingView(rootView: ErrorToast(message: message, width: size.width,
+            onDismiss: onDismiss) { [weak self] height in
                 self?.applyContentHeight(height)
-            }
-        )
+            })
+        host.sizingOptions = []
+        self.host = host
+        contentView = host
 
         // The anchor settles *after* this returns — `NSHostingView` measures the card and
         // resizes the window on a later pass — and it can settle more than once. Both
@@ -80,38 +65,31 @@ final class ErrorPanel: NSPanel {
 
     deinit { NotificationCenter.default.removeObserver(self) }
 
-    @objc private func anchorMoved() {
-        guard let anchorWindow else { return }
-        desiredBottom = anchorWindow.frame.maxY + 8
-        var target = frame
-        target.origin.y = desiredBottom
-        target.origin.x = anchorWindow.frame.midX - frame.width / 2
-        guard target != frame else { return }
-        setFrame(OverlayPlacement.clampToWorkArea(target), display: true)
-        invalidateShadow()
+    func reanchor(zone: SnapZone) {
+        self.zone = zone
+        updateFrame()
     }
 
-    /// Same measure-then-resize contract as `ResultPanel`: the message wraps, so the
-    /// height is not knowable up front. Grows **upward** — the bottom edge is anchored
-    /// to whatever the toast is sitting on top of.
-    ///
-    /// **Clamped, and that is not defensive dressing.** `ResultPanel` has always bounded
-    /// this and the toast never did, which is the whole reason one of them worked: with
-    /// an unbounded measurement (see `ErrorToast`) the window went to 721 pt, and a
-    /// 721 pt window anchored near the bottom of the screen puts its bottom-aligned card
-    /// 653 pt *below* the display. The toast was on screen, opaque and unoccluded the
-    /// entire time — just nowhere anybody could see it.
+    @objc private func anchorMoved() { updateFrame() }
+
     private func applyContentHeight(_ height: CGFloat) {
-        let clamped = min(max(height, Tokens.Geometry.errorToastMinHeight),
-                          Tokens.Geometry.errorToastMaxHeight)
-        // Re-derived rather than carried: between construction and this call the anchor
-        // has usually finished measuring itself and moved.
-        if let anchorWindow { desiredBottom = anchorWindow.frame.maxY + 8 }
-        var target = frame
-        target.size.height = clamped
-        target.origin.y = desiredBottom
+        measuredHeight = min(max(height, Tokens.Geometry.errorToastMinHeight),
+                             Tokens.Geometry.errorToastMaxHeight)
+        updateFrame()
+    }
+
+    private func updateFrame() {
+        if let anchorWindow { anchorFrame = anchorWindow.frame }
+        // Resolve the screen from the anchor, never from the proposed toast frame:
+        // a toast beside a display edge can initially lie on the neighboring screen.
+        let area = OverlayPlacement.workArea(on: OverlayPlacement.screen(containing: anchorFrame))
+        let size = NSSize(width: min(Tokens.Geometry.errorToastWidth, area.width),
+                          height: min(measuredHeight, area.height))
+        if let host, host.rootView.width != size.width { host.rootView.width = size.width }
+        let target = BarPlacement.stackedFrame(size: size, gap: 8, zone: zone,
+                                              anchor: anchorFrame, workArea: area)
         guard target != frame else { return }
-        setFrame(OverlayPlacement.clampToWorkArea(target), display: true)
+        setFrame(target, display: true)
         invalidateShadow()
     }
 
@@ -128,6 +106,7 @@ private struct ToastHeightKey: PreferenceKey {
 
 struct ErrorToast: View {
     let message: String
+    var width: CGFloat = Tokens.Geometry.errorToastWidth
     let onDismiss: () -> Void
     let onHeightChange: (CGFloat) -> Void
 
@@ -164,15 +143,10 @@ struct ErrorToast: View {
         // display — the toast was ordered front, opaque and unoccluded the whole time,
         // and simply off screen. Sizing the card to itself is the fix; the window then
         // follows the measurement instead of fighting it.
-        .frame(width: Tokens.Geometry.errorToastWidth)
-        .background(
-            RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
-                .fill(Tokens.Overlay.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
-                .strokeBorder(Tokens.Overlay.hairline, lineWidth: 1)
-        )
+        .frame(width: width)
+        .background(SmokedGlassSurface(
+            shape: RoundedRectangle(cornerRadius: Tokens.Overlay.inputRadius, style: .continuous)
+        ))
         .fixedSize(horizontal: false, vertical: true)
         .background(
             GeometryReader { proxy in

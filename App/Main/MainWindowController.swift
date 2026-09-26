@@ -8,7 +8,16 @@ import SwiftUI
 /// owned by `AppDelegate`, not by this window, and `isReleasedWhenClosed = false`
 /// keeps the instance alive so reopening from the menu bar returns to the same page
 /// rather than rebuilding from scratch. The only way out of the app is 終了.
-final class MainWindowController: NSWindowController {
+final class MainWindowController: NSWindowController, NSWindowDelegate {
+    private weak var model: MainModel?
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard let model else { return true }
+        model.leaveButtons {
+            if model.showsWhatsNew { model.dismissWhatsNew(returnToAbout: false) }
+            sender.orderOut(nil)
+        }
+        return false
+    }
 
     convenience init(model: MainModel) {
         let window = NSWindow(
@@ -22,9 +31,10 @@ final class MainWindowController: NSWindowController {
         // references. `MainWindowView` reserves the 36 pt they need.
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        // The shell colour, not the canvas: the content is a panel floating inside
-        // the window, and this is what shows in the margin around it.
-        window.backgroundColor = NSColor(Tokens.Window.shell)
+        // The translucent sidebar needs a clear backing; the workspace paints its
+        // own opaque surface and Reduce Transparency supplies a solid shell.
+        window.isOpaque = false
+        window.backgroundColor = .clear
         // The window's palette is a fixed light one. Without this, a Mac in dark mode
         // draws the system-supplied halves — switches, text-field carets, the
         // titlebar — from a dark appearance against light-only surfaces.
@@ -35,6 +45,8 @@ final class MainWindowController: NSWindowController {
         window.contentView = NSHostingView(rootView: MainWindowView(model: model))
         window.center()
         self.init(window: window)
+        self.model = model
+        window.delegate = self
     }
 
     func present() {

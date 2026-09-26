@@ -13,11 +13,18 @@ public struct UserPromptRemoteStore: Sendable {
     private let config: SupabaseConfig
     private let auth: AuthService
     private let session: URLSession
+    private var expectedAccountID: String?
 
     public init(config: SupabaseConfig, auth: AuthService, session: URLSession = .shared) {
         self.config = config
         self.auth = auth
         self.session = session
+    }
+
+    public func scoped(to accountID: String) -> Self {
+        var copy = self
+        copy.expectedAccountID = accountID
+        return copy
     }
 
     public func fetch() async throws -> [UserPrompt] {
@@ -218,10 +225,16 @@ public struct UserPromptRemoteStore: Sendable {
     /// transport error. Every caller here goes through this, so no request is ever sent
     /// with no token at all.
     private func authorize(_ request: inout URLRequest) async throws {
+        if let expectedAccountID, await auth.currentSession?.userId != expectedAccountID {
+            throw RewriteError.notSignedIn
+        }
         let accessToken: String
         do {
             accessToken = try await auth.ensureFreshAccessToken()
         } catch {
+            throw RewriteError.notSignedIn
+        }
+        if let expectedAccountID, await auth.currentSession?.userId != expectedAccountID {
             throw RewriteError.notSignedIn
         }
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")

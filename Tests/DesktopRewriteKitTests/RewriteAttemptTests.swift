@@ -29,6 +29,7 @@ final class RewriteAttemptTests: XCTestCase {
             Dictionary(uniqueKeysWithValues: RewriteType.allCases.map { ($0, $0.rawValue) }),
             [
                 .savedButton: "saved_button",
+                .universal: "universal",
                 .customInstruction: "custom_instruction",
                 .reply: "reply",
                 .regenerate: "regenerate",
@@ -48,7 +49,7 @@ final class RewriteAttemptTests: XCTestCase {
     func testTutorialIsNotARewriteType() {
         XCTAssertFalse(RewriteType.allCases.contains { $0.rawValue.contains("tutorial") })
         XCTAssertFalse(RewriteType.allCases.contains { $0.rawValue.contains("onboarding") })
-        XCTAssertEqual(RewriteType.allCases.count, 5)
+        XCTAssertEqual(RewriteType.allCases.count, 6)
     }
 
     // MARK: - The tracker

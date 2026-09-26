@@ -1,13 +1,7 @@
 import DesktopRewriteKit
 import SwiftUI
 
-/// The window shell: a grey frame, a sidebar drawn straight onto it, and the content
-/// as a **white panel floating inside** the frame.
-///
-/// That panel is `design.md`'s structural signature and the thing that most obviously
-/// separates this window from the one it replaces. There is no divider line between
-/// the sidebar and the content — the gap of shell colour around the panel *is* the
-/// separation, and the panel's own shadow is what puts it in front.
+/// Translucent desktop glass frames a stable, opaque workspace.
 struct MainWindowView: View {
     @ObservedObject var model: MainModel
 
@@ -22,7 +16,8 @@ struct MainWindowView: View {
         // 32 pt top read as ~60 against a 32 pt bottom, and the sidebar's brand row
         // sat that much below where the traffic lights needed it to.
         .ignoresSafeArea()
-        .background(Tokens.Window.shell)
+        .background { AsideSidebarBackdrop().ignoresSafeArea() }
+        .disabled(model.showsPreferences)
         // An overlay rather than `.sheet`, so the modal can be centred, dimmed and
         // dismissed by clicking away from it — see `PreferencesSheet`.
         .overlay {
@@ -41,7 +36,7 @@ struct MainWindowView: View {
             HStack(spacing: 8) {
                 AppMark(size: 22)
                 Text(tr("敬語ボタン", "KeigoButton", "敬語ボタン"))
-                    .font(Tokens.Font.body(15, weight: .semibold))
+                    .font(Tokens.LightFont.body(15, weight: .semibold))
                     .foregroundStyle(Tokens.Window.textPrimary)
             }
             .padding(.horizontal, 16)
@@ -52,14 +47,14 @@ struct MainWindowView: View {
 
             VStack(spacing: 2) {
                 NavRow(icon: .home, title: tr("ホーム", "Home", "主页"), isActive: model.page == .home) {
-                    model.page = .home
+                    model.leaveButtons { model.page = .home }
                 }
                 NavRow(
                     icon: .buttons,
                     title: tr("ボタン", "Buttons", "按钮"),
                     isActive: model.page == .buttons
                 ) {
-                    model.page = .buttons
+                    model.leaveButtons { model.page = .buttons }
                 }
             }
             .padding(.horizontal, 10)
@@ -70,7 +65,7 @@ struct MainWindowView: View {
         }
         .frame(width: Tokens.Window.sidebarWidth)
         .frame(maxHeight: .infinity)
-        .background(Tokens.Window.sidebar)
+
     }
 
     /// Pinned bottom-left, and the way into the account page.
@@ -81,19 +76,19 @@ struct MainWindowView: View {
     private var accountBlock: some View {
         HStack(spacing: 10) {
             Button {
-                model.page = .account
+                model.leaveButtons { model.page = .account }
             } label: {
                 HStack(spacing: 10) {
                     Avatar(initial: model.avatarInitial, diameter: 30)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(model.accountLabel)
-                            .font(Tokens.Font.body(13, weight: .medium))
+                            .font(Tokens.LightFont.body(13, weight: .medium))
                             .foregroundStyle(Tokens.Window.textPrimary)
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Text(model.isSignedIn ? tr("アカウント", "Account", "账户") : tr("サインイン", "Sign in", "登录"))
-                            .font(Tokens.Font.body(11))
-                            .foregroundStyle(Tokens.Window.textTertiary)
+                            .font(Tokens.LightFont.body(11))
+                            .foregroundStyle(Tokens.Window.textOnSidebar)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -103,7 +98,7 @@ struct MainWindowView: View {
             .cursor(.pointingHand)
 
             IconButton(icon: .settings, help: tr("環境設定", "Settings", "偏好设置")) {
-                model.showsPreferences = true
+                model.leaveButtons { model.showsPreferences = true }
             }
         }
         .padding(.horizontal, 14)
@@ -146,12 +141,7 @@ struct MainWindowView: View {
     }
 }
 
-/// The active row **darkens**.
-///
-/// This reverses the old window's rule, which lifted the active row to the canvas
-/// colour on the theory that the lighter surface reads as nearer. `design.md` does
-/// the opposite — `#ededef` against a `#f5f6f7` sidebar — and on a sidebar that is
-/// already near-white there is no lighter step left to take.
+/// White selection lifts above the translucent navigation.
 private struct NavRow: View {
     let icon: Icon.Name
     let title: String
@@ -167,10 +157,10 @@ private struct NavRow: View {
                     .frame(width: 18)
                     .opticalCentre()
                 Text(title)
-                    .font(Tokens.Font.body(14, weight: isActive ? .medium : .regular))
+                    .font(Tokens.LightFont.body(14, weight: isActive ? .medium : .regular))
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(isActive ? Tokens.Window.textPrimary : Tokens.Window.textSecondary)
+            .foregroundStyle(isActive ? Tokens.Window.textPrimary : Tokens.Window.textOnSidebar)
             .padding(.horizontal, 10)
             .frame(height: 34)
             .background(

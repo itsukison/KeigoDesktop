@@ -1,0 +1,141 @@
+{
+  "version": 3,
+  "snapshotId": "region-fixture",
+  "blocks": [
+    {
+      "id": "b0",
+      "conversationId": "pane",
+      "text": "田中さんとの会話",
+      "order": 0,
+      "role": "AXHeading"
+    },
+    {
+      "id": "b1",
+      "conversationId": "history",
+      "text": "明日の15時は空いていますか？",
+      "order": 1,
+      "role": "AXStaticText"
+    },
+    {
+      "id": "b2",
+      "conversationId": "sidebar",
+      "text": "別の会話",
+      "order": 2,
+      "role": "AXStaticText"
+    }
+  ],
+  "status": "partial",
+  "truncationReasons": [
+    "visible_history_only"
+  ],
+  "regions": [
+    {
+      "id": "root",
+      "role": "AXWindow",
+      "containsFocus": true,
+      "bounds": [
+        0,
+        0,
+        1200,
+        800
+      ]
+    },
+    {
+      "id": "pane",
+      "parentId": "root",
+      "role": "AXGroup",
+      "containsFocus": true,
+      "bounds": [
+        300,
+        0,
+        900,
+        800
+      ]
+    },
+    {
+      "id": "history",
+      "parentId": "pane",
+      "role": "AXScrollArea",
+      "containsFocus": false,
+      "bounds": [
+        300,
+        80,
+        900,
+        600
+      ]
+    },
+    {
+      "id": "sidebar",
+      "parentId": "root",
+      "role": "AXList",
+      "containsFocus": false,
+      "bounds": [
+        0,
+        0,
+        300,
+        800
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "regionId": "pane",
+      "blockId": "b0",
+      "role": "AXHeading",
+      "kind": "text",
+      "containsFocus": false,
+      "sourceAttribute": "AXValue",
+      "bounds": [
+        300,
+        0,
+        900,
+        40
+      ]
+    },
+    {
+      "regionId": "history",
+      "blockId": "b1",
+      "role": "AXStaticText",
+      "kind": "text",
+      "containsFocus": false,
+      "sourceAttribute": "AXValue",
+      "bounds": [
+        300,
+        100,
+        900,
+        60
+      ]
+    },
+    {
+      "regionId": "pane",
+      "role": "AXTextArea",
+      "kind": "composer",
+      "containsFocus": true,
+      "bounds": [
+        300,
+        700,
+        900,
+        80
+      ]
+    },
+    {
+      "regionId": "sidebar",
+      "blockId": "b2",
+      "role": "AXStaticText",
+      "kind": "text",
+      "containsFocus": false
+    }
+  ],
+  "diagnostics": {
+    "sampledNodes": 20,
+    "pendingPeak": 12,
+    "childPages": 8,
+    "attributeFailures": 0,
+    "childFailures": 0,
+    "focusPathLength": 4,
+    "focusPathRead": 4,
+    "focusReachesRoot": true,
+    "elapsedMs": 25,
+    "axErrorCodes": []
+  }
+}

@@ -18,7 +18,8 @@ BACKGROUND_PATH="$SCRIPT_DIR/dmg-background.png"
   echo "expected KeigoButton.app, got $APP_NAME" >&2
   exit 1
 }
-[[ -f "$BACKGROUND_PATH" ]] || { echo "background not found: $BACKGROUND_PATH" >&2; exit 1; }
+# Always derive the installer from its source, not a stale checked-in preview.
+swift "$SCRIPT_DIR/render-dmg-background.swift" "$SCRIPT_DIR/dmg-background.svg" "$BACKGROUND_PATH"
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/keigobutton-dmg.XXXXXX")"
 STAGING_DIR="$WORK_DIR/staging"
@@ -40,7 +41,7 @@ ln -s /Applications "$STAGING_DIR/Applications"
 cp "$BACKGROUND_PATH" "$STAGING_DIR/.background/background.png"
 
 hdiutil create \
-  -volname "敬語ボタン" \
+  -volname "KeigoButton" \
   -srcfolder "$STAGING_DIR" \
   -format UDRW \
   -fs HFS+ \
@@ -66,7 +67,8 @@ tell application "Finder"
   set statusbar visible of installerWindow to false
   set pathbar visible of installerWindow to false
   set sidebar width of installerWindow to 0
-  set bounds of installerWindow to {120, 120, 840, 560}
+  -- 440 pt artwork plus the Finder title bar; otherwise the final language clips.
+  set bounds of installerWindow to {120, 120, 840, 592}
 
   set viewOptions to icon view options of installerWindow
   set arrangement of viewOptions to not arranged
@@ -80,8 +82,23 @@ tell application "Finder"
   update mountedFolder without registering applications
   delay 2
   close installerWindow
+  -- Finder persists window settings asynchronously after closing.
+  delay 5
 end tell
 APPLESCRIPT
+
+# Do not distribute a plain folder if Finder has not saved its layout yet.
+python3 - "$MOUNT_DIR/.DS_Store" <<'PYVERIFY'
+import pathlib, sys, time
+path = pathlib.Path(sys.argv[1])
+for attempt in range(20):
+    data = path.read_bytes() if path.exists() else b""
+    if all(key in data for key in (b"icvp", b"Iloc", b"bwsp")):
+        break
+    time.sleep(0.5)
+else:
+    raise SystemExit("Finder did not persist the installer background/window/icon layout")
+PYVERIFY
 
 sync
 hdiutil detach "$MOUNT_DIR" -quiet

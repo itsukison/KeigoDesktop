@@ -1,372 +1,208 @@
 import DesktopRewriteKit
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// ボタン — one ordered desktop list backed by the shared `user_prompts` rows.
-///
-/// The first row owns the phone's `main` slot. Reordering is deliberately explicit:
-/// the compact arrows move one row at a time, without a detached drag preview or hidden
-/// drop target competing with the row's toggle and edit controls.
 struct ButtonsView: View {
     @ObservedObject var model: MainModel
-
-    static let rowHeight: CGFloat = 60
-
+    @State private var selected: UserPrompt?
+    @State private var adding = false
+    @State private var title = ""
+    @State private var instruction = ""
+    @State private var pendingAction: (() -> Void)?
+    @State private var showDiscard = false
     @State private var pendingDelete: UserPrompt?
-    /// Open only from the language banner. Not a permanent control on this page: for
-    /// everyone whose buttons already write the right language there is nothing here to
-    /// choose, and a always-visible "replace all my buttons" affordance beside a list of
-    /// buttons someone spent time wording is an invitation to lose that work.
     @State private var choosingPack = false
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            PageTitle(
-                title: tr("ボタン", "Buttons", "按钮"),
-                subtitle: tr(
-                    "バーに並ぶ書き換えボタンです。変更はスマホにも同期されます。",
-                    "The buttons on your bar. Changes sync to your phone too.",
-                    "这些是工具栏上的改写按钮。修改会同步到手机。"
-                )
-            )
+    private var dirty: Bool {
+        title != (selected?.title ?? "") || instruction != (selected?.prompt ?? "")
+    }
+    private var valid: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
-            if !model.isSignedIn {
-                signInPrompt
-            } else {
-                if model.buttonsWriteOtherLanguage {
-                    languageMismatchBanner
-                }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            PageTitle(title: tr("ボタン", "Buttons", "按钮"), subtitle: tr(
+                "よく使う指示を、自分の順番で。変更はスマホにも同期されます。",
+                "Your instructions, in your order. Changes sync to your phone too.",
+                "常用指令，按你的顺序排列。修改也会同步到手机。"))
+            if model.isSignedIn {
                 toolbar
                 if let error = model.promptsError {
-                    Text(error)
-                        .font(Tokens.Font.body(13))
-                        .foregroundStyle(Tokens.Window.textSecondary)
+                    HStack {
+                        Text(error).foregroundStyle(Tokens.Window.error)
+                        Spacer()
+                        Button(tr("再試行", "Retry", "重试")) { Task { await model.reloadPrompts() } }
+                    }.font(Tokens.LightFont.body(13))
                 }
-                promptList
+                if model.buttonsWriteOtherLanguage {
+                    HStack {
+                        Text(tr("ボタンの言語が設定と異なります。", "Your presets use a different writing language.", "预设按钮的写作语言与设置不同。"))
+                        Spacer()
+                        Button(tr("セットを選ぶ", "Choose a set", "选择按钮组")) {
+                            confirmChange { choosingPack = true }
+                        }
+                    }.font(Tokens.LightFont.body(13)).padding(14).background(Tokens.Window.accentTint)
+                }
+                HStack(alignment: .top, spacing: 20) {
+                    buttonList.frame(width: 228)
+                    editor.frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                Text(tr("サインインするとボタンを編集できます。", "Sign in to edit your buttons.", "登录后即可编辑按钮。"))
+                ActionButton(tr("サインイン", "Sign in", "登录")) { model.page = .account }
+            }
+        }
+        .onAppear {
+            synchronizeSelection()
+            model.confirmLeavingButtons = { action in confirmChange(action) }
+        }
+        .onDisappear { model.confirmLeavingButtons = nil }
+        .onChange(of: model.prompts) { _, _ in if !dirty { synchronizeSelection() } }
+        .onChange(of: model.signedInEmail) { _, _ in
+            selected = nil; adding = false; title = ""; instruction = ""
+            pendingAction = nil; showDiscard = false
+        }
+        .alert(tr("変更を破棄しますか？", "Discard unsaved changes?", "放弃未保存的修改？"), isPresented: $showDiscard) {
+            Button(tr("編集を続ける", "Keep editing", "继续编辑"), role: .cancel) { pendingAction = nil }
+            Button(tr("破棄", "Discard", "放弃"), role: .destructive) {
+                let action = pendingAction; pendingAction = nil
+                load(selected); action?()
             }
         }
         .alert(item: $pendingDelete) { prompt in
-            Alert(
-                title: Text(tr("「\(prompt.title)」を削除しますか？", "Delete \u{201C}\(prompt.title)\u{201D}?", "要删除「\(prompt.title)」吗？")),
-                message: Text(tr(
-                    "このボタンはスマホからも消えます。元に戻せません。",
-                    "It disappears from your phone as well, and this can't be undone.",
-                    "该按钮也会从手机上消失，且无法撤销。"
-                )),
-                primaryButton: .destructive(Text(tr("削除", "Delete", "删除"))) { model.delete(prompt) },
-                secondaryButton: .cancel(Text(tr("キャンセル", "Cancel", "取消")))
-            )
+            Alert(title: Text(tr("このボタンを削除しますか？", "Delete this button?", "删除此按钮？")),
+                  message: Text(tr("スマホからも削除されます。元に戻せません。", "This also deletes it from your phone. This cannot be undone.", "也会从手机上删除，且无法撤销。")),
+                  primaryButton: .destructive(Text(tr("削除", "Delete", "删除"))) { model.delete(prompt) },
+                  secondaryButton: .cancel())
         }
-        .sheet(isPresented: $choosingPack) {
-            PresetPackPicker(model: model) { choosingPack = false }
-        }
-    }
-
-    /// Shown when the buttons on this account are stock text for the *other* writing
-    /// language — §17's two questions having drifted apart. It is the visible half of
-    /// the bug this page could not otherwise explain: an English interface whose 敬語
-    /// button returns Japanese, because the instruction behind it is a Japanese sentence
-    /// asking for Japanese.
-    ///
-    /// An offer, never an automatic repair. The rows are shared with the phone and the
-    /// user may have chosen them there on purpose, so nothing is written until a pack is
-    /// picked in the sheet.
-    private var languageMismatchBanner: some View {
-        Card(padding: 18) {
-            HStack(alignment: .top, spacing: 14) {
-                IconPlate(icon: .info, diameter: 36)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(tr(
-                        "ボタンは英語向けの設定になっていません",
-                        "These buttons still write Japanese",
-                        "这些按钮仍然会写成日语"
-                    ))
-                        .font(Tokens.Font.body(14, weight: .medium))
-                        .foregroundStyle(Tokens.Window.textPrimary)
-                    Text(tr(
-                        "AIへの指示が日本語で書かれているため、英語を選んでいても日本語で返ってきます。英語向けのセットに入れ替えできます。",
-                        "The instruction behind each one asks the AI for Japanese, so a rewrite comes back in Japanese even with English selected. You can swap them for an English set.",
-                        "每个按钮给AI的指令都是日语，因此即使界面选了其他语言，改写结果仍是日语。可以替换为对应的按钮组。"
-                    ))
-                        .font(Tokens.Font.body(13))
-                        .foregroundStyle(Tokens.Window.textSecondary)
-                        .lineSpacing(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 12)
-                ActionButton(
-                    tr("セットを選ぶ", "Choose a set", "选择按钮组"),
-                    style: .primary
-                ) {
-                    choosingPack = true
-                }
-            }
-        }
-    }
-
-    private var signInPrompt: some View {
-        Card(padding: 20) {
-            HStack(spacing: 14) {
-                IconPlate(icon: .profile, diameter: 40)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(tr("サインインするとボタンを編集できます", "Sign in to edit your buttons", "登录后即可编辑按钮"))
-                        .font(Tokens.Font.body(14, weight: .medium))
-                        .foregroundStyle(Tokens.Window.textPrimary)
-                    Text(tr(
-                        "スマホの敬語ボタンと同じアカウントで同期されます。",
-                        "They sync with the same account you use on your phone.",
-                        "与手机上敬語ボタン使用同一账户同步。"
-                    ))
-                        .font(Tokens.Font.body(13))
-                        .foregroundStyle(Tokens.Window.textSecondary)
-                }
-                Spacer()
-                ActionButton(tr("サインイン", "Sign in", "登录"), style: .primary) { model.page = .account }
-            }
-        }
+        .sheet(isPresented: $choosingPack) { PresetPackPicker(model: model) { choosingPack = false } }
     }
 
     private var toolbar: some View {
         HStack {
-            Text({
-                let shown = model.prompts.filter(\.isEnabled).count
-                let total = model.prompts.count
-                return tr(
-                    "\(shown) / \(total) 個をバーに表示中",
-                    "\(shown) of \(total) shown on the bar",
-                    "工具栏上显示 \(shown) / \(total) 个"
-                )
-            }())
-                .font(Tokens.Font.body(13))
-                .foregroundStyle(Tokens.Window.textTertiary)
+            Text(tr("\(model.prompts.filter(\.isEnabled).count)個をバーに表示中",
+                    "\(model.prompts.filter(\.isEnabled).count) shown on the bar",
+                    "工具栏上显示\(model.prompts.filter(\.isEnabled).count)个"))
+                .font(Tokens.LightFont.body(13)).foregroundStyle(Tokens.Window.textSecondary)
+            if model.isLoadingPrompts || model.isSavingButtons || model.isReorderingButtons { ProgressView().controlSize(.small) }
             Spacer()
-            ActionButton(tr("ボタンを追加", "Add a button", "添加按钮"), icon: .add, style: .primary) {
-                model.addPrompt()
+            ActionButton(tr("ボタンを追加", "Add a button", "添加按钮"), icon: .add) {
+                confirmChange { selected = nil; adding = true; title = ""; instruction = "" }
+            }.disabled(model.isSavingButtons)
+        }
+    }
+
+    private var buttonList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(tr("表示順", "BAR ORDER", "显示顺序"))
+                .font(Tokens.LightFont.body(11, weight: .semibold)).foregroundStyle(Tokens.Window.textSecondary)
+            if model.prompts.isEmpty {
+                Text(model.isLoadingPrompts ? tr("読み込み中…", "Loading…", "正在加载…") : tr("まだボタンがありません。", "No buttons yet.", "还没有按钮。"))
+                    .font(Tokens.LightFont.body(14)).padding(16)
+            }
+            ForEach(Array(model.prompts.enumerated()), id: \.element.id) { index, prompt in
+                row(prompt, index: index)
             }
         }
     }
 
-    @ViewBuilder
-    private var promptList: some View {
-        if model.prompts.isEmpty {
-            Card(padding: 20) {
-                HStack(spacing: 14) {
-                    IconPlate(icon: .buttons, diameter: 40)
-                    Text(
-                        model.isLoadingPrompts
-                            ? tr("読み込んでいます…", "Loading…", "正在加载…")
-                            : tr(
-                                "まだボタンがありません。「ボタンを追加」から作成できます。",
-                                "No buttons yet. Create one with Add a button.",
-                                "还没有按钮。可以点击「添加按钮」创建。"
-                            )
-                    )
-                    .font(Tokens.Font.body(14))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-                    Spacer()
-                }
+    private func row(_ prompt: UserPrompt, index: Int) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(Tokens.Window.textSecondary)
+                .onDrag { NSItemProvider(object: prompt.id.uuidString as NSString) }
+                .accessibilityLabel(tr("ドラッグして並べ替え", "Drag to reorder", "拖动排序"))
+            Button {
+                confirmChange { load(prompt) }
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(prompt.title).font(Tokens.LightFont.body(13, weight: .medium)).lineLimit(2)
+                    Text(index == 0 ? tr("メイン", "Main", "主要") : prompt.prompt)
+                        .font(Tokens.LightFont.body(11)).foregroundStyle(Tokens.Window.textSecondary).lineLimit(1)
+                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+            VStack(spacing: 4) {
+                Button { _ = model.movePrompt(id: prompt.id, by: -1) } label: { Image(systemName: "chevron.up") }
+                    .disabled(index == 0).help(tr("上へ", "Move up", "上移"))
+                Button { _ = model.movePrompt(id: prompt.id, by: 1) } label: { Image(systemName: "chevron.down") }
+                    .disabled(index == model.prompts.count - 1).help(tr("下へ", "Move down", "下移"))
+            }.buttonStyle(.plain).font(.system(size: 10, weight: .semibold))
+            Toggle(tr("バーに表示", "Show on bar", "在工具栏显示"), isOn: Binding(
+                get: { prompt.isEnabled }, set: { model.setEnabled(prompt, $0) }))
+                .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+        }
+        .padding(10)
+        .background(selected?.id == prompt.id && !adding ? Tokens.Window.selectionLocal : Tokens.Window.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Tokens.Window.hairline))
+        .disabled(model.isSavingButtons)
+        .onDrop(of: [.text], isTargeted: nil) { providers in
+            guard let provider = providers.first else { return false }
+            _ = provider.loadObject(ofClass: String.self) { value, _ in
+                guard let value, let id = UUID(uuidString: value) else { return }
+                Task { @MainActor in model.movePrompt(id: id, before: prompt.id) }
             }
-        } else {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
-                    SectionCaption(text: tr("表示順", "Order", "显示顺序"))
-                    Spacer(minLength: 12)
-                    Text(tr(
-                        "先頭がメイン・左の矢印で並べ替え",
-                        "First row is the main button — reorder with the arrows",
-                        "第一行为主按钮，用左侧箭头排序"
-                    ))
-                        .font(Tokens.Font.body(11))
-                        .foregroundStyle(Tokens.Window.textTertiary)
-                }
+            return true
+        }
+    }
 
-                RowGroup {
-                    ForEach(model.prompts) { prompt in
-                        if model.editingPromptId == prompt.id {
-                            PromptEditor(
-                                prompt: prompt,
-                                onSave: { model.save($0); model.editingPromptId = nil },
-                                onDelete: {
-                                    model.editingPromptId = nil
-                                    pendingDelete = prompt
-                                },
-                                onCancel: { model.editingPromptId = nil }
-                            )
-                            .id(prompt.id)
-                            if prompt.id != model.prompts.last?.id { Hairline() }
-                        } else {
-                            PromptRow(
-                                prompt: prompt,
-                                isMain: prompt.id == model.prompts.first?.id,
-                                showsSeparator: prompt.id != model.prompts.last?.id,
-                                canMoveUp: prompt.id != model.prompts.first?.id,
-                                canMoveDown: prompt.id != model.prompts.last?.id,
-                                onToggle: { model.setEnabled(prompt, $0) },
-                                onMoveUp: { model.movePrompt(id: prompt.id, by: -1) },
-                                onMoveDown: { model.movePrompt(id: prompt.id, by: 1) },
-                                onEdit: { model.editingPromptId = prompt.id },
-                                onDelete: { pendingDelete = prompt }
-                            )
-                        }
+    @ViewBuilder private var editor: some View {
+        if selected != nil || adding {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(adding ? tr("新しいボタン", "New button", "新按钮") : tr("ボタンを編集", "Edit button", "编辑按钮"))
+                    .font(Tokens.LightFont.body(18, weight: .semibold))
+                Text(tr("名前", "Name", "名称")).font(Tokens.LightFont.body(13, weight: .medium))
+                TextField(tr("例：丁寧に", "For example: Make polite", "例如：更礼貌"), text: $title)
+                    .textFieldStyle(.roundedBorder)
+                Text(tr("AIへの指示", "Instructions", "AI指令")).font(Tokens.LightFont.body(13, weight: .medium))
+                TextEditor(text: $instruction)
+                    .font(Tokens.LightFont.body(14)).scrollContentBackground(.hidden)
+                    .padding(8).frame(height: 200)
+                    .background(Tokens.Window.surface)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Tokens.Window.borderControl))
+                    .accessibilityLabel(tr("AIへの指示", "Instructions", "AI指令"))
+                HStack {
+                    if let selected {
+                        Button(role: .destructive) { confirmChange { pendingDelete = selected } } label: {
+                            Image(systemName: "trash")
+                        }.help(tr("削除", "Delete", "删除"))
                     }
+                    Spacer()
+                    ActionButton(tr("キャンセル", "Cancel", "取消"), style: .ghost) { load(selected) }
+                    ActionButton(tr("保存", "Save", "保存")) {
+                        let current = selected; let name = title; let text = instruction
+                        Task {
+                            if await model.saveButton(current, title: name, instruction: text) {
+                                load(model.prompts.first { $0.id == model.editingPromptId })
+                            }
+                        }
+                    }.disabled(!valid || !dirty || model.isSavingButtons || model.isReorderingButtons)
                 }
-                // The source of truth changes once per click; no row follows the pointer.
-                .animation(.easeOut(duration: 0.16), value: model.prompts.map(\.id))
-            }
+            }.padding(20).background(Tokens.Window.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Tokens.Window.hairline))
+                .disabled(model.isSavingButtons)
+        } else {
+            Text(tr("ボタンを選択するか、新しく追加してください。", "Select a button or add a new one.", "选择按钮或添加新按钮。"))
+                .font(Tokens.LightFont.body(14)).foregroundStyle(Tokens.Window.textSecondary).padding(24)
         }
+    }
+
+    private func confirmChange(_ action: @escaping () -> Void) {
+        guard !model.isSavingButtons else { return }
+        if dirty { pendingAction = action; showDiscard = true } else { action() }
+    }
+    private func load(_ prompt: UserPrompt?) {
+        selected = prompt; adding = false; title = prompt?.title ?? ""; instruction = prompt?.prompt ?? ""
+    }
+    private func synchronizeSelection() {
+        if adding { return }
+        load(model.prompts.first { $0.id == selected?.id } ?? model.prompts.first)
     }
 }
 
-private struct PromptRow: View {
-    let prompt: UserPrompt
-    let isMain: Bool
-    let showsSeparator: Bool
-    let canMoveUp: Bool
-    let canMoveDown: Bool
-    let onToggle: @MainActor @Sendable (Bool) -> Void
-    let onMoveUp: () -> Void
-    let onMoveDown: () -> Void
-    let onEdit: () -> Void
-    let onDelete: () -> Void
-
-    @State private var hovering = false
-
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(spacing: 0) {
-                IconButton(
-                    icon: .arrowUp,
-                    help: isMain ? tr("これが先頭です", "Already first", "已在最前") : tr("1つ上へ", "Move up", "上移一位"),
-                    enabled: canMoveUp,
-                    action: onMoveUp
-                )
-                IconButton(
-                    icon: .arrowDown,
-                    help: canMoveDown ? tr("1つ下へ", "Move down", "下移一位") : tr("これが末尾です", "Already last", "已在最后"),
-                    enabled: canMoveDown,
-                    action: onMoveDown
-                )
-            }
-            .frame(width: 26)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(tr("表示順を変更", "Change order", "更改顺序"))
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(prompt.title)
-                        .font(Tokens.Font.body(14, weight: .medium))
-                        .foregroundStyle(Tokens.Window.textPrimary)
-                    if isMain { Badge(tr("メイン", "Main", "主要")) }
-                }
-                Text(prompt.prompt.isEmpty ? tr("指示が未入力です", "No instruction yet", "尚未输入指令") : prompt.prompt)
-                    .font(Tokens.Font.body(13))
-                    .foregroundStyle(Tokens.Window.textTertiary)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Toggle("", isOn: Binding(get: { prompt.isEnabled }, set: onToggle))
-                .accentSwitch()
-                .labelsHidden()
-
-            IconButton(icon: .edit, help: tr("編集", "Edit", "编辑"), action: onEdit)
-            IconButton(icon: .trash, help: tr("削除", "Delete", "删除"), action: onDelete)
-        }
-        .padding(.horizontal, 16)
-        .frame(height: ButtonsView.rowHeight)
-        .background(
-            RoundedRectangle(cornerRadius: Tokens.Window.smallCardRadius, style: .continuous)
-                .fill(hovering ? Tokens.Window.surface : .clear)
-        )
-        .overlay(alignment: .bottom) {
-            if showsSeparator { Hairline() }
-        }
-        .opacity(prompt.isEnabled ? 1 : 0.55)
-        .onHover { hovering = $0 }
-    }
-}
-
-/// Inline rather than a sheet: the prompt text is the thing being compared against
-/// its neighbours, and a modal hides exactly that.
-private struct PromptEditor: View {
-    let prompt: UserPrompt
-    let onSave: (UserPrompt) -> Void
-    let onDelete: () -> Void
-    let onCancel: () -> Void
-
-    @State private var title: String
-    @State private var text: String
-
-    init(
-        prompt: UserPrompt,
-        onSave: @escaping (UserPrompt) -> Void,
-        onDelete: @escaping () -> Void,
-        onCancel: @escaping () -> Void
-    ) {
-        self.prompt = prompt
-        self.onSave = onSave
-        self.onDelete = onDelete
-        self.onCancel = onCancel
-        _title = State(initialValue: prompt.title)
-        _text = State(initialValue: prompt.prompt)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(tr("ボタン名", "Button name", "按钮名称"))
-                    .font(Tokens.Font.body(12, weight: .medium))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-                SettingsField(placeholder: tr("敬語", "Polite", "敬語"), text: $title)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(tr("指示", "Instruction", "指令"))
-                    .font(Tokens.Font.body(12, weight: .medium))
-                    .foregroundStyle(Tokens.Window.textSecondary)
-                TextEditor(text: $text)
-                    .font(Tokens.Font.body(14))
-                    .scrollContentBackground(.hidden)
-                    .frame(height: 96)
-                    .padding(6)
-                    .background(FieldBackground())
-                Text(tr(
-                    "選択した文章をどう書き換えるかを日本語で書きます。例：「取引先に送る丁寧な敬語に直してください。」",
-                    "Describe how the text should be rewritten. For example: \u{201C}Rewrite this as a polite email to a client.\u{201D}",
-                    "用文字描述要如何改写选中的内容。例如：「请改写成发给客户的礼貌敬语。」"
-                ))
-                    .font(Tokens.Font.body(12))
-                    .foregroundStyle(Tokens.Window.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HStack {
-                ActionButton(tr("削除", "Delete", "删除"), style: .secondary, action: onDelete)
-                Spacer()
-                ActionButton(tr("キャンセル", "Cancel", "取消"), style: .secondary, action: onCancel)
-                ActionButton(tr("保存", "Save", "保存"), style: .primary, enabled: !trimmedTitle.isEmpty) {
-                    var next = prompt
-                    next.title = trimmedTitle
-                    next.prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    onSave(next)
-                }
-            }
-        }
-        .padding(16)
-    }
-
-    private var trimmedTitle: String {
-        title.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-/// The pack picker, reached only from ボタン's language banner.
-///
-/// The same five packs §15's purpose page offers, in the same order, resolved for the
-/// current writing language by `OnboardingPresetPack.available(for:)` — so an English
-/// user is shown Outreach and Polish where a Japanese one is shown 海外とのやり取り and
-/// 日本語を整える. The packs are not translations of one another (§17), which is why this
-/// asks rather than converting button by button: there is no English counterpart to 英訳
-/// to convert it *into*.
 private struct PresetPackPicker: View {
     @ObservedObject var model: MainModel
     let dismiss: () -> Void

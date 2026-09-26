@@ -4,6 +4,7 @@ public struct OnboardingButtonDraft: Codable, Equatable, Identifiable, Sendable 
     public let id: UUID
     public var title: String
     public var prompt: String
+    public var isEnabled: Bool?
     public var builtinKey: String?
     public var origin: PromptOrigin
     public let createdAt: Date
@@ -13,12 +14,14 @@ public struct OnboardingButtonDraft: Codable, Equatable, Identifiable, Sendable 
         title: String,
         prompt: String,
         builtinKey: String? = nil,
+        isEnabled: Bool? = nil,
         origin: PromptOrigin = .onboardingPreset,
         createdAt: Date = Date()
     ) {
         self.id = id
         self.title = title
         self.prompt = prompt
+        self.isEnabled = isEnabled
         self.builtinKey = builtinKey
         self.origin = origin
         self.createdAt = createdAt
@@ -30,6 +33,7 @@ public struct OnboardingButtonDraft: Codable, Equatable, Identifiable, Sendable 
             title: prompt.title,
             prompt: prompt.prompt,
             builtinKey: prompt.builtinKey,
+            isEnabled: prompt.isEnabled,
             origin: prompt.origin,
             createdAt: prompt.createdAt
         )
@@ -42,7 +46,7 @@ public struct OnboardingButtonDraft: Codable, Equatable, Identifiable, Sendable 
             builtinKey: builtinKey,
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
-            isEnabled: true,
+            isEnabled: isEnabled ?? true,
             sortOrder: index == 0 ? 0 : index - 1,
             origin: origin,
             createdAt: createdAt,

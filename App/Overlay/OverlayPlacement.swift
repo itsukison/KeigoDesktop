@@ -1,12 +1,12 @@
 import AppKit
+import ApplicationServices
+import SwiftUI
+import DesktopRewriteKit
 
-/// Where the pill sits, and how that survives a display being unplugged (§4).
+/// Fixed destinations; legacy free-position offsets are retired on first restore.
 enum OverlayPlacement {
-
-    /// Stored as an offset from the work area's origin, never as an absolute point.
-    /// An absolute point strands the pill off-screen the moment an external display
-    /// goes away.
     private static let offsetKey = "overlay.pill.offsetFromVisibleFrameOrigin"
+    private static let zoneKey = "overlay.pill.snapZone"
 
     /// The screen under the mouse cursor, falling back to `.main`. Same rule
     /// `prompt/src/core/window-manager.js` `positionOverlay()` uses.
@@ -35,19 +35,85 @@ enum OverlayPlacement {
         clamp(frame, to: workArea(on: screen(containing: frame)))
     }
 
-    /// Places an auxiliary panel — the generating capsule, the result card — on the
-    /// bar's bottom edge and inside the work area.
+    /// The insets every snap slot sits off its edge — `bottomInset` and its mirrors.
+    static var slotInsets: BarSlotInsets {
+        BarSlotInsets(
+            bottom: Tokens.Geometry.bottomInset,
+            top: Tokens.Geometry.snapTopInset,
+            side: Tokens.Geometry.snapSideInset
+        )
+    }
+
+    /// Places an auxiliary panel — the generating capsule, the result card — in the
+    /// bar's place, on the side of it with more room (`BarPlacement.replaceFrame`).
     ///
     /// The clamp is the point. These were centred on the bar with no bounds check at
     /// all, and the bar is draggable with a persisted position, so parking it near a
     /// screen edge left a 420 pt result card hanging off the side.
     static func auxiliaryFrame(size: NSSize, anchoredTo bar: NSRect) -> NSRect {
-        clampToWorkArea(
-            NSRect(x: bar.midX - size.width / 2, y: bar.minY, width: size.width, height: size.height)
+        BarPlacement.replaceFrame(size: size, bar: bar, workArea: workArea(on: screen(containing: bar)))
+    }
+
+    /// Which side of the bar a stacked panel grows into. The one question every
+    /// above-anchored panel used to answer "above" in its own file; now they all ask
+    /// this, so a top-docked bar's toast, reply card and result hang *below* it.
+    static func verticalSide(anchoredTo bar: NSRect) -> VerticalAnchorSide {
+        BarPlacement.verticalSide(ofBar: bar, in: workArea(on: screen(containing: bar)))
+    }
+
+    /// Places a panel that stacks `gap` beyond another's near edge — the error toast,
+    /// the reply context card, the update notice, the snooze menu.
+    static func stackedFrame(size: NSSize, gap: CGFloat, anchoredTo anchor: NSRect) -> NSRect {
+        BarPlacement.stackedFrame(
+            size: size,
+            gap: gap,
+            anchor: anchor,
+            workArea: workArea(on: screen(containing: anchor))
         )
     }
 
-    /// `visibleFrame`, corrected at the bottom edge.
+    /// The resting frame a zone parks the bar at, for the bar's current size.
+    static func zoneFrame(_ zone: SnapZone, barSize: NSSize, on screen: NSScreen) -> NSRect {
+        BarPlacement.zoneFrame(zone, barSize: barSize, workArea: workArea(on: screen),
+                               insets: slotInsets, notch: notchFrame(on: screen))
+    }
+
+    static func notchFrame(on screen: NSScreen) -> NSRect? {
+        guard screen.safeAreaInsets.top > 0,
+              let left = screen.auxiliaryTopLeftArea,
+              let right = screen.auxiliaryTopRightArea,
+              right.minX > left.maxX else { return nil }
+        return NSRect(x: left.maxX, y: screen.frame.maxY - screen.safeAreaInsets.top,
+                      width: right.minX - left.maxX, height: screen.safeAreaInsets.top)
+    }
+
+    static func slotFrames(on screen: NSScreen, active: SnapZone? = nil) -> [SnapZone: NSRect] {
+        let area = workArea(on: screen)
+        let notch = notchFrame(on: screen)
+        return Dictionary(uniqueKeysWithValues: SnapZone.allCases.map { zone in
+            let grows = active == zone
+            let size: NSSize
+            switch zone {
+            case .bottomCenter:
+                size = NSSize(width: grows ? 112 : 72, height: grows ? 56 : 40)
+            case .topCenter:
+                size = NSSize(width: max(notch?.width ?? 72, 72) + (grows ? 32 : 0),
+                              height: grows ? 56 : 36)
+            case .left, .right:
+                size = NSSize(width: grows ? 56 : 36, height: grows ? 112 : 72)
+            }
+            return (zone, BarPlacement.zoneFrame(zone, barSize: size, workArea: area,
+                                                  insets: slotInsets, notch: notch))
+        })
+    }
+
+    static func activeSnapZone(near bar: NSRect, on screen: NSScreen) -> SnapZone? {
+        BarPlacement.activeZone(near: bar, slots: slotFrames(on: screen),
+                                threshold: Tokens.Geometry.snapEdgeThreshold)
+    }
+
+    /// `visibleFrame`, corrected at the bottom edge and capped below the camera
+    /// housing at the top.
     ///
     /// **`visibleFrame` on its own is wrong, and not marginally.** Measured on a
     /// 1920×1080 display while a full-screen space had the Dock hidden: the Dock's own
@@ -58,82 +124,133 @@ enum OverlayPlacement {
     ///
     /// `DockProbe` decides whether the Dock is really down there. Only then is
     /// `visibleFrame.minY` trusted; otherwise the work area runs to the screen edge.
+    ///
+    /// The notch cap only bites in a full-screen space: windowed, `visibleFrame` already
+    /// stops below the menu bar — which on a notched display is exactly the housing's
+    /// height — so `area.maxY` equals the cap and nothing moves. Full-screen, the menu
+    /// bar is gone and `visibleFrame` runs to the frame top, through the housing; the
+    /// cap pulls it back so a top zone parks below the cutout, not behind it.
+    /// `safeAreaInsets.top` is 0 on displays without a housing, so those are untouched.
     static func workArea(on screen: NSScreen) -> NSRect {
         var area = screen.visibleFrame
-        guard !DockProbe.occupiesBottom(of: screen) else { return area }
-        area.size.height += area.minY - screen.frame.minY
-        area.origin.y = screen.frame.minY
+        if AXIsProcessTrusted(), !DockProbe.occupiesBottom(of: screen) {
+            area.size.height += area.minY - screen.frame.minY
+            area.origin.y = screen.frame.minY
+        }
+        if screen.safeAreaInsets.top > 0 {
+            let belowHousing = screen.frame.maxY - screen.safeAreaInsets.top
+            if area.maxY > belowHousing {
+                area.size.height -= area.maxY - belowHousing
+            }
+        }
         return area
     }
 
-    /// The bottom edge. Every reposition goes through here — the old `reframe`
-    /// carried the previous frame's `minY` forward instead, so the Y computed at
-    /// launch was the Y forever.
-    static func anchorY(on screen: NSScreen) -> CGFloat {
-        workArea(on: screen).minY + (savedOffset()?.y ?? Tokens.Geometry.bottomInset)
-    }
-
     static func frame(for size: NSSize, on screen: NSScreen) -> NSRect {
-        let area = workArea(on: screen)
-
-        if let offset = savedOffset() {
-            let proposed = NSRect(
-                x: area.origin.x + offset.x,
-                y: area.origin.y + offset.y,
-                width: size.width,
-                height: size.height
-            )
-            // A saved offset from a wider display can still land outside a narrower
-            // one, so clamp rather than trust it.
-            if area.intersects(proposed) {
-                return clamp(proposed, to: area)
-            }
-        }
-
-        return NSRect(
-            x: area.midX - size.width / 2,
-            y: anchorY(on: screen),
-            width: size.width,
-            height: size.height
-        )
+        zoneFrame(savedZone(), barSize: size, on: screen)
     }
 
-    /// Keeps the same centre point while the window changes size, so expanding the
-    /// row grows it symmetrically instead of dragging it sideways. The Y is *not*
-    /// carried over from `current` — see `anchorY`.
     static func reframe(_ current: NSRect, to size: NSSize, on screen: NSScreen) -> NSRect {
-        let proposed = NSRect(
-            x: current.midX - size.width / 2,
-            y: anchorY(on: screen),
-            width: size.width,
-            height: size.height
-        )
-        return clamp(proposed, to: workArea(on: screen))
+        frame(for: size, on: screen)
     }
 
-    static func persist(frame: NSRect, on screen: NSScreen) {
-        let area = workArea(on: screen)
-        UserDefaults.standard.set(
-            [frame.origin.x - area.origin.x, frame.origin.y - area.origin.y],
-            forKey: offsetKey
-        )
-    }
-
-    static func resetPosition() {
+    static func persist(zone: SnapZone) {
+        UserDefaults.standard.set(zone.rawValue, forKey: zoneKey)
         UserDefaults.standard.removeObject(forKey: offsetKey)
     }
 
-    private static func savedOffset() -> CGPoint? {
-        guard let stored = UserDefaults.standard.array(forKey: offsetKey) as? [Double],
-              stored.count == 2
-        else { return nil }
-        return CGPoint(x: stored[0], y: stored[1])
+    static func resetPosition() {
+        persist(zone: .bottomCenter)
+    }
+
+    static func savedZone() -> SnapZone {
+        let raw = UserDefaults.standard.string(forKey: zoneKey)
+        let zone = SnapZone.restored(from: raw)
+        if raw != zone.rawValue || UserDefaults.standard.object(forKey: offsetKey) != nil {
+            persist(zone: zone)
+        }
+        return zone
     }
 
     private static func clamp(_ rect: NSRect, to area: NSRect) -> NSRect {
-        var result = rect
-        result.origin.x = min(max(rect.origin.x, area.minX), area.maxX - rect.width)
-        result.origin.y = min(max(rect.origin.y, area.minY), area.maxY - rect.height)
-        return result
+        BarPlacement.clamp(rect, to: area)
+    }
+}
+
+struct CompanionGeometry: Equatable {
+    let zone: SnapZone
+    let anchor: NSRect
+    let workArea: NSRect
+    var notchWidth: CGFloat = 0
+
+    init(zone: SnapZone, anchor: NSRect, workArea: NSRect, notchWidth: CGFloat = 0) {
+        self.zone = zone
+        self.anchor = anchor
+        self.workArea = workArea
+        self.notchWidth = notchWidth
+    }
+
+    init(zone: SnapZone, anchor: NSRect, screen: NSScreen) {
+        self.init(zone: zone, anchor: anchor, workArea: OverlayPlacement.workArea(on: screen),
+                  notchWidth: OverlayPlacement.notchFrame(on: screen)?.width ?? 0)
+    }
+
+    private var isSide: Bool { zone == .left || zone == .right }
+
+    var resultWidth: CGFloat {
+        let width = isSide ? Tokens.Geometry.sideResultPanelWidth : Tokens.Geometry.resultPanelWidth
+        return min(workArea.width, max(width, zone == .topCenter ? notchWidth : 0))
+    }
+
+    var resultMaxHeight: CGFloat {
+        min(workArea.height, isSide ? Tokens.Geometry.sideResultPanelMaxHeight : Tokens.Geometry.resultPanelMaxHeight)
+    }
+
+    var resultBodyMaxHeight: CGFloat {
+        isSide ? Tokens.Geometry.sideResultBodyMaxHeight : Tokens.Geometry.resultBodyMaxHeight
+    }
+
+    var generationSize: NSSize {
+        let size: NSSize
+        switch zone {
+        case .bottomCenter:
+            size = NSSize(width: Tokens.Geometry.generatingCapsuleWidth, height: Tokens.Geometry.generatingCapsuleHeight)
+        case .topCenter:
+            size = NSSize(width: max(208, notchWidth), height: 40)
+        case .left, .right:
+            size = NSSize(width: Tokens.Geometry.sideGeneratingWidth, height: Tokens.Geometry.sideGeneratingHeight)
+        }
+        return NSSize(width: min(size.width, workArea.width), height: min(size.height, workArea.height))
+    }
+
+    func frame(size: NSSize) -> NSRect {
+        BarPlacement.attachedFrame(size: size, zone: zone, anchor: anchor, workArea: workArea)
+    }
+}
+
+
+extension SnapZone {
+    func companionShape(generating: Bool = false) -> UnevenRoundedRectangle {
+        let radius: CGFloat
+        switch self {
+        case .bottomCenter: radius = generating ? 18 : Tokens.Overlay.panelRadius
+        case .topCenter: radius = Tokens.Geometry.topCornerRadius
+        case .left, .right: radius = Tokens.Geometry.sideCornerRadius
+        }
+        return UnevenRoundedRectangle(
+            topLeadingRadius: self == .left || self == .topCenter ? 0 : radius,
+            bottomLeadingRadius: self == .left ? 0 : radius,
+            bottomTrailingRadius: self == .right ? 0 : radius,
+            topTrailingRadius: self == .right || self == .topCenter ? 0 : radius,
+            style: .continuous)
+    }
+
+    var companionAlignment: Alignment {
+        switch self {
+        case .bottomCenter: return .bottom
+        case .topCenter: return .top
+        case .left: return .leading
+        case .right: return .trailing
+        }
     }
 }

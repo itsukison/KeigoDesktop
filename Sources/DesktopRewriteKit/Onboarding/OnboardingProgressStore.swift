@@ -5,7 +5,7 @@ public enum DesktopOnboardingStep: Int, CaseIterable, Sendable {
     case purpose = 1
     case review = 2
     case access = 3
-    case bar = 4
+    case bar = 4 // Reserved for older installs; resumes at practice.
     case practice = 5
     case complete = 6
     case replyPractice = 7
@@ -14,6 +14,7 @@ public enum DesktopOnboardingStep: Int, CaseIterable, Sendable {
     case language = 10
     case offer = 11
     case name = 12
+    case writingStyle = 13
 
     /// Raw values are append-only — a saved step from an unfinished run is read back by
     /// number — while this array owns the order the user actually sees. `source` is
@@ -38,7 +39,7 @@ public enum DesktopOnboardingStep: Int, CaseIterable, Sendable {
     /// one more field of the signup form rather than as the name every rewrite will be
     /// signed with, which is the only thing it is for.
     public static let flow: [DesktopOnboardingStep] = [
-        .language, .welcome, .name, .purpose, .review, .access, .bar, .practice,
+        .language, .welcome, .name, .purpose, .review, .access, .practice,
         .customPractice, .replyPractice, .source, .offer, .complete,
     ]
 
@@ -53,13 +54,21 @@ public enum DesktopOnboardingStep: Int, CaseIterable, Sendable {
         $0 != .language && $0 != .offer
     }
 
-    /// The four pages that carry 「あとで始める」 — the bar explainer and the three
-    /// practices. They are the only pages of the run whose content is teaching rather
+    /// The three practice pages carry 「あとで始める」. They teach interaction rather
     /// than setup, and so the only ones a user can decline without leaving the app in
     /// a half-configured state.
     public static let educationSteps: [DesktopOnboardingStep] = [
-        .bar, .practice, .customPractice, .replyPractice,
+        .practice, .customPractice, .replyPractice,
     ]
+
+    /// Retire pages without reusing persisted identifiers or restarting setup.
+    public var activeStep: DesktopOnboardingStep {
+        switch self {
+        case .writingStyle: return .purpose
+        case .bar: return .practice
+        default: return self
+        }
+    }
 
     /// Where 「あとで始める」 goes: **the next page in `flow`, never the end of the run.**
     ///
@@ -103,14 +112,24 @@ public final class OnboardingProgressStore: @unchecked Sendable {
 
     private let defaults: UserDefaults
     private let prefix: String
+    private let persistsChanges: Bool
 
-    public init(defaults: UserDefaults = .standard, prefix: String = "desktopOnboarding") {
+    public init(defaults: UserDefaults = .standard, prefix: String = "desktopOnboarding", persistsChanges: Bool = true) {
         self.defaults = defaults
         self.prefix = prefix
+        self.persistsChanges = persistsChanges
+    }
+
+    public func replayCopy() -> OnboardingProgressStore {
+        OnboardingProgressStore(defaults: defaults, prefix: prefix, persistsChanges: false)
     }
 
     public var isComplete: Bool {
         defaults.integer(forKey: key("completedVersion")) >= Self.currentVersion
+    }
+
+    public var shouldPresentIntro: Bool {
+        !isComplete && defaults.object(forKey: key("step")) == nil
     }
 
     /// **Nothing saved means a first run, so it starts at the head of `flow`, not at
@@ -123,15 +142,17 @@ public final class OnboardingProgressStore: @unchecked Sendable {
         guard defaults.object(forKey: key("step")) != nil else {
             return DesktopOnboardingStep.flow.first ?? .welcome
         }
-        return DesktopOnboardingStep(rawValue: defaults.integer(forKey: key("step"))) ?? .welcome
+        let step = DesktopOnboardingStep(rawValue: defaults.integer(forKey: key("step"))) ?? .welcome
+        return step.activeStep
     }
 
     public func save(step: DesktopOnboardingStep) {
-        guard !isComplete else { return }
+        guard persistsChanges, !isComplete else { return }
         defaults.set(step.rawValue, forKey: key("step"))
     }
 
     public func complete() {
+        guard persistsChanges else { return }
         defaults.set(Self.currentVersion, forKey: key("completedVersion"))
         defaults.removeObject(forKey: key("step"))
         defaults.removeObject(forKey: key("pack"))
@@ -139,6 +160,7 @@ public final class OnboardingProgressStore: @unchecked Sendable {
     }
 
     public func save(pack: OnboardingPresetPack?, drafts: [OnboardingButtonDraft]) {
+        guard persistsChanges else { return }
         if let pack {
             defaults.set(pack.rawValue, forKey: key("pack"))
         } else {

@@ -45,6 +45,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     /// can be rebuilt from a language change without asking the model again.
     private var pendingUpdateVersion: String?
     private let onboardingProgress = OnboardingProgressStore()
+    private var debugIntroRequested: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--replay-onboarding-intro")
+        #else
+        false
+        #endif
+    }
     private let languageStore = AppLanguageStore()
     private var statusMenu: NSMenu?
     private var updaterStarted = false
@@ -72,6 +79,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     private let history = RewriteHistoryStore()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+
+        if ReplyAvailabilityPreview.isRunning {
+            NSApp.setActivationPolicy(.accessory)
+            Task { @MainActor in
+                do { try await ReplyAvailabilityPreview.render() }
+                catch { NSLog("Reply preview failed: %@", String(describing: error)) }
+                NSApp.terminate(nil)
+            }
+            return
+        }
+        if EdgePanelPreview.isRunning {
+            NSApp.setActivationPolicy(.accessory)
+            EdgePanelPreview.show()
+            return
+        }
+        if BarMaterialPreview.isRunning {
+            NSApp.setActivationPolicy(.accessory)
+            BarMaterialPreview.show()
+            return
+        }
+        if AsideDesignPreview.isRunning {
+            NSApp.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await AsideDesignPreview.render() }
+                catch { NSLog("Aside preview failed: %@", String(describing: error)) }
+                NSApp.terminate(nil)
+            }
+            return
+        }
+        #endif
         // §9: no Dock icon. The pill is the app's real surface; the main window is
         // reached from the menu bar and does not change the activation policy — a
         // policy flip on open would momentarily steal focus, which §4 forbids.
@@ -89,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
 
         let overlay = OverlayController(
             rewriteService: rewriteService,
+            auth: auth,
             promptStore: promptStore,
             analytics: PostHogAnalytics(),
             history: history,
@@ -103,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             billingStore: billingStore,
             history: history,
             appVersion: appVersion,
-            onPromptsChanged: { [weak overlay] in await overlay?.refreshPrompts() }
+            onPromptsChanged: { [weak overlay] in await overlay?.refreshAccount() }
         )
         // The menu bar is AppKit, built once, and outside every SwiftUI observation
         // graph — so it is the one surface a language change cannot reach on its own.
@@ -132,13 +171,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         installMainMenu()
         installStatusItem()
 
+
         // §5: onboarding gates on Accessibility. Without it there is no product, so the
         // window opens on the permission banner instead of the overlay appearing and
         // doing nothing. A signed-out launch opens it for the same reason: the hover
         // row would have no buttons to show.
-        overlay.show()
-        if !onboardingProgress.isComplete {
-            overlay.setVisible(false)
+        overlay.show(initiallyVisible: onboardingProgress.isComplete && !debugIntroRequested)
+        if !onboardingProgress.isComplete || debugIntroRequested {
             openOnboarding()
             return
         }
@@ -150,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         startUpdaterIfConfigured()
         Task { [auth] in
             let signedIn = await auth.isSignedIn
-            if !AXPermission.isTrusted || !signedIn { openMainWindow() }
+            if !AXPermission.isTrusted || !signedIn { showMainWindow(activating: true) }
         }
     }
 
@@ -323,13 +362,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             action: #selector(openPreferences),
             keyEquivalent: ","
         ).target = self
-        menu.addItem(
-            withTitle: tr("ボタンを再読み込み", "Reload buttons", "重新加载按钮"),
-            action: #selector(reloadPrompts),
-            keyEquivalent: "r"
-        ).target = self
         menu.addItem(.separator())
         // Titles are placeholders; `menuNeedsUpdate` writes the real ones.
+        #if DEBUG
+        if ReplyContextFeature.isEnabled {
+            menu.addItem(withTitle: "Export Reply Diagnostics…", action: #selector(exportReplyDiagnostics), keyEquivalent: "").target = self
+        }
+        #endif
         let hideItem = menu.addItem(
             withTitle: "",
             action: #selector(toggleOverlayHidden),
@@ -430,6 +469,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     /// Runs right before the status menu opens — the same "ask again at click time"
     /// shape `PillRootView`'s right-click menu uses for its own copy-disabled row,
     /// just via AppKit's delegate hook instead of a fresh SwiftUI `ViewBuilder` call.
+    @objc private func exportReplyDiagnostics() { overlay?.exportReplyDiagnostics() }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard let overlay else { return }
         let hour = OverlaySnooze.Duration.oneHour.label
@@ -552,8 +593,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             openOnboarding()
             return
         }
-        mainModel?.showsPreferences = true
-        openMainWindow()
+        mainModel?.leaveButtons { [weak self] in
+            self?.mainModel?.showsPreferences = true
+            self?.openMainWindow()
+        }
     }
 
     /// The ⚙︎ modal opened straight onto プラン. Onboarding is not a gate here the way
@@ -561,8 +604,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     /// so the flow is finished by construction.
     private func openPlan() {
         mainModel?.preferencesSection = .plan
-        mainModel?.showsPreferences = true
-        openMainWindow()
+        mainModel?.leaveButtons { [weak self] in
+            self?.mainModel?.showsPreferences = true
+            self?.openMainWindow()
+        }
     }
 
     /// A missing session found from the overlay is a returning-user recovery path,
@@ -581,7 +626,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             let coordinator = OnboardingCoordinator(
                 mainModel: mainModel,
                 overlay: overlay,
-                progress: onboardingProgress,
+                progress: debugIntroRequested ? onboardingProgress.replayCopy() : onboardingProgress,
                 languageStore: languageStore
             ) { [weak self] in
                 guard let self else { return }
@@ -592,12 +637,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             }
             onboardingWindow = OnboardingWindowController(coordinator: coordinator)
         }
-        onboardingWindow?.present(replay: onboardingProgress.isComplete)
+        onboardingWindow?.present(replay: onboardingProgress.isComplete, debugIntro: debugIntroRequested)
     }
 
-    @objc private func reloadPrompts() {
-        Task { await overlay?.refreshPrompts() }
-    }
+
 
     @objc private func checkForUpdates(_ sender: Any?) {
         guard updaterStarted, overlay?.allowsUpdateCheck == true else { return }
@@ -696,6 +739,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     }
 
     // MARK: - Sparkle gentle reminders
+
 
     /// This accessory app has no Dock presence and its scheduled Sparkle alert can be
     /// ordered behind the app the user is working in. Claim gentle-reminder support so

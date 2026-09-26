@@ -8,10 +8,12 @@ let package = Package(
     name: "KeigoButtonMacCore",
     platforms: [.macOS(.v14)],
     products: [
+        .executable(name: "ReplyNativeHost", targets: ["ReplyNativeHost"]),
         .library(name: "DesktopRewriteKit", targets: ["DesktopRewriteKit"]),
         .library(name: "TextIO", targets: ["TextIO"]),
     ],
     targets: [
+        .executableTarget(name: "ReplyNativeHost", dependencies: ["TextIO"]),
         .target(name: "DesktopRewriteKit"),
         .target(name: "TextIO", dependencies: ["DesktopRewriteKit"]),
         .testTarget(name: "DesktopRewriteKitTests", dependencies: ["DesktopRewriteKit"]),
