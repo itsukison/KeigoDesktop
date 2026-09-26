@@ -80,6 +80,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
+        if SavedButtonsVerification.isRunning {
+            NSApp.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await SavedButtonsVerification.run() }
+                catch { NSLog("Saved buttons verification failed: %@", String(describing: error)) }
+                NSApp.terminate(nil)
+            }
+            return
+        }
 
         if ReplyAvailabilityPreview.isRunning {
             NSApp.setActivationPolicy(.accessory)

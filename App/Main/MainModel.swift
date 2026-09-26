@@ -254,7 +254,8 @@ final class MainModel: NSObject, ObservableObject {
         billingStore: BillingRemoteStore,
         history: RewriteHistoryStore,
         appVersion: String,
-        onPromptsChanged: @escaping () async -> Void
+        onPromptsChanged: @escaping () async -> Void,
+        automaticallyRefresh: Bool = true
     ) {
         self.auth = auth
         self.promptStore = promptStore
@@ -264,7 +265,7 @@ final class MainModel: NSObject, ObservableObject {
         self.appVersion = appVersion
         self.onPromptsChanged = onPromptsChanged
         super.init()
-        refresh()
+        if automaticallyRefresh { refresh() }
     }
 
     // MARK: - Refresh

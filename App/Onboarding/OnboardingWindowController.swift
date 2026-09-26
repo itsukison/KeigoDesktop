@@ -88,6 +88,15 @@ final class OnboardingCoordinator: ObservableObject {
         language = languageStore.resolved
         move(to: replay ? .language : progress.savedStep)
         self.preparingIntro = false
+        if [.purpose, .review].contains(step) {
+            isPreparingPurpose = true
+            Task {
+                await mainModel.reloadPrompts()
+                if !mainModel.prompts.isEmpty { selectCurrentButtons() }
+                else if buttonDrafts.isEmpty { select(pack: .starter) }
+                isPreparingPurpose = false
+            }
+        }
     }
 
     /// Applied immediately rather than on 次へ: the page is the one place the effect
@@ -260,7 +269,7 @@ final class OnboardingCoordinator: ObservableObject {
     var usesCurrentButtons: Bool { selectedPack == nil && !buttonDrafts.isEmpty }
 
     var canConfirmButtons: Bool {
-        !buttonDrafts.isEmpty && buttonDrafts.allSatisfy {
+        !isPreparingPurpose && mainModel.promptsError == nil && !buttonDrafts.isEmpty && buttonDrafts.allSatisfy {
             !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && !$0.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
@@ -374,13 +383,10 @@ final class OnboardingCoordinator: ObservableObject {
                 )
                 return
             }
-            if buttonDrafts.isEmpty {
-                if mainModel.prompts.isEmpty {
-                    select(pack: .starter)
-                } else {
-                    selectCurrentButtons()
-                }
-            }
+            // Returning accounts start with the server's configuration, including
+            // disabled/customized rows, even if an old setup draft is still on disk.
+            if !mainModel.prompts.isEmpty { selectCurrentButtons() }
+            else if buttonDrafts.isEmpty { select(pack: .starter) }
             move(to: .purpose)
         }
     }
