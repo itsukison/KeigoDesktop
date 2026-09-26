@@ -160,6 +160,15 @@ import TextIO
             }
             precondition(EdgePreviewProtocol.mode.requestCount == count + 1)
             precondition(controller.previewError == nil)
+            guard let payload = EdgePreviewProtocol.mode.lastPayload else { throw PreviewError.failed("missing request payload") }
+            let events = EdgePreviewAnalytics.events.snapshot.suffix(2)
+            precondition(events.count == 2 && events.first == events.last)
+            let attempt = events.last!
+            precondition(attempt.type == .savedButton && !attempt.isTutorial)
+            precondition(payload.rewriteType == "saved_button" && payload.writingStyle == nil)
+            precondition(payload.attemptId == attempt.id.uuidString && payload.buttonAnalyticsKey == attempt.buttonAnalyticsKey)
+            precondition(payload.prompt == OnboardingPresetPack.starter.drafts()[0].prompt)
+            report.append("PASS: actual saved-button payload and start/completion attribution match; style omitted")
             report.append("PASS: nonempty \(mode), exactly one mock rewrite")
         }
         controller.dismiss()
@@ -282,6 +291,17 @@ private final class EdgePreviewMode: @unchecked Sendable {
     private let lock = NSLock()
     private var value = "success"
     private var requests = 0
+    private var payload: RewriteRequest?
+    var lastPayload: RewriteRequest? { lock.withLock { payload } }
+    func capture(_ request: URLRequest) {
+        var data = request.httpBody ?? Data()
+        if data.isEmpty, let stream = request.httpBodyStream {
+            stream.open(); defer { stream.close() }
+            var bytes = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable { let n = stream.read(&bytes, maxLength: bytes.count); if n <= 0 { break }; data.append(bytes, count: n) }
+        }
+        lock.withLock { payload = try? JSONDecoder().decode(RewriteRequest.self, from: data) }
+    }
     var requestCount: Int { lock.lock(); defer { lock.unlock() }; return requests }
     func recordRequest() { lock.lock(); defer { lock.unlock() }; requests += 1 }
     func set(_ mode: String) { lock.lock(); defer { lock.unlock() }; value = mode }
@@ -304,6 +324,7 @@ private final class EdgePreviewProtocol: URLProtocol {
             client?.urlProtocolDidFinishLoading(self)
             return
         }
+        Self.mode.capture(request)
         Self.mode.recordRequest()
         let mode = Self.mode.get()
         let work = DispatchWorkItem { [weak self] in
@@ -321,10 +342,17 @@ private final class EdgePreviewProtocol: URLProtocol {
     override func stopLoading() { work?.cancel() }
 }
 
+private final class EdgePreviewEvents: @unchecked Sendable {
+    private let lock = NSLock()
+    private var attempts: [RewriteAttempt] = []
+    var snapshot: [RewriteAttempt] { lock.withLock { attempts } }
+    func append(_ attempt: RewriteAttempt) { lock.withLock { attempts.append(attempt) } }
+}
 private struct EdgePreviewAnalytics: Analytics {
+    static let events = EdgePreviewEvents()
     func styleApplied(_ style: ResolvedWritingStyle, attemptID: UUID, isTutorial: Bool) {}
-    func rewriteStarted(_ attempt: RewriteAttempt, target: TextTarget?) {}
-    func rewriteCompleted(_ attempt: RewriteAttempt, target: TextTarget, promptOrigin: String?, isReply: Bool, candidateCount: Int, latencyMs: Int) {}
+    func rewriteStarted(_ attempt: RewriteAttempt, target: TextTarget?) { Self.events.append(attempt) }
+    func rewriteCompleted(_ attempt: RewriteAttempt, target: TextTarget, promptOrigin: String?, isReply: Bool, candidateCount: Int, latencyMs: Int) { Self.events.append(attempt) }
     func rewriteFailed(_ attempt: RewriteAttempt, stage: FailureStage, message: String, target: TextTarget?) {}
     func rewriteAbandoned(_ attempt: RewriteAttempt, reason: AbandonReason, target: TextTarget?) {}
     func inserted(_ attempt: RewriteAttempt, target: TextTarget, isReply: Bool, selectedIndex: Int, destination: InsertAction) {}

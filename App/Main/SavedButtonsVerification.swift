@@ -6,6 +6,7 @@ import DesktopRewriteKit
 @MainActor enum SavedButtonsVerification {
     static var isRunning: Bool { ProcessInfo.processInfo.arguments.contains("--verify-saved-buttons") }
     static func run() async throws {
+        precondition(!ReplyContextFeature.isEnabled, "Release ignores all automatic Reply overrides")
         let config = SupabaseConfig(supabaseURL: URL(string: "https://buttons.invalid")!, appVersion: "fixture")
         let sessions = InMemorySessionStore(session: AuthSession(accessToken: "A", refreshToken: "A", expiresAt: .distantFuture, userId: "A"))
         let auth = AuthService(config: config, store: sessions)
