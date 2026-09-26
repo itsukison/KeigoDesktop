@@ -1,5 +1,11 @@
 # Multiple-button release verification
 
+This is the evidence record for the original separation checkpoint. For subsequent
+changes, see [the 0.1.11 release draft](release-0.1.11-draft.md). In particular, the
+shared `user_prompts` behavior and no-migration assumptions below have been superseded
+by independent `desktop_user_prompts` storage; newer native changes require final
+combined-candidate verification.
+
 The release implementation is on `codex/redesign-multiple-buttons`. It has **not**
 been merged or published. See [the branch and recovery map](branch-map.md).
 

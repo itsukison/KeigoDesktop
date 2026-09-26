@@ -298,3 +298,18 @@ Deno.test("the reply branch stays language-neutral after the output-language rul
   const english = systemInstructions(request({ writingLanguage: "en" }));
   assert(japanese === english, "the output-language rule leaked into the reply branch");
 });
+
+Deno.test("saved-button quality rules reach whole text, fragments and composition without changing reply policy", () => {
+  for (const writingLanguage of ["ja", "en"] as const) {
+    for (const operation of [{ text: "pls send by 5" }, { text: "pls send", selection: true }, { text: "" }]) {
+      const system = systemInstructions(request({ ...operation, writingLanguage, replyTo: null }));
+      assert(system.includes("rough notes, shorthand, and broken sentences"), "rough input guidance missing");
+      assert(system.includes("Preserve legitimate hyphens"), "identifiers must survive punctuation guidance");
+      assert(system.includes("already-correct wording"), "proofreading must not become a style rewrite");
+      if (operation.selection) assert(system.includes("fragment only"), "fragment scope must survive");
+    }
+  }
+  const reply = systemInstructions(request());
+  assert(!reply.includes("rough notes, shorthand, and broken sentences"), "unrelated reply behavior changed");
+  assert(reply.includes("always authored by the authenticated"), "reply authorship must survive");
+});

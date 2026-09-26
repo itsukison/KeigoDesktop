@@ -151,31 +151,37 @@ public final class OnboardingProgressStore: @unchecked Sendable {
         defaults.set(step.rawValue, forKey: key("step"))
     }
 
-    public func complete() {
+    public func complete(accountID: String? = nil) {
         guard persistsChanges else { return }
         defaults.set(Self.currentVersion, forKey: key("completedVersion"))
         defaults.removeObject(forKey: key("step"))
-        defaults.removeObject(forKey: key("pack"))
-        defaults.removeObject(forKey: key("drafts"))
-    }
-
-    public func save(pack: OnboardingPresetPack?, drafts: [OnboardingButtonDraft]) {
-        guard persistsChanges else { return }
-        if let pack {
-            defaults.set(pack.rawValue, forKey: key("pack"))
-        } else {
-            defaults.removeObject(forKey: key("pack"))
+        if let accountID {
+            defaults.removeObject(forKey: draftKey("pack", accountID: accountID))
+            defaults.removeObject(forKey: draftKey("drafts", accountID: accountID))
         }
-        defaults.set(try? JSONEncoder().encode(drafts), forKey: key("drafts"))
     }
 
-    public var savedPack: OnboardingPresetPack? {
-        defaults.string(forKey: key("pack")).flatMap(OnboardingPresetPack.init(rawValue:))
+    public func save(pack: OnboardingPresetPack?, drafts: [OnboardingButtonDraft], accountID: String) {
+        guard persistsChanges, !accountID.isEmpty else { return }
+        if let pack {
+            defaults.set(pack.rawValue, forKey: draftKey("pack", accountID: accountID))
+        } else {
+            defaults.removeObject(forKey: draftKey("pack", accountID: accountID))
+        }
+        defaults.set(try? JSONEncoder().encode(drafts), forKey: draftKey("drafts", accountID: accountID))
     }
 
-    public var savedDrafts: [OnboardingButtonDraft] {
-        guard let data = defaults.data(forKey: key("drafts")) else { return [] }
+    public func savedPack(for accountID: String) -> OnboardingPresetPack? {
+        defaults.string(forKey: draftKey("pack", accountID: accountID)).flatMap(OnboardingPresetPack.init(rawValue:))
+    }
+
+    public func savedDrafts(for accountID: String) -> [OnboardingButtonDraft] {
+        guard let data = defaults.data(forKey: draftKey("drafts", accountID: accountID)) else { return [] }
         return (try? JSONDecoder().decode([OnboardingButtonDraft].self, from: data)) ?? []
+    }
+
+    private func draftKey(_ suffix: String, accountID: String) -> String {
+        key("account.\(accountID).\(suffix)")
     }
 
     private func key(_ suffix: String) -> String {

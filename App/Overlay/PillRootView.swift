@@ -199,8 +199,17 @@ struct BrandMark: View {
 }
 
 /// The compact row: saved buttons, available Reply, and one-off guidance.
+private struct ButtonRowSizeKey: PreferenceKey {
+    static let defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next.width > 0 && next.height > 0 { value = next }
+    }
+}
+
 struct HoverRow: View {
     @ObservedObject var controller: OverlayController
+    @State private var buttonContentSize = CGSize(width: 100, height: 32)
 
     var body: some View {
         let sidebar = controller.usesSidebarLayout
@@ -243,9 +252,20 @@ struct HoverRow: View {
                                 .help(prompt.title)
                         }
                     }
+                    .fixedSize(horizontal: true, vertical: true)
+                    .background(GeometryReader { proxy in
+                        Color.clear.preference(key: ButtonRowSizeKey.self, value: proxy.size)
+                    })
+                }
+                .onPreferenceChange(ButtonRowSizeKey.self) { size in
+                    if size.width > 0 && size.height > 0 { buttonContentSize = size }
                 }
                 .scrollIndicators(.visible)
-                .frame(width: controller.buttonViewportSize.width, height: controller.buttonViewportSize.height)
+                .frame(
+                    width: sidebar ? controller.buttonViewportLimit.width
+                        : min(buttonContentSize.width, controller.buttonViewportLimit.width),
+                    height: sidebar ? min(buttonContentSize.height, controller.buttonViewportLimit.height) : 34
+                )
                 divider
                 if controller.availableReplySource != nil {
                     CopiedReplyAction(controller: controller)

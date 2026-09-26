@@ -37,7 +37,8 @@ Saved buttons require nonempty text or a selection; blank/missing targets show g
 without taking focus. The pencil can compose from scratch. Reply retains its own
 source/audience and capture rules (§16).
 
-Mac and phone explicitly share `user_prompts`. Loading never reseeds or replaces an
+Mac buttons live in `public.desktop_user_prompts`, independently of the phone’s
+`public.user_prompts`. Account and subscription remain shared. Loading never reseeds or replaces an
 existing configuration. Preserve IDs, origins, builtin identities, enabled states and
 ordering. The first item owns the main slot. Universal writing styles and automatic
 Reply are independent experiments, preserved under recovery references; neither is
@@ -93,9 +94,11 @@ Their `ScreenCaptureKit` + `Vision` screen-OCR path is out of scope for v1 (§10
   plainly: *"Nothing here references or alters existing tables, so it cannot
   affect app users or the rest of the schema."*
   (`../Japanese/supabase/migrations/20260728120000_web_rewrite_rate_limit.sql`)
-- **Shared buttons are an explicit exception: desktop reads and writes `user_prompts`.**
-  Preserve the existing wire contract and account-scoped ownership. Edits and deletion
-  sync to the phone; explain that in the interface. Never reseed on load or sign-in.
+- **Desktop buttons use `public.desktop_user_prompts` with owner-scoped RLS.**
+  Preserve the row contract and account ownership. No desktop runtime path reads or
+  writes phone buttons. The migration copies rows once for accounts already present
+  in `desktop.activations`, preserving every field. New accounts start with no desktop
+  rows; never seed on sign-in, fall back to phone storage, or repeat the import.
 - **Analytics never mix.** Desktop reports to its own PostHog project, not the
   existing `Default project` (id 465060, org `Keigo`). See §7.
 - **The overlay is dark; the main workspace is light.** `design.md` specifies an
@@ -170,7 +173,7 @@ Instead, **copy** these four types and keep them contract-compatible:
 
 | Type | Source | Why it must not drift |
 |---|---|---|
-| `UserPrompt`, `PromptOrigin` | `Sources/KeyboardPreferences/UserPrompts.swift` | decodes rows from the shared `user_prompts` table |
+| `UserPrompt`, `PromptOrigin` | `Sources/KeyboardPreferences/UserPrompts.swift` | retains the compatible row shape in independent `desktop_user_prompts` storage |
 | `RewriteRequest` | `Sources/JapaneseKeyboardAI/Models/RewriteModels.swift` | the desktop function should accept a superset, not a different shape |
 | `RewriteCandidate`, `RewriteResult` | same file | `{ candidates, language, eventId }` |
 | `CaptureMode` | same file | `.selection` / `.wholeInput` map cleanly onto AX (§5) |
@@ -576,7 +579,7 @@ high in some app, that's a bug report, not a mystery.
 
 Shared Supabase project with the iOS app:
 `https://eercsucvxnszqletxued.supabase.co`. Shared login and shared
-billing and shared saved buttons. **Separate function, separate schema, separate analytics.**
+billing, with independently stored desktop buttons. **Separate function, separate schema, separate analytics.**
 
 **Two hosts, deliberately.** Auth alone is reached through the project's Supabase
 custom domain `https://auth.keigobutton.com`; REST and Functions stay on
@@ -587,13 +590,13 @@ host of the URL the app hands the session, so it used to quote
 `SupabaseConfig.authURL` is the only place that host lives, and the default
 `<ref>.supabase.co/auth/v1` still works, which is what keeps iOS unchanged.
 
-### Shared, read as-is
+### Shared account data and independent desktop buttons
 
 | Table | Use |
 |---|---|
 | `auth.users` | one identity across phone and laptop |
 | `profiles` | display name, subscription state. Four columns: `id`, `display_name` (NOT NULL, default `''`), `created_at`, and `platform` — see below |
-| `user_prompts` | Shared phone/Mac buttons with account RLS. Existing identities and wire contracts remain compatible. |
+| `desktop_user_prompts` | Desktop-only buttons with account RLS. A one-time migration preserves existing desktop users’ shared configurations; future phone/Mac edits are independent. |
 | `user_ai_consent` | AI-improvement consent. Honored by iOS. **Not read by desktop as of 2026-09-18** — `desktop-rewrite`'s `fetchConsent` was removed along with the gate it fed; see `desktop.rewrite_events` below |
 
 #### `profiles.platform` — derived, and never written by a client
@@ -1347,9 +1350,8 @@ convention — `bundleIdPrefix: com.core7.keigobutton`, `DEVELOPMENT_TEAM: 4KS6Y
   function has to be granted to `authenticated` on a project the iOS app shares,
   and the migration lands in the iOS repo per the point above. Worth deciding
   before a user has two Macs and two different streaks.
-- **Whether the phone should get the same button editor.** §14 writes
-  shared saved buttons from the desktop; the phone and Mac use the same configuration.
-  Nothing reconciles a simultaneous edit — last write wins, per row.
+- **Whether the phone should get the same button editor.** Desktop and phone now
+  have independent saved configurations. Desktop changes never update phone rows.
 
 ---
 
@@ -1409,8 +1411,18 @@ are centralized in `design.md`.
 The Aside Buttons page has an ordered list on the left and a selected name/multiline
 instruction editor on the right. Text edits require explicit Save/Cancel and nonblank
 values. Add creates a local draft only until Save. Selection, page navigation, settings
-and closing the window must handle unsaved edits. Confirm deletion with phone-sync copy.
-Drag handles and accessible up/down controls change order; toggles change enabled state.
+and closing the window must handle unsaved edits. Confirm deletion as a desktop-only action.
+The dashboard uses a native reorder table with dedicated six-dot drag handles and an
+open-hand cursor. Drop positions are gaps, including before the first and after the last
+row; native insertion feedback and autoscrolling stay within the bounded list. Only
+local drags from the same unchanged list are accepted. Hover/cancellation never writes;
+a valid drop saves once through the existing order queue, preserving editor identity
+and unsaved text. Labeled accessible up/down controls and the visibility
+toggle live below the selected editor’s fields. These controls retain their immediate
+save behavior, independently of the explicit Save for name/instruction edits. The list
+uses flat full-row selectors with soft gray-blue selection and Main/Hidden metadata.
+Both customization surfaces share white fields and focus styling; Add is secondary
+and Delete is labeled.
 Serialize/coalesce reorder writes, demote old main rows before promoting a new main,
 and reload after failures. Account switches invalidate pending responses and writes.
 Language realignment is explicit and preserves customized/user-authored buttons.
@@ -1764,8 +1776,28 @@ The repeatable command is in `docs/reports/onboarding-visual-polish.md`. The mas
 only the alpha `.mov` ships. The intro and gradient stage both use that same corrected
 movie through `AVPlayerLayer`, with no per-frame filtering or added runtime dependency.
 
-Purpose/preset selection is followed by button review/customization. Returning accounts
-use their current buttons by default; replacing them requires an explicit preset choice.
+Purpose offers three sets of four buttons per writing language: Everyday (recommended,
+pink), Work (blue), and Friends & Social (orange). Everyday retains Japanese
+敬語 / メール / 英訳 / 自然に and English Polite / Email / Shorten / Proofread.
+Chinese guidance retains Japanese writing behavior. Purpose cards use neutral text and a common blue selection treatment. The matching
+supplied pink, blue, or orange artwork appears only behind a single white demo window;
+Before/After examples use equal 16 pt body text. Its compact dark
+bar has four selectable previews, the keycap mark on the left and pencil on the right.
+The replacement sheet offers
+the same three packs; retired pack identifiers remain decodable.
+Review uses a pale neutral list with flat full-row selectors and soft gray-blue selection,
+without mountain artwork, decorative numbering, checkmarks or chevrons. Main/Hidden
+metadata remains. It provides an identity-bound name/instruction editor;
+selection follows the button through reordering. The selected name heads the editor; labeled move controls sit below the fields. A
+borderless Delete label with trash icon stays at the bottom-right, disabled for the final button; deleting selects
+the next adjacent button, or the previous one at the end. Keep customization focused on
+name and instructions, without Before/After examples or extra helper copy.
+Selection-page examples are illustrative; customized instructions do not claim stock outputs.
+Preserve exact recognition of earlier preset bodies without migrating saved text.
+Only authenticated accounts with successfully loaded desktop buttons see Keep my current
+buttons. New and iPhone-only accounts default to Everyday. Loading errors require retry,
+not replacement. Unfinished drafts are account-scoped; unowned legacy drafts are ignored.
+Same-account edits survive back navigation and restart; account changes clear visible state.
 Replay uses in-memory drafts and never writes replacement buttons. Practice teaches an
 actual saved button, pencil composition and copy → focus destination → hover → Reply.
 Keep raw step IDs and completion version 2. Unfinished `writingStyle` (13) resumes at
@@ -2341,7 +2373,7 @@ They never replace customized buttons during startup, auth refresh or language c
 `desktop.rewrite_events.writing_language` (migration `20260819050128`). Diagnosing the
 above meant inferring the writing language from `command_key` — noticing that
 `translateToEnglish` and `natural` are keys no English pack contains — and then reading
-the account's `user_prompts` rows by hand, because the one field that answers the
+the account's `desktop_user_prompts` rows by hand, because the one field that answers the
 question directly was the one field the event did not carry. `locale` is not a
 substitute and never was, for the reason above.
 
@@ -2493,7 +2525,7 @@ mechanism that would do better without forcing `AppleLanguages`, which would dra
 every system-drawn control with it.
 
 UI-language changes never silently replace buttons. Explicit button edits and confirmed
-realignment sync to the phone (§2).
+realignment affect only desktop buttons (§2).
 
 ---
 

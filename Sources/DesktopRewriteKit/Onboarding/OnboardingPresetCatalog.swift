@@ -55,6 +55,11 @@ public struct OnboardingButtonDraft: Codable, Equatable, Identifiable, Sendable 
     }
 }
 
+public struct OnboardingButtonExample: Equatable, Sendable {
+    public let input: String
+    public let output: String
+}
+
 public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
     case starter
     case work
@@ -64,22 +69,15 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
     case outreach
     case polish
 
-    /// Which packs a language is actually offered.
-    ///
-    /// 简体中文 gets the Japanese list unchanged: that user writes Japanese and only
-    /// reads the explanation in Chinese (§17), so 海外とのやり取り and 日本語を整える
-    /// are as relevant to them as to a Japanese user. English drops both — one is
-    /// 日↔英 translation and the other is Japanese proofreading — and puts Outreach
-    /// and Polish in their place.
+    /// Three purpose sets, each with four buttons. Retired packs remain
+    /// decodable so existing saved buttons and unfinished drafts are preserved.
     public static func available(for language: AppLanguage) -> [OnboardingPresetPack] {
-        language.writesJapanese
-            ? [.starter, .work, .international, .japanese, .social]
-            : [.starter, .work, .outreach, .polish, .social]
+        [.starter, .work, .social]
     }
 
     public var title: String {
         switch self {
-        case .starter: return tr("まずは定番", "The everyday four", "先从常用的开始")
+        case .starter: return tr("毎日の文章", "Everyday", "日常写作")
         case .work: return tr("仕事の連絡", "Work messages", "工作联络")
         case .international: return tr("海外とのやり取り", "Across languages", "与海外沟通")
         case .japanese: return tr("日本語を整える", "Polish Japanese", "打磨日语")
@@ -169,7 +167,7 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
         Set(allCases.flatMap { pack in
             (language.writesJapanese ? pack.japaneseTemplates : pack.englishTemplates)
                 .map { $0.prompt.trimmingCharacters(in: .whitespacesAndNewlines) }
-        })
+        }).union(LegacyOnboardingPrompts.bodies(writtenIn: language))
     }
 
     /// Privacy-safe purpose key for a saved button.
@@ -192,6 +190,8 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
             return template.analyticsKey
         }
 
+        if let key = LegacyOnboardingPrompts.analyticsKey(for: body) { return key }
+
         if let builtinKey = prompt.builtinKey {
             return builtinAnalyticsKeys[builtinKey] ?? "builtin_other"
         }
@@ -206,6 +206,12 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
             // error rather than silently acquiring an analytics meaning.
             return "user_authored"
         }
+    }
+
+    /// Illustrative stock copy only; an edited instruction must not imply a generated preview.
+    public static func example(for draft: OnboardingButtonDraft, writtenIn language: AppLanguage) -> OnboardingButtonExample? {
+        allCases.flatMap { language.writesJapanese ? $0.japaneseTemplates : $0.englishTemplates }
+            .first { $0.prompt == draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines) }?.example
     }
 
     /// Whether the review screen still contains the selected pack unchanged.
@@ -236,13 +242,11 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
         let analyticsKey: String
         let title: String
         let prompt: String
+        let example: OnboardingButtonExample
         var builtinKey: String? = nil
     }
 
-    /// Titles are what the overlay bar draws, and the bar has **no overflow
-    /// handling** (§4): the row is intrinsically sized and simply gets wider. The
-    /// English titles are therefore kept to nine characters or fewer, which puts a
-    /// four-button English row within a few points of a four-button Japanese one.
+    /// Short titles keep the four stock actions readable in the overlay.
     private var templates: [Template] {
         AppLanguageState.current.writesJapanese ? japaneseTemplates : englishTemplates
     }
@@ -261,25 +265,29 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
                 Template(
                     analyticsKey: "polite",
                     title: "敬語",
-                    prompt: "次の文章を、日常でそのまま送れる自然でやわらかい丁寧語に変換してください。ビジネス敬語ではなく、相手に失礼がない普通の丁寧語にしてください。命令や指示は、やわらかいお願いの形にしてください。堅すぎる敬語は避け、出力は変換後の文章だけにしてください。",
+                    prompt: "自然な敬語に整え、ぶっきらぼうな依頼やメモも、そのまま送れる丁寧な文章にしてください。依頼は「〜していただけますか」「〜していただけますと助かります／幸いです」など、文脈に合う表現に。期限や意図を弱めず、堅くしすぎないでください。",
+                    example: OnboardingButtonExample(input: "資料見た。2ページ目の数字、金曜17時までに直して。", output: "資料を確認しました。2ページ目の数字を金曜17時までに修正していただけますと助かります。"),
                     builtinKey: "polite"
                 ),
                 Template(
                     analyticsKey: "email",
                     title: "メール",
-                    prompt: "次の文章を、日本のビジネスメールとしてそのまま送れる本文に整えてください。用件を先に示し、挨拶・本文・結びを自然に段落分けしてください。原文にない氏名・会社名・事実は作らず、件名・署名・拝啓・敬具は付けないでください。",
+                    prompt: "日本語のビジネスメールに整え、宛名、空行で区切った本文、「何卒よろしくお願いいたします。」の結び、差出人名の順にしてください。宛名と差出人名は原文で分かるものだけ使い、不明なら省略してください。既存の挨拶や署名は重複させず、件名や新しい事情は加えないでください。",
+                    example: OnboardingButtonExample(input: "佐藤さんへ。資料ありがとう。社内で確認して金曜までに返事する。山田", output: "佐藤様\n\n資料をお送りいただき、ありがとうございます。\n社内で確認のうえ、金曜日までにお返事いたします。\n\n何卒よろしくお願いいたします。\n山田"),
                     builtinKey: "email"
                 ),
                 Template(
                     analyticsKey: "translate_english",
                     title: "英訳",
-                    prompt: "自然で読みやすい英語に翻訳してください。直訳ではなく、ネイティブが日常的に書く文体・語順にしてください。",
+                    prompt: "仕事のやり取りで使える、自然で少し丁寧な英語に翻訳してください。直訳調や大げさな表現を避け、元の意図や確実さを保ってください。",
+                    example: OnboardingButtonExample(input: "今日はちょっと難しそう。明日の午後ならいけるけど、どう？", output: "Today may be difficult, but I’m available tomorrow afternoon. Would that work for you?"),
                     builtinKey: "translateToEnglish"
                 ),
                 Template(
                     analyticsKey: "natural_japanese",
                     title: "自然に",
-                    prompt: "ネイティブが書いたような自然で読みやすい日本語に書き直してください。直訳調や不自然な言い回しは修正し、意味と話し手の雰囲気は保ってください。",
+                    prompt: "意味と元の語り口を保ち、不自然な言い回しや重複を直して、読みやすい日本語にしてください。必要以上に言い換えたり、丁寧さを上げたりしないでください。",
+                    example: OnboardingButtonExample(input: "この機能を使うことで、毎日の文章を書く作業の時間を減らすことができます。", output: "この機能を使うと、毎日の文章を書く時間を減らせます。"),
                     builtinKey: "natural"
                 ),
             ]
@@ -289,22 +297,26 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
                 Template(
                     analyticsKey: "work_chat",
                     title: "社内チャット",
-                    prompt: "次の文章を、SlackやTeamsなどの社内チャットでそのまま送れる、簡潔で感じのよい文章に書き直してください。メールのような挨拶や署名は付けず、用件を先に示し、丁寧さを保ちながら堅くしすぎないでください。"
+                    prompt: "社内チャット向けに、簡潔で感じのよい文章にしてください。",
+                    example: OnboardingButtonExample(input: "確認まだの人、今日中に見てほしいです。", output: "未確認の方は、今日中に確認をお願いします！")
                 ),
                 Template(
                     analyticsKey: "manager_message",
                     title: "上司向け",
-                    prompt: "次の文章を、上司に失礼なく簡潔に伝わる文章に書き直してください。敬意は保ちつつ過度にへりくだらず、依頼や確認は相手が返答しやすい形にしてください。"
+                    prompt: "上司に伝わる、簡潔で丁寧な文章にしてください。",
+                    example: OnboardingButtonExample(input: "明日午前休みたい。午後から出ます。", output: "明日の午前中、お休みをいただけますか。午後から出勤します。")
                 ),
                 Template(
                     analyticsKey: "client_message",
                     title: "取引先",
-                    prompt: "次の文章を、取引先にそのまま送れる自然なビジネス文に書き直してください。要点を明確にし、適切な敬語を使い、原文にない約束・事実・固有名詞は追加しないでください。"
+                    prompt: "取引先に送れる、丁寧で分かりやすい文章にしてください。",
+                    example: OnboardingButtonExample(input: "見積もり送ります。確認してください。", output: "お見積もりをお送りします。ご確認いただけますと幸いです。")
                 ),
                 Template(
                     analyticsKey: "meeting_recap",
                     title: "会議要約",
-                    prompt: "次の会議メモを、決定事項、未決事項、担当者と期限が分かる簡潔な要約にしてください。情報がない項目は作らず、重要な数字・日付・固有名詞は保持してください。"
+                    prompt: "会議メモを、決定事項と次にやることが分かるように要約してください。",
+                    example: OnboardingButtonExample(input: "公開は金曜。田中さんが木曜までに文章確認。価格はまだ決まってない。", output: "決定：金曜日に公開。\n次の作業：田中さんが木曜日までに文章を確認。\n未決：価格。")
                 ),
             ]
 
@@ -313,23 +325,27 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
                 Template(
                     analyticsKey: "translate_english",
                     title: "英訳",
-                    prompt: "自然で読みやすい英語に翻訳してください。直訳ではなく、ネイティブが日常的に書く文体・語順にしてください。",
+                    prompt: "自然な英語に翻訳してください。",
+                    example: OnboardingButtonExample(input: "来週の火曜の午後は空いていますか？", output: "Are you free next Tuesday afternoon?"),
                     builtinKey: "translateToEnglish"
                 ),
                 Template(
                     analyticsKey: "translate_japanese",
                     title: "和訳",
-                    prompt: "次の文章を、翻訳調を残さない自然で読みやすい日本語に翻訳してください。意味、数字、日付、固有名詞を正確に保ってください。"
+                    prompt: "自然な日本語に翻訳してください。",
+                    example: OnboardingButtonExample(input: "Could we move the meeting to Friday?", output: "打ち合わせを金曜日に変更できますか？")
                 ),
                 Template(
                     analyticsKey: "business_english",
                     title: "仕事英語",
-                    prompt: "次の文章を、海外の同僚や取引先に送れる簡潔で自然なビジネス英語にしてください。直訳調を避け、丁寧で明確な表現にし、原文にない情報は追加しないでください。"
+                    prompt: "仕事でそのまま使える、自然で丁寧な英語にしてください。",
+                    example: OnboardingButtonExample(input: "修正版を送ります。金曜までに確認をお願いします。", output: "Here's the revised version. Could you review it by Friday?")
                 ),
                 Template(
                     analyticsKey: "friend_english",
                     title: "友達英語",
-                    prompt: "次の文章を、英語話者の友達に送れる自然で親しみやすい英語にしてください。意味と温度感を保ち、教科書的または過度にくだけた表現は避けてください。"
+                    prompt: "友達に送る、自然で親しみやすい英語にしてください。",
+                    example: OnboardingButtonExample(input: "明日、時間あったらコーヒー飲まない？", output: "Want to grab a coffee tomorrow if you’re free?")
                 ),
             ]
 
@@ -338,22 +354,26 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
                 Template(
                     analyticsKey: "proofread_japanese",
                     title: "校正",
-                    prompt: "次の日本語の誤字、脱字、文法、助詞の誤りだけを修正してください。意味、語調、段落構成はできるだけ変えず、修正後の文章だけを出力してください。"
+                    prompt: "日本語の誤字や文法の誤りを直してください。",
+                    example: OnboardingButtonExample(input: "明日は15時からで大丈夫でしょか。", output: "明日は15時からで大丈夫でしょうか。")
                 ),
                 Template(
                     analyticsKey: "natural_japanese",
                     title: "自然な日本語",
-                    prompt: "次の文章を、日本語のネイティブが書いたような自然で読みやすい文章に書き直してください。不自然な語順や直訳調を直し、意味と話し手の意図は保ってください。"
+                    prompt: "自然で読みやすい日本語に整えてください。",
+                    example: OnboardingButtonExample(input: "この案について、あなたの考えを聞くことができたら嬉しいです。", output: "この案について、ご意見を聞かせていただけると嬉しいです。")
                 ),
                 Template(
                     analyticsKey: "simplify_japanese",
                     title: "やさしく",
-                    prompt: "次の文章を、難しい語や長い文を避けた、やさしく分かりやすい日本語に書き直してください。情報を削りすぎず、一文を短くしてください。"
+                    prompt: "やさしく分かりやすい日本語にしてください。",
+                    example: OnboardingButtonExample(input: "関係各所との調整後、対応方針を共有します。", output: "関係者と相談してから、どう対応するかをお伝えします。")
                 ),
                 Template(
                     analyticsKey: "polite",
                     title: "敬語",
-                    prompt: "次の文章を、日常でそのまま送れる自然でやわらかい丁寧語に変換してください。命令や指示はやわらかいお願いの形にし、堅すぎる敬語は避けてください。",
+                    prompt: "自然で丁寧な敬語にしてください。",
+                    example: OnboardingButtonExample(input: "明日の会議、15時に変えて。", output: "明日の会議を15時に変更していただけますか。"),
                     builtinKey: "polite"
                 ),
             ]
@@ -363,22 +383,26 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
                 Template(
                     analyticsKey: "line_message",
                     title: "LINE",
-                    prompt: "次の文章を、LINEでそのまま送れる短く自然なメッセージに書き直してください。会話らしいリズムと元の絵文字は保ち、メールのような堅い表現は避けてください。"
+                    prompt: "LINEで送る、短く自然なメッセージにしてください。",
+                    example: OnboardingButtonExample(input: "明日の予定ですが、15時にお会いする形でよろしいでしょうか。", output: "明日15時に会うので大丈夫？")
                 ),
                 Template(
                     analyticsKey: "friend_message",
                     title: "友達",
-                    prompt: "次の文章を、親しい友達に送れる自然で親しみやすい口調に書き直してください。馴れ馴れしくしすぎず、意味と話し手らしさは保ってください。"
+                    prompt: "友達に話すような、自然で親しみやすい文章にしてください。",
+                    example: OnboardingButtonExample(input: "本日はお時間をいただきありがとうございました。またお会いしましょう。", output: "今日はありがとう！また会おうね。")
                 ),
                 Template(
                     analyticsKey: "social_post",
                     title: "SNS投稿",
-                    prompt: "次の文章を、SNSの投稿として読みやすく自然な文章に整えてください。冒頭で要点が伝わる構成にし、原文の事実と雰囲気は保ち、ハッシュタグは勝手に追加しないでください。"
+                    prompt: "SNSの投稿として、読みやすく伝わる文章にしてください。",
+                    example: OnboardingButtonExample(input: "新機能できました。文章選んで押すと整います。試してね。", output: "新機能を公開しました！\n文章を選んで、ボタンを押すだけで整えられます。ぜひ試してみてください。")
                 ),
                 Template(
                     analyticsKey: "social_comment",
                     title: "コメント",
-                    prompt: "次の文章を、SNSで面識のない相手にも失礼のない、親しみやすいコメントに書き直してください。過度に丁寧または馴れ馴れしい表現は避けてください。"
+                    prompt: "SNSで気軽に送れる、感じのよいコメントにしてください。",
+                    example: OnboardingButtonExample(input: "この写真いい。どこで撮った？", output: "素敵な写真ですね！どちらで撮られたんですか？")
                 ),
             ]
         }
@@ -400,24 +424,28 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
                 Template(
                     analyticsKey: "polite",
                     title: "Polite",
-                    prompt: "Rewrite the text so it reads warm, courteous and professional. Soften blunt requests into considerate ones, keep it natural rather than stiff or old-fashioned, and do not add flattery. Output only the rewritten text.",
+                    prompt: "Turn rough notes, shorthand or blunt wording into a complete, natural and courteous message ready to send. Rephrase freely where needed for clarity, while keeping the intended request, facts and deadlines. Use everyday language without adding apologies, excuses or extra deference.",
+                    example: OnboardingButtonExample(input: "revised file pls today by 5 need for meeting tmr", output: "Could you send the revised file by 5 today? I need it for tomorrow’s meeting."),
                     builtinKey: "polite"
                 ),
                 Template(
                     analyticsKey: "email",
                     title: "Email",
-                    prompt: "Rewrite the text as the body of a business email that could be sent as is. Lead with the point, break it into short natural paragraphs, and close politely. Do not add a subject line, signature or placeholder names, and do not invent facts that are not in the original.",
+                    prompt: "Turn the text into an approachable professional email with a greeting, readable paragraphs separated by blank lines, and a closing such as “Best,” followed by the sender’s name. Use recipient and sender names only when supplied; omit unknown names. Keep existing greetings and signatures without duplication, and do not add a subject or new facts.",
+                    example: OnboardingButtonExample(input: "To Sam. thanks for the proposal. ill review it with the team and reply by friday. Alex", output: "Hi Sam,\n\nThanks for sending the proposal. I’ll review it with the team and get back to you by Friday.\n\nBest,\nAlex"),
                     builtinKey: "email"
                 ),
                 Template(
                     analyticsKey: "shorten",
                     title: "Shorten",
-                    prompt: "Rewrite the text so it says the same thing in noticeably fewer words. Cut filler, hedging and repetition, keep every fact, name, number and date, and keep the tone the writer used."
+                    prompt: "Remove filler and repetition to make the text shorter. Keep every distinct point, question, request and deadline, and preserve the writer’s tone; do not turn it into a summary.",
+                    example: OnboardingButtonExample(input: "I just wanted to check whether you’ve had a chance to review the proposal I sent on Monday. We need your feedback by Thursday so we can finalize the budget on Friday.", output: "Have you reviewed the proposal I sent Monday? We need your feedback by Thursday to finalize the budget Friday.")
                 ),
                 Template(
                     analyticsKey: "proofread_english",
                     title: "Proofread",
-                    prompt: "Correct only the spelling, grammar, punctuation and word-choice errors in the text. Keep the meaning, tone, structure and paragraph breaks as they are, and output only the corrected text."
+                    prompt: "Correct spelling, grammar and punctuation. Keep the writer’s wording, tone and structure wherever they are already correct, without polishing or rephrasing for style.",
+                    example: OnboardingButtonExample(input: "Me and Sam was going to send the report yesterday, but we didn’t had the final numbers.", output: "Sam and I were going to send the report yesterday, but we didn’t have the final numbers.")
                 ),
             ]
 
@@ -426,22 +454,26 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
                 Template(
                     analyticsKey: "work_chat",
                     title: "Chat",
-                    prompt: "Rewrite the text as a Slack or Teams message that can be sent as is: short, clear and friendly. Lead with the point, drop email greetings and sign-offs, and stay polite without being formal."
+                    prompt: "Make this clear and friendly for a work chat.",
+                    example: OnboardingButtonExample(input: "review still missing. need it today.", output: "Could someone finish the review today? Thanks!")
                 ),
                 Template(
                     analyticsKey: "manager_message",
                     title: "Manager",
-                    prompt: "Rewrite the text as a message to the writer's manager. Be direct and respectful, put the ask or the status first, keep it brief, and make any request easy to answer. Do not over-apologise."
+                    prompt: "Make this clear and respectful for my manager.",
+                    example: OnboardingButtonExample(input: "need tomorrow morning off. back after lunch.", output: "Could I take tomorrow morning off? I’ll be back after lunch.")
                 ),
                 Template(
                     analyticsKey: "client_message",
                     title: "Client",
-                    prompt: "Rewrite the text as a message to an external client. Be clear, professional and warm, make next steps explicit, and never add commitments, dates or names that are not in the original."
+                    prompt: "Make this clear and professional for a client.",
+                    example: OnboardingButtonExample(input: "sending the estimate. have a look.", output: "Here’s the estimate for your review.")
                 ),
                 Template(
                     analyticsKey: "meeting_recap",
                     title: "Recap",
-                    prompt: "Turn the notes into a short recap that shows decisions, open questions, owners and deadlines. Do not invent anything that is missing; keep every number, date and name exactly as written."
+                    prompt: "Summarize these notes into decisions and next steps.",
+                    example: OnboardingButtonExample(input: "launch friday. sam checks copy thursday. price undecided.", output: "Decision: Launch Friday.\nNext step: Sam reviews the copy Thursday.\nOpen question: Pricing.")
                 ),
             ]
 
@@ -450,22 +482,26 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
                 Template(
                     analyticsKey: "follow_up",
                     title: "Follow-up",
-                    prompt: "Rewrite the text as a short follow-up to a message that has not been answered. Be friendly and low-pressure, restate the ask in one line, make it easy to reply, and do not guilt the reader or imply they were rude."
+                    prompt: "Write a friendly follow-up.",
+                    example: OnboardingButtonExample(input: "checking on the quote i sent last week.", output: "Just following up on the quote I sent last week. Have you had a chance to look it over?")
                 ),
                 Template(
                     analyticsKey: "first_contact",
                     title: "Intro",
-                    prompt: "Rewrite the text as a first-contact message to someone the writer has not met. Open with why the writer is reaching out to this person specifically, keep it under a short paragraph, end with one clear and easy ask, and avoid hype and buzzwords."
+                    prompt: "Turn this into a friendly introduction with a clear ask.",
+                    example: OnboardingButtonExample(input: "hi, we built a writing tool. want a demo this week?", output: "Hi, we’ve built a tool to help with everyday writing. Would you be interested in a demo this week?")
                 ),
                 Template(
                     analyticsKey: "persuasive",
                     title: "Persuade",
-                    prompt: "Rewrite the text to be more persuasive. Lead with the benefit to the reader, back the ask with the reasons already present in the original, and stay confident without exaggerating or inventing evidence."
+                    prompt: "Make this more persuasive using the ideas already here.",
+                    example: OnboardingButtonExample(input: "use the template. it saves setup time.", output: "Save time on setup by starting with the template.")
                 ),
                 Template(
                     analyticsKey: "decline",
                     title: "Decline",
-                    prompt: "Rewrite the text as a polite decline. Say no clearly so it cannot be misread as a maybe, keep the reason the writer gave, thank the reader, and leave the relationship intact. Do not promise future action the original did not offer."
+                    prompt: "Help me say no politely and clearly.",
+                    example: OnboardingButtonExample(input: "cant take this on. my quarter is full.", output: "Thanks for thinking of me. I’m fully booked this quarter, so I’ll have to pass.")
                 ),
             ]
 
@@ -474,22 +510,26 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
                 Template(
                     analyticsKey: "grammar",
                     title: "Grammar",
-                    prompt: "Correct only the grammar, articles, prepositions, tense and spelling in the text. Keep the writer's wording, meaning and tone wherever it is already correct, and output only the corrected text."
+                    prompt: "Fix the grammar and spelling.",
+                    example: OnboardingButtonExample(input: "We has finish the report yesterday.", output: "We finished the report yesterday.")
                 ),
                 Template(
                     analyticsKey: "natural_english",
                     title: "Natural",
-                    prompt: "Rewrite the text so it reads like a fluent native speaker wrote it. Fix awkward phrasing, word order and translated-sounding expressions, and keep the meaning and the writer's intent."
+                    prompt: "Make this sound natural in English.",
+                    example: OnboardingButtonExample(input: "Please let me know your convenient time.", output: "Please let me know what time works for you.")
                 ),
                 Template(
                     analyticsKey: "simplify_english",
                     title: "Simplify",
-                    prompt: "Rewrite the text in plain English. Use shorter sentences and everyday words, drop jargon where a common word works, and keep all of the information."
+                    prompt: "Make this easy to understand in plain English.",
+                    example: OnboardingButtonExample(input: "We will commence implementation following stakeholder alignment.", output: "We’ll start once everyone involved agrees.")
                 ),
                 Template(
                     analyticsKey: "formal_english",
                     title: "Formal",
-                    prompt: "Rewrite the text in formal written English suitable for an official or contractual context. Remove contractions and casual phrasing, stay precise, and do not add legal language or claims that are not in the original."
+                    prompt: "Rewrite this in a formal, professional tone.",
+                    example: OnboardingButtonExample(input: "we cant finish friday. moving it to monday.", output: "We are unable to complete this by Friday. Completion has been moved to Monday.")
                 ),
             ]
 
@@ -498,22 +538,26 @@ public enum OnboardingPresetPack: String, CaseIterable, Codable, Sendable {
                 Template(
                     analyticsKey: "friendly_chat",
                     title: "Friendly",
-                    prompt: "Rewrite the text so it sounds warm and easy to read in a chat. Keep it conversational and keep any emoji the writer used, without becoming over-familiar."
+                    prompt: "Make this warm and conversational.",
+                    example: OnboardingButtonExample(input: "I would appreciate an update when you have availability.", output: "Could you give me an update when you get a chance?")
                 ),
                 Template(
                     analyticsKey: "social_post",
                     title: "Post",
-                    prompt: "Rewrite the text as a social post that is easy to read: the point in the first line, short lines after it. Keep the facts and the writer's voice, and do not add hashtags that are not already there."
+                    prompt: "Turn this into an engaging, readable social post.",
+                    example: OnboardingButtonExample(input: "new feature today. select text press button. give it a go.", output: "New today: select your text, press a button, and give your writing a polish. Try it out!")
                 ),
                 Template(
                     analyticsKey: "social_comment",
                     title: "Comment",
-                    prompt: "Rewrite the text as a friendly public comment to someone the writer does not know. Stay respectful and brief, and avoid both stiffness and over-familiarity."
+                    prompt: "Make this a friendly, thoughtful public comment.",
+                    example: OnboardingButtonExample(input: "good explanation. the example helped.", output: "Great explanation! The example really helped it click.")
                 ),
                 Template(
                     analyticsKey: "casual_message",
                     title: "Casual",
-                    prompt: "Rewrite the text in a relaxed tone for a friend. Keep it natural and short, keep the meaning, and do not force slang."
+                    prompt: "Make this relaxed and natural for a friend.",
+                    example: OnboardingButtonExample(input: "I regret to inform you that I will arrive fifteen minutes late.", output: "Sorry, I’m running 15 minutes late!")
                 ),
             ]
 

@@ -7,7 +7,7 @@ private final class ButtonResponseProtocol: URLProtocol, @unchecked Sendable {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        let status = request.url!.host == "failure.test" ? 500 : 200
+        let status = request.url!.host == "failure.test" || request.url!.path != "/rest/v1/desktop_user_prompts" ? 500 : 200
         let body = #"[{"id":"10000000-0000-0000-0000-000000000001","slot":"main","builtin_key":"polite","title":"Polite","prompt":"Keep the meaning","is_enabled":false,"sort_order":0,"origin":"builtin","created_at":"2026-08-01T00:00:00Z","updated_at":"2026-08-02T00:00:00Z"}]"#
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
@@ -41,6 +41,17 @@ final class SavedButtonReleaseTests: XCTestCase {
         XCTAssertEqual(reviewed.prompt, prompt.prompt)
         XCTAssertEqual(reviewed.createdAt, prompt.createdAt)
         XCTAssertFalse(reviewed.isEnabled)
+    }
+
+    func testEveryCRUDOperationUsesDesktopStorage() async throws {
+        let (store, _, transport) = fixture()
+        defer { transport.invalidateAndCancel() }
+        let existing = try await store.fetch()
+        let row = try XCTUnwrap(existing.first)
+        try await store.update(row)
+        _ = try await store.create(title: "New", prompt: "Instruction", sortOrder: 1)
+        _ = try await store.replaceAll(with: [row])
+        try await store.delete(id: row.id)
     }
 
     func testScopedStoreRejectsReadsAndWritesAfterAccountSwitch() async throws {

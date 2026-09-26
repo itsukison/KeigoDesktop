@@ -317,14 +317,25 @@ struct AppIconView: View {
 
 /// Bundled, static artwork. Never participates in sizing, focus, or hit testing.
 struct AsideBackdrop: View {
-    enum Artwork: String { case mountain = "AsideMountain", glow = "AsideGlow" }
+    enum Artwork: String {
+        case mountain = "AsideMountain", glow = "AsideGlow"
+        case pink = "AsidePink", blue = "AsideBlue", orange = "AsideOrange"
+
+        var fallback: Color {
+            switch self {
+            case .pink: return Color(red: 0.984, green: 0.906, blue: 0.941)
+            case .orange: return Color(red: 1, green: 0.929, blue: 0.863)
+            default: return Tokens.Window.environment
+            }
+        }
+    }
     var artwork: Artwork = .mountain
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Tokens.Window.environment
+                artwork.fallback
                 if !reduceTransparency {
                     Image(artwork.rawValue)
                         .resizable().interpolation(.high).scaledToFill()

@@ -437,7 +437,8 @@ action at right. Google authentication remains attached to its form.
 | Language | Small static mascot, semibold centered heading, 480 pt white grouped rows with script glyphs and tinted selection |
 | Account | Split; medium headline and compact white form group left, mascot on glow right |
 | Name / permission | Split; field/status left, white native scene on mountain right |
-| Purpose / button review | Preset choices followed by ordered list and instruction editor; keep current buttons as the default |
+| Purpose | Three purpose cards left: Everyday (recommended), Work, Friends & Social. Each contains four buttons. Blue selection, neutral labels and recommendation badge; matching pink/blue/orange artwork only behind a single white demo window and a compact dark four-button bar, with the keycap mark left and pencil right. Only returning desktop accounts with saved buttons see Keep current |
+| Button review | Flat full-row selectors on a pale neutral panel, with soft gray-blue selection; selected-name heading and white name/instruction editor beside it. Labeled move controls sit below the fields. Fixed bottom-right Delete label with trash icon and no separator; no Before/After text |
 | Saved button / custom / reply | Compact semibold instruction, secondary explanation, live white editor on mountain stage; hover taught in practice |
 | Attribution | Centered heading, 640 pt two-column choice group |
 | Offer | Centered heading, 560 pt grouped plans, full renewal information and clear decline |
@@ -448,9 +449,22 @@ practice text/instructions, 16 pt body/action labels, and 13 pt metadata. Page h
 medium; Language and practice actions use semibold for emphasis. Body copy stays regular.
 Shared gaps use 8/12/16/24/32/48 pt. Controls are
 40 pt tall with 10 pt corners, grouped choices have 16 pt corners, and stages 20 pt.
-Keep all four style contexts, both questions, examples and notes. The onboarding
-presentation measures equal-height cards from all choices in each row; selection must
-not change height. Dashboard style-card geometry stays independent.
+Every button row selects its own editor, including its surrounding whitespace.
+The two customization pages share 10 pt white fields with subtle borders and blue focus,
+8 pt label-to-field gaps, 16 pt field gaps and 24 pt group gaps. Onboarding uses 20 pt
+editor headings and 16 pt editable text; dashboard uses 16 pt headings and 14 pt editable
+text. Field labels are 13 pt medium. Lists have no decorative numbers/checkmarks/chevrons;
+retain Main button and Hidden metadata. Dashboard uses six-dot handles with an open-hand cursor and native insertion feedback
+in a bounded, autoscrolling reorder list, and
+places visibility and labeled move controls in the selected editor. Add is secondary;
+Save is primary, with a quiet labeled Delete action. Selection-page Before/After examples
+use equal 16 pt body text and a single white preview frame. Customization has no artwork. Show the
+main-button role on the first row; keep selection and draft bindings tied to identity
+through reordering. Keep instructions concise while retaining necessary tone and format
+requirements. Existing saved instructions remain untouched. Illustrative examples belong
+on the introduction page, not below the customization editor. Never present a stock
+example as a live result of a customized instruction. Keep all choices reachable by scrolling and retain
+the fixed navigation shelf.
 
 Practice headers use 28 pt semibold instructions, 16 pt secondary explanations, a
 104 pt minimum height aligned toward the stage, and a 16 pt gap before it. Allow longer
@@ -546,6 +560,7 @@ at rest. §16 of `AGENTS.md` owns lifecycle and capture behavior.
 |---|---|---|---|
 | [`public/moutain.png`](public/moutain.png) | 1672 × 941 RGB PNG; 1,364,669 bytes. Cyan sky and white snow ridge | Native onboarding illustration stages only | Statistics, reading cards, inputs, overlay, stretching or tiling |
 | [`public/gradient.png`](public/gradient.png) | 1672 × 941 RGB PNG; 1,188,987 bytes. Diffuse cyan/blue glow with dot field | Bounded mascot/account/completion illustration stage | Repeated card fills, text fields, controls, animated wallpaper |
+| `public/pink.png`, `public/blue.png`, `public/orange.png` | Supplied soft atmospheric artwork | Everyday, Work, and Friends & Social purpose demo stages, respectively | Text surfaces, controls, or the live overlay |
 | Existing keycap/mascot catalog assets | Brand tile, template mark, alpha character and sprites | Identity and established teaching moments | Aside logo or a second mascot style |
 | Existing Reicon and official app/provider assets | Already integrated | Navigation, controls, recognizable app/provider identity | Generated UI glyphs or text baked into images |
 

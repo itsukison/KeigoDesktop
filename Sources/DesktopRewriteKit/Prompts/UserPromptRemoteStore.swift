@@ -1,13 +1,7 @@
 import Foundation
 
-/// Reads (and writes) the shared `user_prompts` table.
-///
-/// This is the one table both surfaces own read-write (§2) — it is what makes a
-/// user's buttons follow them from phone to laptop. Its schema is a contract owned
-/// by the iOS repo; changing it is a two-repo change.
-///
-/// Everything else desktop touches goes to the `desktop` schema. Nothing here reads
-/// or writes `ai_rewrite_events` or `ai_rewrite_usage_buckets`.
+/// Account-owned desktop buttons. Never falls back to the phone’s `user_prompts`.
+/// The row shape remains compatible with UserPrompt; storage is independent.
 public struct UserPromptRemoteStore: Sendable {
 
     private let config: SupabaseConfig
@@ -29,7 +23,7 @@ public struct UserPromptRemoteStore: Sendable {
 
     public func fetch() async throws -> [UserPrompt] {
         var components = URLComponents(
-            url: config.restEndpoint.appendingPathComponent("user_prompts"),
+            url: config.restEndpoint.appendingPathComponent("desktop_user_prompts"),
             resolvingAgainstBaseURL: false
         )!
         // RLS scopes this to the caller's rows, so no explicit user_id filter is
@@ -63,7 +57,7 @@ public struct UserPromptRemoteStore: Sendable {
 
     // MARK: - Writes
     //
-    // `user_prompts` already carries owner-scoped RLS for all four commands
+    // `desktop_user_prompts` carries owner-scoped RLS for all four commands
     // (`select/insert/update/delete own`, verified against the live project), so
     // editing buttons from the Mac needs no migration. What it does need is care with
     // three columns:
@@ -88,7 +82,7 @@ public struct UserPromptRemoteStore: Sendable {
         }
 
         var request = URLRequest(
-            url: config.restEndpoint.appendingPathComponent("user_prompts")
+            url: config.restEndpoint.appendingPathComponent("desktop_user_prompts")
         )
         request.httpMethod = "POST"
         request.timeoutInterval = 15
@@ -143,8 +137,8 @@ public struct UserPromptRemoteStore: Sendable {
     /// no buttons. A final fetch is the caller's source of truth.
     ///
     /// The account's current rows are read first because `id` is not the table's only
-    /// unique key: `user_prompts_user_builtin_unique` makes `builtin_key` an identity too,
-    /// and a preset pack arrives with fresh ids for keys the phone already seeded.
+    /// unique key: `desktop_user_prompts_user_builtin_unique` makes `builtin_key` an identity too,
+    /// and a preset pack arrives with fresh ids for keys already saved on desktop.
     /// `UserPromptIdentity.reconciled` is what keeps that upsert an upsert — see the note
     /// there for the 409 it fixes.
     public func replaceAll(with prompts: [UserPrompt]) async throws -> [UserPrompt] {
@@ -158,7 +152,7 @@ public struct UserPromptRemoteStore: Sendable {
         let prompts = UserPromptIdentity.reconciled(prompts, existing: try await fetch())
 
         var components = URLComponents(
-            url: config.restEndpoint.appendingPathComponent("user_prompts"),
+            url: config.restEndpoint.appendingPathComponent("desktop_user_prompts"),
             resolvingAgainstBaseURL: false
         )!
         components.queryItems = [URLQueryItem(name: "on_conflict", value: "id")]
@@ -186,7 +180,7 @@ public struct UserPromptRemoteStore: Sendable {
         _ = try await send(upsert, action: "Failed to save the onboarding buttons.")
 
         var deleteComponents = URLComponents(
-            url: config.restEndpoint.appendingPathComponent("user_prompts"),
+            url: config.restEndpoint.appendingPathComponent("desktop_user_prompts"),
             resolvingAgainstBaseURL: false
         )!
         let ids = prompts.map { $0.id.uuidString }.joined(separator: ",")
@@ -202,7 +196,7 @@ public struct UserPromptRemoteStore: Sendable {
 
     private func rowRequest(id: UUID, method: String) throws -> URLRequest {
         var components = URLComponents(
-            url: config.restEndpoint.appendingPathComponent("user_prompts"),
+            url: config.restEndpoint.appendingPathComponent("desktop_user_prompts"),
             resolvingAgainstBaseURL: false
         )!
         components.queryItems = [URLQueryItem(name: "id", value: "eq.\(id.uuidString)")]

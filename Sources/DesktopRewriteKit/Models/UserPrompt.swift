@@ -1,14 +1,9 @@
 import Foundation
 
 // COPIED from ../Japanese/Sources/KeyboardPreferences/UserPrompts.swift.
-// `user_prompts` is the one table both surfaces read and write (AGENTS.md §2), so
-// this type is a contract owned by the iOS repo. Any change here is a two-repo
-// change — note it in the PR.
-//
-// Deliberately narrower than the original: the App Group cache (`UserPromptStore`)
-// and the built-in seed set are iOS-only. A desktop user with no buttons is a
-// user who has not finished onboarding on their phone, and seeding local
-// defaults here would write rows the phone never asked for.
+// The row shape remains compatible with iOS, but desktop stores it independently
+// in public.desktop_user_prompts. New accounts choose buttons during Mac onboarding;
+// loading a configuration never seeds rows or falls back to phone storage.
 
 /// Where a button came from. Retention differs sharply by origin — a button the
 /// user authored predicts sustained use far better than one they merely picked

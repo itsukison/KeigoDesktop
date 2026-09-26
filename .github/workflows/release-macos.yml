@@ -262,6 +262,10 @@ jobs:
           PAGES_DIR="$RUNNER_TEMP/pages"
           mkdir -p "$PAGES_DIR"
           cp "$APPCAST_DIR/appcast.xml" "$PAGES_DIR/appcast.xml"
+          python3 scripts/release/localize-appcast.py "$APPCAST_DIR/appcast.xml" docs/releases "$PAGES_DIR"
+          for LOCALIZED_FEED in "$PAGES_DIR"/appcast-*.xml; do
+            xmllint --noout "$LOCALIZED_FEED"
+          done
           echo "APPCAST_DIR=$APPCAST_DIR" >> "$GITHUB_ENV"
           echo "PAGES_DIR=$PAGES_DIR" >> "$GITHUB_ENV"
 

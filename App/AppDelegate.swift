@@ -89,7 +89,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             }
             return
         }
-
+        if WhatsNewPreview.isRunning {
+            if !WhatsNewPreview.renders {
+                NSApp.setActivationPolicy(.accessory)
+                WhatsNewPreview.show()
+                return
+            }
+            NSApp.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await WhatsNewPreview.render() }
+                catch { NSLog("What's new preview failed: %@", String(describing: error)) }
+                NSApp.terminate(nil)
+            }
+            return
+        }
         if ReplyAvailabilityPreview.isRunning {
             NSApp.setActivationPolicy(.accessory)
             Task { @MainActor in
@@ -110,11 +123,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
             return
         }
         if AsideDesignPreview.isRunning {
-            NSApp.setActivationPolicy(.prohibited)
+            NSApp.setActivationPolicy(AsideDesignPreview.isInspecting ? .accessory : .prohibited)
             Task { @MainActor in
                 do { try await AsideDesignPreview.render() }
                 catch { NSLog("Aside preview failed: %@", String(describing: error)) }
-                NSApp.terminate(nil)
+                if !AsideDesignPreview.isInspecting { NSApp.terminate(nil) }
             }
             return
         }
@@ -179,7 +192,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
 
         installMainMenu()
         installStatusItem()
-
+        mainModel?.prepareReleaseIntroduction(onboardingComplete: onboardingProgress.isComplete)
+        mainModel?.canPresentWhatsNew = { [weak self] in
+            self?.overlay?.allowsUpdateCheck == true && self?.onboardingWindow?.window?.isVisible != true
+        }
 
         // §5: onboarding gates on Accessibility. Without it there is no product, so the
         // window opens on the permission banner instead of the overlay appearing and
@@ -574,13 +590,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
     }
 
     @objc private func openMainWindow() {
-        showMainWindow(activating: true)
+        showMainWindow(activating: true, introduceRelease: true)
     }
 
     /// `activating: false` is for the one caller the user did not ask anything of — the
     /// update notice opening the dashboard by itself. See
     /// `MainWindowController.presentWithoutActivating`.
-    private func showMainWindow(activating: Bool) {
+    private func showMainWindow(activating: Bool, introduceRelease: Bool = false) {
         guard onboardingProgress.isComplete else {
             openOnboarding()
             return
@@ -592,6 +608,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
         mainModel.refresh()
         if activating {
             mainWindow?.present()
+            if introduceRelease { mainModel.presentWhatsNewIfNeeded() }
         } else {
             mainWindow?.presentWithoutActivating()
         }
@@ -749,6 +766,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
 
     // MARK: - Sparkle gentle reminders
 
+    func feedURLString(for updater: SPUUpdater) -> String? {
+        guard let address = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
+              let base = URL(string: address), base.lastPathComponent == "appcast.xml" else { return nil }
+        return base.deletingLastPathComponent()
+            .appendingPathComponent("appcast-\(AppLanguageState.current.rawValue).xml").absoluteString
+    }
 
     /// This accessory app has no Dock presence and its scheduled Sparkle alert can be
     /// ordered behind the app the user is working in. Claim gentle-reminder support so

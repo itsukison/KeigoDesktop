@@ -123,10 +123,10 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(japanese.map(\.prompt), chinese.map(\.prompt))
     }
 
-    func testEnglishGetsDifferentPacksAndDifferentButtons() {
+    func testEnglishGetsThreePurposePacksWithEnglishButtons() {
         XCTAssertEqual(
             OnboardingPresetPack.available(for: .english),
-            [.starter, .work, .outreach, .polish, .social]
+            [.starter, .work, .social]
         )
 
         AppLanguageState.current = .english

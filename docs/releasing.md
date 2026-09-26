@@ -1,5 +1,11 @@
 # macOS releases and updates
 
+The next release is being prepared in
+[the 0.1.11 draft checklist](reports/release-separation/release-0.1.11-draft.md), with
+[Japanese, English and Chinese release notes](releases/0.1.11.md). That checklist
+includes the first-launch animation, independent Mac button storage and the separate
+rewrite-function deployment dependency. The dated release status below is historical.
+
 The first public build must already contain Sparkle's public EdDSA key. Existing
 installations use that key to authenticate every later update archive; shipping an
 empty or temporary key creates a manual-update break in the chain.
@@ -104,3 +110,36 @@ signing identities and prove the entire chain:
 
 Do not publish the appcast before its GitHub release assets are public. The workflow
 orders them deliberately: release first, appcast deployment second.
+
+## Localized update notes and What's new
+
+The release workflow retains the legacy combined `appcast.xml` and generates
+`appcast-ja.xml`, `appcast-en.xml`, and `appcast-zh-Hans.xml`. New clients select a feed
+using the saved **app interface language** on each check. Sparkle's own system-drawn
+window controls may still follow macOS language; the release-note body follows the
+app. Existing clients keep using the original feed until they install this support.
+Deploy all feeds together through the existing workflow; no live feed is changed by
+local builds. Do not deploy a build using these URLs without publishing those feeds.
+
+Keep release Markdown under `docs/releases/VERSION.md`, with `## 日本語`, `## English`,
+and `## 简体中文` sections. The localizer escapes HTML and renders paragraphs/headings/
+bullets, preserving signed enclosures and version ordering. Older Japanese-only notes
+use a concise localized fallback for English/Chinese. Verify the localizer with
+`python3 scripts/release/test-localize-appcast.py`.
+
+The installed app's educational content lives in `App/Main/ReleaseHighlights.swift`.
+Update its stable ID and ordered feature list when shipping a new introduction.
+Keep the same ID for maintenance patches so they do not repeat a tutorial. Bundle
+only the curated current introduction; skipped releases do not create a modal queue.
+The version label comes from the installed bundle, not a separately hard-coded version.
+Author each feature's Japanese, English and Chinese strings together, including native
+demo labels in `WhatsNewView.swift`. The current introduction presents placement only
+(`desktop-four-position-bar`); Buttons and copy-to-reply demonstrations remain in code
+for future use. It is offered on deliberate dashboard opening when safe, and About
+can reopen it. The first-launch cinematic is separate onboarding behavior.
+
+A Debug build supports `--preview-whats-new` for an isolated interactive native window
+and `--render-whats-new` for 2× PNGs in `/private/tmp/keigo-whats-new-previews`.
+Both bypass normal startup, production requests, analytics and persisted user settings.
+Check every language, Next/Back/page selectors, demonstration controls, destination
+routing, dismissal, minimum window size, and macOS accessibility display settings.

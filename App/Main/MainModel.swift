@@ -29,7 +29,54 @@ final class MainModel: NSObject, ObservableObject {
     // MARK: Navigation
 
     @Published var page: Page = .home
-    @Published var showsPreferences = false
+    @Published var showsPreferences = false {
+        didSet {
+            if showsPreferences, showsWhatsNew { dismissWhatsNew(returnToAbout: false) }
+        }
+    }
+    @Published private(set) var showsWhatsNew = false
+    var canPresentWhatsNew: () -> Bool = { true }
+    private let introductionStore = ReleaseIntroductionStore()
+    private var whatsNewReturnsToAbout = false
+    private weak var whatsNewPreviousResponder: NSResponder?
+
+    func prepareReleaseIntroduction(onboardingComplete: Bool) {
+        introductionStore.prepare(ReleaseHighlights.id, onboardingComplete: onboardingComplete)
+    }
+
+    func presentWhatsNewIfNeeded() {
+        guard !showsPreferences, !showsWhatsNew,
+              introductionStore.shouldPresent(ReleaseHighlights.id) else { return }
+        presentWhatsNew()
+    }
+
+    func presentWhatsNew(fromAbout: Bool = false) {
+        guard canPresentWhatsNew() else { return }
+        whatsNewPreviousResponder = NSApp.keyWindow?.firstResponder
+        whatsNewReturnsToAbout = fromAbout
+        showsPreferences = false
+        showsWhatsNew = true
+    }
+
+    func dismissWhatsNew(returnToAbout: Bool = true) {
+        introductionStore.acknowledge(ReleaseHighlights.id)
+        showsWhatsNew = false
+        let restoresAbout = returnToAbout && whatsNewReturnsToAbout
+        whatsNewReturnsToAbout = false
+        if restoresAbout { showsPreferences = true }
+        let responder = whatsNewPreviousResponder
+        whatsNewPreviousResponder = nil
+        DispatchQueue.main.async {
+            if let view = responder as? NSView, let window = view.window {
+                window.makeFirstResponder(view)
+            }
+        }
+    }
+
+    func openButtonsFromWhatsNew() {
+        dismissWhatsNew(returnToAbout: false)
+        page = .buttons
+    }
     /// Which ⚙︎ pane is open. On the model rather than in `PreferencesSheet` because
     /// the overlay opens it on プラン when a free user hits the monthly cap (§9 row
     /// 41), and a `@State` in the view is unreachable from there.
@@ -84,7 +131,8 @@ final class MainModel: NSObject, ObservableObject {
         if page == .buttons, let confirmLeavingButtons { confirmLeavingButtons(action) }
         else { action() }
     }
-    private var promptAccountID: String?
+    @Published private(set) var promptAccountID: String?
+    @Published private(set) var hasLoadedPrompts = false
     private var promptRevision: UInt64 = 0
     private var promptLoadID = UUID()
 
@@ -664,6 +712,7 @@ final class MainModel: NSObject, ObservableObject {
 
     func signOut() {
         promptRevision &+= 1
+        hasLoadedPrompts = false
         promptAccountID = nil
         prompts = []
         pendingPromptOrder = nil
@@ -693,6 +742,7 @@ final class MainModel: NSObject, ObservableObject {
         if AsideDesignPreview.isRunning { return }
         #endif
         let account = await auth.currentSession?.userId
+        hasLoadedPrompts = false
         if promptAccountID != account {
             promptRevision &+= 1
             promptAccountID = account
@@ -712,6 +762,7 @@ final class MainModel: NSObject, ObservableObject {
                 prompts = UserPromptOrder.sortedForEditing(loaded)
             }
             promptsError = nil
+            hasLoadedPrompts = true
         } catch {
             guard promptAccountID == account, promptLoadID == loadID else { return }
             promptsError = tr("ボタンを読み込めませんでした。", "Couldn't load your buttons.", "无法加载按钮。")
@@ -742,7 +793,8 @@ final class MainModel: NSObject, ObservableObject {
             whenWriting: language
         )
         mutate { _ in
-            try await self.applyOnboardingButtons(drafts)
+            guard let account = self.promptAccountID else { throw RewriteError.notSignedIn }
+            try await self.applyOnboardingButtons(drafts, accountID: account)
             PostHogSDK.shared.capture("desktop_button_language_realigned", properties: [
                 "pack": pack.rawValue,
                 "writing_language": self.language.writingLanguageCode,
@@ -758,8 +810,8 @@ final class MainModel: NSObject, ObservableObject {
         }
     }
 
-    func applyOnboardingButtons(_ drafts: [OnboardingButtonDraft]) async throws {
-        guard let account = await auth.currentSession?.userId else { throw RewriteError.notSignedIn }
+    func applyOnboardingButtons(_ drafts: [OnboardingButtonDraft], accountID: String) async throws {
+        guard let account = await auth.currentSession?.userId, account == accountID else { throw RewriteError.notSignedIn }
         let store = promptStore.scoped(to: account)
         let replacements = drafts.enumerated().map { $0.element.userPrompt(at: $0.offset) }
         let loaded = try await store.replaceAll(with: replacements)
@@ -837,6 +889,15 @@ final class MainModel: NSObject, ObservableObject {
         guard !isSavingButtons, let next = UserPromptOrder.moving(prompts, id: id, before: destination) else { return }
         prompts = next
         commitOrder()
+    }
+
+    @discardableResult
+    func movePrompt(id: UUID, toInsertionIndex insertion: Int) -> Bool {
+        guard !isSavingButtons, !isLoadingPrompts,
+              let next = UserPromptOrder.moving(prompts, id: id, toInsertionIndex: insertion) else { return false }
+        prompts = next
+        commitOrder()
+        return true
     }
 
     func commitOrder() {
@@ -1059,6 +1120,16 @@ extension MainModel: ASWebAuthenticationPresentationContextProviding {
 
 #if DEBUG
 extension MainModel {
+    func configureButtonSetupPreview(accountID: String?, saved: [UserPrompt], loaded: Bool = true, state: String = "ready") {
+        signedInEmail = accountID.map { "\($0)@example.com" }
+        promptAccountID = accountID
+        prompts = saved
+        hasLoadedPrompts = loaded
+        isLoadingPrompts = state == "loading"
+        isSavingButtons = state == "saving"
+        promptsError = state == "error" ? tr("保存できませんでした。もう一度お試しください。", "Couldn't save. Your edits are still here; try again.", "无法保存。编辑内容已保留，请重试。") : nil
+    }
+
     /// Inert design fixtures; never restore a session, load files, or call a service.
     func configureDesignPreview(signedIn: Bool = true, state: String = "ready") {
         language = AppLanguageState.current

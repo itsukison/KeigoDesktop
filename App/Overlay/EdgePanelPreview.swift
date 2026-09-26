@@ -314,7 +314,7 @@ private final class EdgePreviewProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        if request.url?.lastPathComponent == "user_prompts" {
+        if request.url?.lastPathComponent == "desktop_user_prompts" {
             let encoder = JSONEncoder()
             encoder.keyEncodingStrategy = .convertToSnakeCase
             encoder.dateEncodingStrategy = .iso8601

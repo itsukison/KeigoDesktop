@@ -315,6 +315,13 @@ struct PreferencesSheet: View {
 
     private var aboutSection: some View {
         group(tr("敬語ボタン", "KeigoButton", "敬語ボタン")) {
+            SettingsRow(title: tr("アップデートのご案内", "What's new", "更新亮点"),
+                        subtitle: tr("新しい使い方をご紹介します。", "Explore the latest improvements.", "了解最新功能的使用方法。")) {
+                ActionButton(tr("見る", "Explore", "查看"), style: .secondary) {
+                    model.presentWhatsNew(fromAbout: true)
+                }
+            }
+            Hairline()
             SettingsRow(title: tr("バージョン", "Version", "版本"), subtitle: nil) {
                 Text(model.appVersion)
                     .font(Tokens.LightFont.mono(13))

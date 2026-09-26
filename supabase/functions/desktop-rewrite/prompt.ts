@@ -111,6 +111,11 @@ function isCompose(request: PromptRequest): boolean {
   return !isReplyRequest(request) && !request.text.trim();
 }
 
+const savedButtonWritingRules = [
+  "Use natural, direct wording rather than canned openings, inflated vocabulary, repetitive cushioning, or stock offers of help. Do not introduce decorative em dashes, en dashes, or hyphens as sentence separators; use commas or separate sentences. Preserve legitimate hyphens in words, names, URLs, identifiers, and quoted material.",
+  "When the command asks for a polite rewrite, turn rough notes, shorthand, and broken sentences into complete, coherent wording; preserving meaning does not mean preserving rough grammar. Keep the original request, urgency, certainty, refusal, and commitment strength. Do not invent reasons, apologies, gratitude, or promises. When the command asks only for proofreading, keep already-correct wording instead of polishing it.",
+];
+
 export function systemInstructions(request: PromptRequest): string {
   const isReply = isReplyRequest(request);
 
@@ -140,6 +145,7 @@ export function systemInstructions(request: PromptRequest): string {
   if (isCompose(request)) {
     return [
       assistantIdentity(request),
+      ...savedButtonWritingRules,
       ...outputLanguageRule(request, false),
       "There is no existing text. The user's command is a request for a message to be written from nothing, and it is the entire specification of what to write.",
       "Write the message the command asks for, complete and ready to send or paste as it stands.",
@@ -154,6 +160,7 @@ export function systemInstructions(request: PromptRequest): string {
   if (request.selection) {
     return [
       assistantIdentity(request),
+      ...savedButtonWritingRules,
       ...outputLanguageRule(request, true),
       "The target text is a fragment the user selected inside a larger text. Apply the user-supplied command instruction to the fragment only.",
       "Rewrite the fragment so it fits seamlessly where it stands: match its grammatical role, and continue naturally from <context_before> into <context_after> when they are provided. The fragment may start or end mid-sentence — keep it that way.",
@@ -167,6 +174,7 @@ export function systemInstructions(request: PromptRequest): string {
 
   return [
     assistantIdentity(request),
+      ...savedButtonWritingRules,
     ...outputLanguageRule(request, true),
     "The target text is the entire contents of the field the user is editing. Apply the user-supplied command instruction to it.",
     "Preserve meaning, names, numbers, URLs, dates, and emoji. Preserve line breaks and paragraph structure unless the command explicitly asks to restructure or format the text.",

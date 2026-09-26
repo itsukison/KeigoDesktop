@@ -6,6 +6,7 @@ import SwiftUI
 struct OnboardingFlowView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var coordinator: OnboardingCoordinator
+    var buttonExampleIndex = 0
 
     var body: some View {
         VStack(spacing: 16) {
@@ -14,7 +15,7 @@ struct OnboardingFlowView: View {
                 case .language: LanguageStep(coordinator: coordinator)
                 case .welcome: WelcomeStep(coordinator: coordinator)
                 case .name: NameStep(coordinator: coordinator)
-                case .purpose, .writingStyle: ButtonPurposeStep(coordinator: coordinator)
+                case .purpose, .writingStyle: ButtonPurposeStep(coordinator: coordinator, initialPreviewIndex: buttonExampleIndex)
                 case .review: ButtonSetupReview(coordinator: coordinator)
                 case .access: AccessStep(coordinator: coordinator)
                 case .bar, .practice: PracticeStep(coordinator: coordinator)
@@ -97,7 +98,7 @@ private struct OnboardingNavigationBar: View {
                     )
 
                 case .purpose, .writingStyle:
-                    primaryButton(tr("続ける", "Continue", "继续"), enabled: !coordinator.buttonDrafts.isEmpty)
+                    primaryButton(tr("続ける", "Continue", "继续"), enabled: coordinator.canConfirmButtons)
                 case .review:
                     primaryButton(tr("保存して続ける", "Save and continue", "保存并继续"), enabled: coordinator.canConfirmButtons && !coordinator.isSavingButtons)
 
@@ -1413,7 +1414,9 @@ private extension Array where Element == UserPrompt {
 /// Run the built executable with --render-aside-previews. No production startup,
 /// credentials, network requests, analytics initialization, or preference writes.
 @MainActor enum AsideDesignPreview {
-    static var isRunning: Bool { ProcessInfo.processInfo.arguments.contains("--render-aside-previews") }
+    static var isRunning: Bool { ProcessInfo.processInfo.arguments.contains("--render-button-previews") || ProcessInfo.processInfo.arguments.contains("--render-aside-previews") || ProcessInfo.processInfo.arguments.contains("--render-hover-previews") || isInspecting }
+    static var isInspecting: Bool { ProcessInfo.processInfo.arguments.contains("--inspect-button-setup") }
+    private static var inspectionWindow: NSWindow?
     static var state = "ready"
     private struct EmptySession: SessionStoring {
         func read() -> AuthSession? { nil }
@@ -1433,6 +1436,100 @@ private extension Array where Element == UserPrompt {
         let overlay = OverlayController(rewriteService: DesktopRewriteService(config: config, auth: auth),
             auth: auth, promptStore: UserPromptRemoteStore(config: config, auth: auth), analytics: PostHogAnalytics(), history: history, appVersion: "preview")
         let defaults = UserDefaults(suiteName: "AsideDesignPreview")!
+        if ProcessInfo.processInfo.arguments.contains("--render-button-previews") {
+            for language in AppLanguage.allCases {
+                AppLanguageState.current = language
+                model.configureDesignPreview()
+                model.configureButtonSetupPreview(accountID: nil, saved: [])
+                let coordinator = OnboardingCoordinator(mainModel: model, overlay: overlay,
+                    progress: OnboardingProgressStore(defaults: defaults, persistsChanges: false),
+                    languageStore: AppLanguageStore(defaults: defaults), onFinish: {})
+                for pack in OnboardingPresetPack.available(for: language) {
+                    coordinator.configureDesignPreview(step: .purpose)
+                    coordinator.select(pack: pack)
+                    for index in 0..<4 {
+                        try await capture(OnboardingFlowView(coordinator: coordinator, buttonExampleIndex: index),
+                            size: NSSize(width: 1080, height: 700),
+                            name: "buttons-\(language.rawValue)-\(pack.rawValue)-\(index)", output: output)
+                    }
+                }
+                model.configureButtonSetupPreview(accountID: "preview", saved: OnboardingPresetPack.starter.drafts().enumerated().map { $0.element.userPrompt(at: $0.offset) })
+                coordinator.configureDesignPreview(step: .purpose)
+                coordinator.selectCurrentButtons()
+                try await capture(OnboardingFlowView(coordinator: coordinator), size: NSSize(width: 1080, height: 700),
+                    name: "buttons-\(language.rawValue)-returning", output: output)
+                coordinator.configureDesignPreview(step: .review)
+                try await capture(OnboardingFlowView(coordinator: coordinator), size: NSSize(width: 1080, height: 700),
+                    name: "buttons-\(language.rawValue)-editor", output: output)
+                for _ in 0..<3 { coordinator.addDraft() }
+                coordinator.buttonDrafts[0].title = "A deliberately long button name that wraps to several lines"
+                try await capture(OnboardingFlowView(coordinator: coordinator),
+                    size: NSSize(width: 1080, height: 700), name: "buttons-\(language.rawValue)-editor-long", output: output)
+                for fixture in ["saving", "error"] {
+                    coordinator.configureDesignPreview(step: .review, state: fixture)
+                    try await capture(OnboardingFlowView(coordinator: coordinator),
+                        size: NSSize(width: 1080, height: 700), name: "buttons-\(language.rawValue)-editor-\(fixture)", output: output)
+                }
+                for size in [NSSize(width: 1000, height: 700), NSSize(width: 920, height: 640)] {
+                    for fixture in ["ready", "hidden-long", "empty", "loading", "saving", "error"] {
+                        var prompts = OnboardingPresetPack.starter.drafts().enumerated().map { $0.element.userPrompt(at: $0.offset) }
+                        if fixture == "hidden-long" {
+                            prompts[0].title = "A deliberately long button name that wraps to several lines"
+                            prompts[0].isEnabled = false
+                            prompts[0].prompt = Array(repeating: prompts[0].prompt, count: 4).joined(separator: "\n\n")
+                        }
+                        model.configureButtonSetupPreview(accountID: "preview",
+                            saved: ["empty", "loading"].contains(fixture) ? [] : prompts,
+                            loaded: fixture != "loading", state: fixture)
+                        model.page = .buttons
+                        model.showsPreferences = false
+                        try await capture(MainWindowView(model: model), size: size,
+                            name: "buttons-\(language.rawValue)-dashboard-\(fixture)-\(Int(size.width))", output: output)
+                    }
+                }
+            }
+            return
+        }
+        if ProcessInfo.processInfo.arguments.contains("--render-hover-previews") {
+            AppLanguageState.current = .english
+            let cases: [(String, [String], SnapZone, NSSize)] = [
+                ("hover-four", ["Corporate", "Email", "Shorten", "Proofread"], .bottomCenter, NSSize(width: 540, height: 90)),
+                ("hover-single", ["A"], .bottomCenter, NSSize(width: 540, height: 90)),
+                ("hover-long", Array(repeating: "A deliberately long saved button title", count: 7), .bottomCenter, NSSize(width: 1920, height: 90)),
+                ("hover-side", ["Corporate", "Email", "Shorten", "Proofread"], .left, NSSize(width: 200, height: 340))
+            ]
+            for (name, titles, zone, size) in cases {
+                overlay.configureHoverPreview(titles: titles, zone: zone)
+                try await capture(HoverRow(controller: overlay)
+                    .fixedSize()
+                    .background(SmokedGlassSurface(shape: Capsule(), forceOpaque: true))
+                    .padding(20), size: size, name: name, output: output)
+            }
+            return
+        }
+        if isInspecting {
+            AppLanguageState.current = .english
+            model.configureDesignPreview()
+            let coordinator = OnboardingCoordinator(mainModel: model, overlay: overlay,
+                progress: OnboardingProgressStore(defaults: defaults, persistsChanges: false),
+                languageStore: AppLanguageStore(defaults: defaults), onFinish: {})
+            coordinator.configureDesignPreview(step: .review)
+            let host = NSHostingView(rootView: OnboardingFlowView(coordinator: coordinator))
+            host.sizingOptions = []
+            let size = NSSize(width: 1080, height: 700)
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.title = "Button setup · isolated preview"
+            window.appearance = NSAppearance(named: .aqua)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            window.setContentSize(size)
+            window.center()
+            inspectionWindow = window
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
         var manifest: [String] = []
         for language in AppLanguage.allCases {
             AppLanguageState.current = language

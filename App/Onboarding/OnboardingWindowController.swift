@@ -45,6 +45,8 @@ final class OnboardingCoordinator: ObservableObject {
     private let progress: OnboardingProgressStore
     private let languageStore: AppLanguageStore
     private let onFinish: () -> Void
+    private var draftAccountID: String?
+    private var purposeLoadID = UUID()
     private var replaying = false
     private var preparingIntro = false
     var shouldPresentIntro: Bool { progress.shouldPresentIntro }
@@ -63,6 +65,9 @@ final class OnboardingCoordinator: ObservableObject {
         self.languageStore = languageStore
         self.language = languageStore.resolved
         self.onFinish = onFinish
+        mainModel.$promptAccountID.removeDuplicates().sink { [weak self] account in
+            self?.resetButtonDrafts(for: account)
+        }.store(in: &lessonSubscriptions)
         overlay.$lesson.sink { [weak self] lesson in
             self?.lesson = lesson
             if lesson?.discovered == true { self?.barDiscovered = true }
@@ -83,20 +88,12 @@ final class OnboardingCoordinator: ObservableObject {
         offerInterval = .year
         offerExpiresAt = nil
         offerCheckoutOpened = false
-        selectedPack = progress.savedPack
-        buttonDrafts = replay ? mainModel.prompts.map(OnboardingButtonDraft.init(prompt:)) : progress.savedDrafts
+        draftAccountID = nil
+        resetButtonDrafts(for: mainModel.promptAccountID)
         language = languageStore.resolved
         move(to: replay ? .language : progress.savedStep)
         self.preparingIntro = false
-        if [.purpose, .review].contains(step) {
-            isPreparingPurpose = true
-            Task {
-                await mainModel.reloadPrompts()
-                if !mainModel.prompts.isEmpty { selectCurrentButtons() }
-                else if buttonDrafts.isEmpty { select(pack: .starter) }
-                isPreparingPurpose = false
-            }
-        }
+        if [.purpose, .review].contains(step) { retryPurpose() }
     }
 
     /// Applied immediately rather than on 次へ: the page is the one place the effect
@@ -168,7 +165,7 @@ final class OnboardingCoordinator: ObservableObject {
         // and loads the account's buttons, which is why this page and not `welcome`
         // calls `preparePurpose`.
         case .name where mainModel.hasDisplayNameDraft: preparePurpose()
-        case .purpose: move(to: .review)
+        case .purpose where canConfirmButtons: move(to: .review)
         case .review: confirmButtons()
         case .writingStyle: move(to: .purpose)
         case .access where mainModel.isTrusted: move(to: .practice)
@@ -266,10 +263,16 @@ final class OnboardingCoordinator: ObservableObject {
 
     var tutorialSample: String { OnboardingPracticeSample.text(for: tutorialPrompt) }
 
+    var canKeepCurrentButtons: Bool {
+        mainModel.isSignedIn && mainModel.hasLoadedPrompts && !mainModel.isLoadingPrompts
+            && mainModel.promptsError == nil && !mainModel.prompts.isEmpty
+            && draftAccountID == mainModel.promptAccountID
+    }
+
     var usesCurrentButtons: Bool { selectedPack == nil && !buttonDrafts.isEmpty }
 
     var canConfirmButtons: Bool {
-        !isPreparingPurpose && mainModel.promptsError == nil && !buttonDrafts.isEmpty && buttonDrafts.allSatisfy {
+        !isPreparingPurpose && (mainModel.hasLoadedPrompts || replaying) && mainModel.promptsError == nil && !buttonDrafts.isEmpty && buttonDrafts.allSatisfy {
             !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && !$0.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
@@ -283,6 +286,7 @@ final class OnboardingCoordinator: ObservableObject {
     }
 
     func selectCurrentButtons() {
+        guard canKeepCurrentButtons else { return }
         selectedPack = nil
         buttonDrafts = mainModel.prompts.map(OnboardingButtonDraft.init(prompt:))
         reviewError = nil
@@ -358,36 +362,54 @@ final class OnboardingCoordinator: ObservableObject {
         overlay.endTutorial()
         overlay.setVisible(true)
         if !replaying {
-            progress.complete()
+            progress.complete(accountID: draftAccountID)
             PostHogSDK.shared.capture("desktop_onboarding_completed")
         }
         onFinish()
     }
 
-    private func preparePurpose() {
+    private func resetButtonDrafts(for account: String?) {
+        guard draftAccountID != account || account == nil else { return }
+        draftAccountID = nil // Never persist outgoing drafts under the incoming account.
+        selectedPack = nil
+        buttonDrafts = []
+        reviewError = nil
+        purposeError = nil
+        draftAccountID = account
+        if let account, !replaying {
+            selectedPack = progress.savedPack(for: account)
+            buttonDrafts = progress.savedDrafts(for: account)
+        }
+    }
+
+    func retryPurpose() { loadPurpose(saveName: false) }
+
+    private func preparePurpose() { loadPurpose(saveName: true) }
+
+    private func loadPurpose(saveName: Bool) {
         guard !isPreparingPurpose else { return }
+        let loadID = UUID()
+        purposeLoadID = loadID
         isPreparingPurpose = true
         purposeError = nil
         Task {
-            guard await mainModel.saveDisplayNameForContinuation() else {
-                isPreparingPurpose = false
-                return
-            }
+            defer { if purposeLoadID == loadID { isPreparingPurpose = false } }
+            if saveName, !replaying, !(await mainModel.saveDisplayNameForContinuation()) { return }
             await mainModel.reloadPrompts()
-            isPreparingPurpose = false
-            if mainModel.promptsError != nil {
-                purposeError = tr(
-                    "ボタンを読み込めませんでした。接続を確認して、もう一度お試しください。",
-                    "Couldn't load your buttons. Check your connection and try again.",
-                    "无法加载按钮。请检查网络连接后重试。"
-                )
+            guard purposeLoadID == loadID else { return }
+            guard mainModel.isSignedIn, mainModel.hasLoadedPrompts,
+                  mainModel.promptsError == nil else {
+                purposeError = tr("ボタンを読み込めませんでした。もう一度お試しください。",
+                                  "Couldn't load your buttons. Please try again.", "无法加载按钮，请重试。")
                 return
             }
-            // Returning accounts start with the server's configuration, including
-            // disabled/customized rows, even if an old setup draft is still on disk.
-            if !mainModel.prompts.isEmpty { selectCurrentButtons() }
-            else if buttonDrafts.isEmpty { select(pack: .starter) }
-            move(to: .purpose)
+            resetButtonDrafts(for: mainModel.promptAccountID)
+            // A same-account draft wins over refreshed rows when navigating back.
+            if buttonDrafts.isEmpty {
+                if canKeepCurrentButtons { selectCurrentButtons() }
+                else { select(pack: .starter) }
+            }
+            if saveName { move(to: .purpose) }
         }
     }
 
@@ -395,14 +417,19 @@ final class OnboardingCoordinator: ObservableObject {
         guard canConfirmButtons, !isSavingButtons else { return }
         isSavingButtons = true
         reviewError = nil
+        let account = draftAccountID
         let drafts = buttonDrafts
         let pack = selectedPack
         let customized = pack?.isCustomized(drafts: drafts, writtenIn: language) ?? false
         Task {
             defer { isSavingButtons = false }
             do {
-                if !replaying, drafts != mainModel.prompts.map(OnboardingButtonDraft.init(prompt:)) {
-                    try await mainModel.applyOnboardingButtons(drafts)
+                if !replaying {
+                    guard let account, account == mainModel.promptAccountID else { throw RewriteError.notSignedIn }
+                    if drafts != mainModel.prompts.map(OnboardingButtonDraft.init(prompt:)) {
+                        try await mainModel.applyOnboardingButtons(drafts, accountID: account)
+                    }
+                    guard account == draftAccountID else { return }
                 }
                 // Emit only after the remote replace succeeds. A retry must not turn a
                 // failed save into a preset selection, and a tutorial replay must not
@@ -428,8 +455,8 @@ final class OnboardingCoordinator: ObservableObject {
     }
 
     private func saveDrafts() {
-        guard !replaying else { return }
-        progress.save(pack: selectedPack, drafts: buttonDrafts)
+        guard !replaying, let account = draftAccountID else { return }
+        progress.save(pack: selectedPack, drafts: buttonDrafts, accountID: account)
     }
 
     private var tutorialPrompt: UserPrompt {
@@ -543,8 +570,10 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 #if DEBUG
 extension OnboardingCoordinator {
     /// Assign presentation state directly: `move(to:)` deliberately runs real services.
-    func configureDesignPreview(step: DesktopOnboardingStep) {
+    func configureDesignPreview(step: DesktopOnboardingStep, state: String = "ready") {
         replaying = true
+        isSavingButtons = state == "saving"
+        reviewError = state == "error" ? tr("保存できませんでした。もう一度お試しください。", "Couldn't save. Your edits are still here; try again.", "无法保存。编辑内容已保留，请重试。") : nil
         language = AppLanguageState.current
         self.step = step.activeStep
         selectedPack = .starter

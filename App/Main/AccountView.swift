@@ -18,9 +18,9 @@ struct AccountView: View {
             PageTitle(
                 title: tr("アカウント", "Account", "账户"),
                 subtitle: tr(
-                    "スマホの敬語ボタンと同じアカウントです。ボタンと契約が共有されます。",
-                    "The same account as the app on your phone. Buttons and subscription are shared.",
-                    "与手机上敬語ボタン使用同一账户。按钮和订阅共享。"
+                    "スマホの敬語ボタンと同じアカウントです。契約は共通で、ボタンはMac専用です。",
+                    "The same account as the app on your phone. Your subscription is shared; Mac buttons are separate.",
+                    "与手机上敬語ボタン使用同一账户。订阅共享，Mac按钮独立保存。"
                 )
             )
 
@@ -129,7 +129,7 @@ struct AccountView: View {
             SectionCaption(text: tr("同期", "Sync", "同步"))
             RowGroup {
                 SettingsRow(
-                    title: tr("ボタン・表示名・契約", "Buttons, name and subscription", "按钮、名称与订阅"),
+                    title: tr("表示名と契約", "Name and subscription", "名称与订阅"),
                     subtitle: tr("スマホとこの Mac の両方に反映されます", "Applied on both your phone and this Mac", "会同时应用到手机和这台 Mac")
                 ) {
                     Badge(tr("同期", "Synced", "同步"))
@@ -260,8 +260,8 @@ struct AccountView: View {
             SectionCaption(text: tr("サインインすると", "When you sign in", "登录后"))
             RowGroup {
                 SettingsRow(
-                    title: tr("スマホと同期するボタン", "Your buttons, synced", "同步你的按钮"),
-                    subtitle: tr("同じアカウントでスマホのボタンと同期します", "Use the same saved buttons on your phone and Mac", "在手机和 Mac 上使用相同的已保存按钮")
+                    title: tr("Mac専用のボタン", "Your Mac buttons", "Mac专用按钮"),
+                    subtitle: tr("アカウントに保存され、スマホのボタンとは独立しています", "Saved to your account, separate from your phone buttons", "保存到账户，与手机按钮独立")
                 ) {
                     Badge(tr("この Mac", "This Mac", "这台 Mac"))
                 }

@@ -15,10 +15,10 @@ final class OnboardingIntroTests: XCTestCase {
         XCTAssertFalse(store.isComplete)
         store.save(step: .access)
         replay.save(step: .language)
-        replay.save(pack: .work, drafts: [])
+        replay.save(pack: .work, drafts: [], accountID: "A")
         replay.complete()
         XCTAssertEqual(store.savedStep, .access)
-        XCTAssertNil(store.savedPack)
+        XCTAssertNil(store.savedPack(for: "A"))
         XCTAssertFalse(store.isComplete)
     }
 

@@ -2,12 +2,12 @@ import Foundation
 
 /// Which row on the server an incoming button is actually *about*.
 ///
-/// `user_prompts` carries a second unique key besides its primary one, and it is not
+/// `desktop_user_prompts` carries a second unique key besides its primary one, and it is not
 /// visible from the Swift model:
 ///
 /// ```
-/// CREATE UNIQUE INDEX user_prompts_user_builtin_unique
-///   ON public.user_prompts (user_id, builtin_key) WHERE builtin_key IS NOT NULL;
+/// CREATE UNIQUE INDEX desktop_user_prompts_user_builtin_unique
+///   ON public.desktop_user_prompts (user_id, builtin_key) WHERE builtin_key IS NOT NULL;
 /// ```
 ///
 /// So a `builtin_key` is an identity, not a label — an account owns at most one `polite`
@@ -25,8 +25,8 @@ import Foundation
 public enum UserPromptIdentity {
 
     /// Re-points each incoming button at the row the account already owns for its
-    /// `builtinKey`, keeping that row's `createdAt` — the button has existed since the phone
-    /// made it, and only its text is being replaced. Everything else is passed through
+    /// `builtinKey`, keeping that row's `createdAt` — the button keeps its original
+    /// creation time, and only its text is being replaced. Everything else is passed through
     /// untouched, including `origin`: the content now in the row did come from the preset.
     public static func reconciled(
         _ incoming: [UserPrompt],

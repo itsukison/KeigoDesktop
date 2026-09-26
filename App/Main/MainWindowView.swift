@@ -4,6 +4,7 @@ import SwiftUI
 /// Translucent desktop glass frames a stable, opaque workspace.
 struct MainWindowView: View {
     @ObservedObject var model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
@@ -17,16 +18,24 @@ struct MainWindowView: View {
         // sat that much below where the traffic lights needed it to.
         .ignoresSafeArea()
         .background { AsideSidebarBackdrop().ignoresSafeArea() }
-        .disabled(model.showsPreferences)
+        .disabled(model.showsPreferences || model.showsWhatsNew)
+        .accessibilityHidden(model.showsPreferences || model.showsWhatsNew)
         // An overlay rather than `.sheet`, so the modal can be centred, dimmed and
         // dismissed by clicking away from it — see `PreferencesSheet`.
         .overlay {
-            if model.showsPreferences {
+            if model.showsWhatsNew {
+                WhatsNewModal(version: model.appVersion,
+                              onDismiss: { model.dismissWhatsNew() },
+                              onOpenButtons: model.openButtonsFromWhatsNew)
+                    .id(model.language)
+                    .transition(.opacity)
+            } else if model.showsPreferences {
                 PreferencesSheet(model: model)
                     .transition(.opacity)
             }
         }
         .animation(.easeOut(duration: 0.15), value: model.showsPreferences)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: model.showsWhatsNew)
     }
 
     // MARK: - Sidebar

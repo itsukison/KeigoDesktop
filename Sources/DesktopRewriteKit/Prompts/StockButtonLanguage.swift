@@ -4,7 +4,7 @@ import Foundation
 ///
 /// They are two separate pieces of state and nothing kept them in agreement. The
 /// interface language lives in `UserDefaults` on this Mac (§17); the buttons live in
-/// `user_prompts` on the server, shared with the phone, and no code path rewrote them
+/// `desktop_user_prompts` on the server, independent of the phone, and no code path rewrote them
 /// when the language changed — the ⚙︎ 一般 row said so in as many words. So an English
 /// user could be holding four buttons whose instructions are Japanese sentences that
 /// explicitly ask for Japanese output, and get exactly that.

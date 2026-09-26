@@ -283,15 +283,12 @@ final class OverlayController: ObservableObject {
         return max(replyWidth, min(108, max(56, ceil(longest) + 12)))
     }
 
-    var buttonViewportSize: NSSize {
+    var buttonViewportLimit: NSSize {
         let area = OverlayPlacement.workArea(on: OverlayPlacement.screen(containing: panel.frame))
         if usesSidebarLayout {
-            return NSSize(width: sidebarButtonWidth, height: min(max(32, CGFloat(displayedPrompts.count) * 40 - 8), max(32, area.height - 180)))
+            return NSSize(width: sidebarButtonWidth, height: max(32, area.height - 180))
         }
-        let width = displayedPrompts.reduce(CGFloat(0)) { value, prompt in
-            value + (prompt.title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: Tokens.Overlay.labelMedium)]).width + 32
-        }
-        return NSSize(width: min(max(100, width), max(100, area.width - 240)), height: 34)
+        return NSSize(width: max(100, area.width - 240), height: 34)
     }
 
     var displayedPrompts: [UserPrompt] {
@@ -2501,6 +2498,15 @@ final class OverlayController: ObservableObject {
     }
 
     #if DEBUG
+    func configureHoverPreview(titles: [String], zone: SnapZone = .bottomCenter) {
+        parkedZone = zone
+        signedOut = false
+        tutorialPrompts = []
+        prompts = titles.enumerated().map { index, title in
+            UserPrompt(slot: index == 0 ? .main : .sub, title: title, prompt: "Preview", sortOrder: index)
+        }
+    }
+
     var replyPreviewPanel: PillPanel { panel }
     var replyPreviewHasDetachedContext: Bool { replyContextPanel != nil }
 

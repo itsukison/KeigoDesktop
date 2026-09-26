@@ -36,6 +36,15 @@ import DesktopRewriteKit
         precondition(model.prompts.map(\.id) == [original[2].id, original[0].id, original[1].id])
         precondition(model.prompts.map(\.slot) == [.main, .sub, .sub])
         precondition(!model.prompts[1].isEnabled)
+        precondition(model.movePrompt(id: original[1].id, toInsertionIndex: 0))
+        try await settle(model)
+        precondition(model.prompts.map(\.id) == [original[1].id, original[2].id, original[0].id])
+        precondition(model.movePrompt(id: original[1].id, toInsertionIndex: 3))
+        try await settle(model)
+        precondition(model.prompts.map(\.id) == [original[2].id, original[0].id, original[1].id])
+        let writesBeforeNoOp = ButtonsFixtureProtocol.state.writeCount
+        precondition(!model.movePrompt(id: original[1].id, toInsertionIndex: 3))
+        precondition(ButtonsFixtureProtocol.state.writeCount == writesBeforeNoOp)
         let created = await model.saveButton(nil, title: " New ", instruction: " New instruction ")
         precondition(created && model.prompts.last?.title == "New")
         model.delete(model.prompts.last!)
@@ -56,7 +65,59 @@ import DesktopRewriteKit
         await model.reloadPrompts()
         await oldRead.value
         precondition(model.prompts.isEmpty)
-        let report = "PASS: valid Save/reload, rejected blank creation, identities preserved, enable/disable, coalesced reorder persistence, main slot, Add/Delete, failed Save, failed reorder reconciliation, stale account response.\nNo production network, credentials, or analytics initialization.\n"
+        // Exercise the onboarding coordinator against the same offline account store.
+        let fixtureDefaults = UserDefaults(suiteName: "ButtonSetupVerification.\(UUID().uuidString)")!
+        let progress = OnboardingProgressStore(defaults: fixtureDefaults)
+        let overlay = OverlayController(rewriteService: DesktopRewriteService(config: config, auth: auth),
+            auth: auth, promptStore: UserPromptRemoteStore(config: config, auth: auth, session: transport),
+            analytics: PostHogAnalytics(), history: RewriteHistoryStore(directory: URL(fileURLWithPath: "/private/tmp/keigo-button-fixture-history")), appVersion: "fixture")
+        func coordinator() -> OnboardingCoordinator {
+            OnboardingCoordinator(mainModel: model, overlay: overlay, progress: progress,
+                                  languageStore: AppLanguageStore(defaults: fixtureDefaults), onFinish: {})
+        }
+        func prepare(_ setup: OnboardingCoordinator) async throws {
+            setup.retryPurpose()
+            for _ in 0..<200 {
+                if !setup.isPreparingPurpose { return }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            throw URLError(.timedOut)
+        }
+        sessions.write(AuthSession(accessToken: "A", refreshToken: "A", expiresAt: .distantFuture, userId: "A"))
+        await model.reloadPrompts()
+        model.configureButtonSetupPreview(accountID: "A", saved: model.prompts)
+        let setup = coordinator()
+        try await prepare(setup)
+        precondition(setup.canKeepCurrentButtons && setup.usesCurrentButtons)
+        var draft = setup.buttonDrafts[1]
+        draft.prompt = "My unfinished instruction"
+        setup.updateDraft(draft)
+        setup.moveDraft(id: draft.id, by: -1)
+        try await prepare(setup)
+        precondition(setup.buttonDrafts.first?.id == draft.id && setup.buttonDrafts.first?.prompt == draft.prompt)
+        let resumed = coordinator()
+        try await prepare(resumed)
+        precondition(resumed.buttonDrafts == setup.buttonDrafts)
+        sessions.write(AuthSession(accessToken: "B", refreshToken: "B", expiresAt: .distantFuture, userId: "B"))
+        await model.reloadPrompts()
+        model.configureButtonSetupPreview(accountID: "B", saved: [])
+        precondition(setup.buttonDrafts.isEmpty && !setup.canKeepCurrentButtons)
+        try await prepare(setup)
+        precondition(setup.selectedPack == .starter && setup.buttonDrafts.count == 4 && !setup.canKeepCurrentButtons)
+        let newAccountDrafts = setup.buttonDrafts
+        ButtonsFixtureProtocol.state.failNextRead = true
+        try await prepare(setup)
+        precondition(setup.purposeError != nil && !setup.canConfirmButtons && setup.buttonDrafts == newAccountDrafts)
+        try await prepare(setup)
+        precondition(setup.purposeError == nil && setup.canConfirmButtons)
+        let savedDrafts = progress.savedDrafts(for: "B")
+        let writesBeforeReplay = ButtonsFixtureProtocol.state.writeCount
+        setup.configureDesignPreview(step: .review)
+        setup.select(pack: .social)
+        setup.deleteDraft(id: setup.buttonDrafts[1].id)
+        precondition(progress.savedDrafts(for: "B") == savedDrafts)
+        precondition(ButtonsFixtureProtocol.state.writeCount == writesBeforeReplay)
+        let report = "PASS: valid Save/reload, rejected blank creation, identities preserved, enable/disable, coalesced reorder persistence, main slot, Add/Delete, failed Save, failed reorder reconciliation, stale account response; onboarding returning/new account gating, interrupted drafts, reorder identity, account switch, failed load/retry, replay persistence.\nNo production network, credentials, or analytics initialization.\n"
         try report.write(toFile: "/private/tmp/keigo-saved-buttons-verification.txt", atomically: true, encoding: .utf8)
     }
     private static func settle(_ model: MainModel) async throws {
@@ -74,12 +135,16 @@ private final class ButtonsFixtureState: @unchecked Sendable {
     private var writes = 0
     private var fail = false
     private var delay = false
+    private var failRead = false
+    var failNextRead: Bool { get { lock.withLock { failRead } } set { lock.withLock { failRead = newValue } } }
     var writeCount: Int { lock.withLock { writes } }
     var failNextWrite: Bool { get { lock.withLock { fail } } set { lock.withLock { fail = newValue } } }
     var delayNextRead: Bool { get { lock.withLock { delay } } set { lock.withLock { delay = newValue } } }
     func response(_ request: URLRequest) throws -> (Int, Data, Bool) {
         try lock.withLock {
+            guard request.url?.path == "/rest/v1/desktop_user_prompts" else { return (500, Data(), false) }
             let method = request.httpMethod ?? "GET"
+            if method == "GET", failRead { failRead = false; return (500, Data(), false) }
             if method != "GET" { writes += 1; if fail { fail = false; return (500, Data(), false) } }
             let shouldDelay = method == "GET" && delay
             if shouldDelay { delay = false }

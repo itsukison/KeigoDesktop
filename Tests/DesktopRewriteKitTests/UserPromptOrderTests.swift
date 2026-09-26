@@ -53,6 +53,42 @@ final class UserPromptOrderTests: XCTestCase {
         XCTAssertNil(UserPromptOrder.moving([prompt], id: prompt.id, by: 2))
     }
 
+    func testEveryDragInsertionGap() throws {
+        var prompts = (0..<4).map { make("Button \($0)", slot: $0 == 0 ? .main : .sub, order: max(0, $0 - 1)) }
+        prompts[1].isEnabled = false
+        for source in prompts.indices {
+            for gap in 0...prompts.count {
+                let destination = gap > source ? gap - 1 : gap
+                let moved = UserPromptOrder.moving(prompts, id: prompts[source].id, toInsertionIndex: gap)
+                if source == destination {
+                    XCTAssertNil(moved, "Dropping next to the source should not save")
+                    continue
+                }
+                let result = try XCTUnwrap(moved)
+                var expected = prompts.map(\.id)
+                expected.insert(expected.remove(at: source), at: destination)
+                XCTAssertEqual(result.map(\.id), expected)
+                XCTAssertEqual(result.map(\.slot), [.main, .sub, .sub, .sub])
+                XCTAssertEqual(result.map(\.sortOrder), [0, 0, 1, 2])
+                for row in result {
+                    var original = try XCTUnwrap(prompts.first { $0.id == row.id })
+                    original.slot = row.slot
+                    original.sortOrder = row.sortOrder
+                    XCTAssertEqual(row, original, "Reordering must preserve content and visibility")
+                }
+            }
+        }
+    }
+
+    func testDragRejectsStaleOrInvalidDestinations() {
+        let prompt = make("A", slot: .main, order: 0)
+        XCTAssertNil(UserPromptOrder.moving([], id: prompt.id, toInsertionIndex: 0))
+        XCTAssertNil(UserPromptOrder.moving([prompt], id: UUID(), toInsertionIndex: 0))
+        XCTAssertNil(UserPromptOrder.moving([prompt], id: prompt.id, toInsertionIndex: -1))
+        XCTAssertNil(UserPromptOrder.moving([prompt], id: prompt.id, toInsertionIndex: 2))
+        XCTAssertNil(UserPromptOrder.moving([prompt], id: prompt.id, toInsertionIndex: 1))
+    }
+
     private func make(
         _ title: String,
         slot: UserPrompt.Slot,

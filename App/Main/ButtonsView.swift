@@ -1,6 +1,5 @@
 import DesktopRewriteKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct ButtonsView: View {
     @ObservedObject var model: MainModel
@@ -24,9 +23,9 @@ struct ButtonsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             PageTitle(title: tr("ボタン", "Buttons", "按钮"), subtitle: tr(
-                "よく使う指示を、自分の順番で。変更はスマホにも同期されます。",
-                "Your instructions, in your order. Changes sync to your phone too.",
-                "常用指令，按你的顺序排列。修改也会同步到手机。"))
+                "Macで使う指示を、自分の順番で。",
+                "Your Mac buttons, in your order.",
+                "Mac常用指令，按你的顺序排列。"))
             if model.isSignedIn {
                 toolbar
                 if let error = model.promptsError {
@@ -73,7 +72,7 @@ struct ButtonsView: View {
         }
         .alert(item: $pendingDelete) { prompt in
             Alert(title: Text(tr("このボタンを削除しますか？", "Delete this button?", "删除此按钮？")),
-                  message: Text(tr("スマホからも削除されます。元に戻せません。", "This also deletes it from your phone. This cannot be undone.", "也会从手机上删除，且无法撤销。")),
+                  message: Text(tr("Mac用のボタンから削除されます。元に戻せません。", "This deletes the desktop button. This cannot be undone.", "将删除此桌面按钮，且无法撤销。")),
                   primaryButton: .destructive(Text(tr("削除", "Delete", "删除"))) { model.delete(prompt) },
                   secondaryButton: .cancel())
         }
@@ -88,7 +87,7 @@ struct ButtonsView: View {
                 .font(Tokens.LightFont.body(13)).foregroundStyle(Tokens.Window.textSecondary)
             if model.isLoadingPrompts || model.isSavingButtons || model.isReorderingButtons { ProgressView().controlSize(.small) }
             Spacer()
-            ActionButton(tr("ボタンを追加", "Add a button", "添加按钮"), icon: .add) {
+            ActionButton(tr("ボタンを追加", "Add a button", "添加按钮"), icon: .add, style: .secondary) {
                 confirmChange { selected = nil; adding = true; title = ""; instruction = "" }
             }.disabled(model.isSavingButtons)
         }
@@ -96,78 +95,63 @@ struct ButtonsView: View {
 
     private var buttonList: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(tr("表示順", "BAR ORDER", "显示顺序"))
-                .font(Tokens.LightFont.body(11, weight: .semibold)).foregroundStyle(Tokens.Window.textSecondary)
+            Text(tr("表示順", "Bar order", "显示顺序"))
+                .font(Tokens.LightFont.body(13, weight: .medium)).foregroundStyle(Tokens.Window.textSecondary)
+                .padding(.horizontal, 12)
             if model.prompts.isEmpty {
                 Text(model.isLoadingPrompts ? tr("読み込み中…", "Loading…", "正在加载…") : tr("まだボタンがありません。", "No buttons yet.", "还没有按钮。"))
                     .font(Tokens.LightFont.body(14)).padding(16)
             }
-            ForEach(Array(model.prompts.enumerated()), id: \.element.id) { index, prompt in
-                row(prompt, index: index)
+            if !model.prompts.isEmpty {
+                SavedButtonReorderList(prompts: model.prompts,
+                    selectedID: adding ? nil : selected?.id,
+                    enabled: !model.isSavingButtons && !model.isLoadingPrompts,
+                    onSelect: { prompt in confirmChange { load(prompt) } },
+                    onMove: { id, insertionIndex in
+                        model.movePrompt(id: id, toInsertionIndex: insertionIndex)
+                    })
+                    .padding(.horizontal, 6)
             }
-        }
-    }
 
-    private func row(_ prompt: UserPrompt, index: Int) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: "line.3.horizontal")
-                .foregroundStyle(Tokens.Window.textSecondary)
-                .onDrag { NSItemProvider(object: prompt.id.uuidString as NSString) }
-                .accessibilityLabel(tr("ドラッグして並べ替え", "Drag to reorder", "拖动排序"))
-            Button {
-                confirmChange { load(prompt) }
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(prompt.title).font(Tokens.LightFont.body(13, weight: .medium)).lineLimit(2)
-                    Text(index == 0 ? tr("メイン", "Main", "主要") : prompt.prompt)
-                        .font(Tokens.LightFont.body(11)).foregroundStyle(Tokens.Window.textSecondary).lineLimit(1)
-                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-            }.buttonStyle(.plain)
-            VStack(spacing: 4) {
-                Button { _ = model.movePrompt(id: prompt.id, by: -1) } label: { Image(systemName: "chevron.up") }
-                    .disabled(index == 0).help(tr("上へ", "Move up", "上移"))
-                Button { _ = model.movePrompt(id: prompt.id, by: 1) } label: { Image(systemName: "chevron.down") }
-                    .disabled(index == model.prompts.count - 1).help(tr("下へ", "Move down", "下移"))
-            }.buttonStyle(.plain).font(.system(size: 10, weight: .semibold))
-            Toggle(tr("バーに表示", "Show on bar", "在工具栏显示"), isOn: Binding(
-                get: { prompt.isEnabled }, set: { model.setEnabled(prompt, $0) }))
-                .labelsHidden().toggleStyle(.switch).controlSize(.mini)
         }
-        .padding(10)
-        .background(selected?.id == prompt.id && !adding ? Tokens.Window.selectionLocal : Tokens.Window.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Tokens.Window.hairline))
-        .disabled(model.isSavingButtons)
-        .onDrop(of: [.text], isTargeted: nil) { providers in
-            guard let provider = providers.first else { return false }
-            _ = provider.loadObject(ofClass: String.self) { value, _ in
-                guard let value, let id = UUID(uuidString: value) else { return }
-                Task { @MainActor in model.movePrompt(id: id, before: prompt.id) }
-            }
-            return true
-        }
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Tokens.Window.secondaryPanel)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     @ViewBuilder private var editor: some View {
         if selected != nil || adding {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(adding ? tr("新しいボタン", "New button", "新按钮") : tr("ボタンを編集", "Edit button", "编辑按钮"))
-                    .font(Tokens.LightFont.body(18, weight: .semibold))
-                Text(tr("名前", "Name", "名称")).font(Tokens.LightFont.body(13, weight: .medium))
-                TextField(tr("例：丁寧に", "For example: Make polite", "例如：更礼貌"), text: $title)
-                    .textFieldStyle(.roundedBorder)
-                Text(tr("AIへの指示", "Instructions", "AI指令")).font(Tokens.LightFont.body(13, weight: .medium))
-                TextEditor(text: $instruction)
-                    .font(Tokens.LightFont.body(14)).scrollContentBackground(.hidden)
-                    .padding(8).frame(height: 200)
-                    .background(Tokens.Window.surface)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Tokens.Window.borderControl))
-                    .accessibilityLabel(tr("AIへの指示", "Instructions", "AI指令"))
+            VStack(alignment: .leading, spacing: 24) {
+                Text(adding ? tr("新しいボタン", "New button", "新按钮") : (selected?.title ?? ""))
+                    .font(Tokens.LightFont.body(16, weight: .medium))
+                SavedButtonEditorFields(name: $title, instruction: $instruction)
+                    .id(adding ? "new" : selected?.id.uuidString ?? "none")
+                if let current = model.prompts.first(where: { $0.id == selected?.id }),
+                   let index = model.prompts.firstIndex(where: { $0.id == current.id }) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 16) {
+                            visibilityControl(current)
+                            Spacer(minLength: 0)
+                            orderControls(current, index: index)
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            visibilityControl(current)
+                            orderControls(current, index: index)
+                        }
+                    }
+
+                }
                 HStack {
                     if let selected {
                         Button(role: .destructive) { confirmChange { pendingDelete = selected } } label: {
-                            Image(systemName: "trash")
-                        }.help(tr("削除", "Delete", "删除"))
+                            Label(tr("削除", "Delete", "删除"), systemImage: "trash")
+                                .padding(.vertical, 8).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .font(Tokens.LightFont.body(13))
+                        .foregroundStyle(Tokens.Window.error)
+                        .disabled(model.isReorderingButtons)
                     }
                     Spacer()
                     ActionButton(tr("キャンセル", "Cancel", "取消"), style: .ghost) { load(selected) }
@@ -181,13 +165,31 @@ struct ButtonsView: View {
                     }.disabled(!valid || !dirty || model.isSavingButtons || model.isReorderingButtons)
                 }
             }.padding(20).background(Tokens.Window.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Tokens.Window.hairline))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Tokens.Window.hairline))
                 .disabled(model.isSavingButtons)
         } else {
             Text(tr("ボタンを選択するか、新しく追加してください。", "Select a button or add a new one.", "选择按钮或添加新按钮。"))
                 .font(Tokens.LightFont.body(14)).foregroundStyle(Tokens.Window.textSecondary).padding(24)
         }
+    }
+
+    private func visibilityControl(_ prompt: UserPrompt) -> some View {
+        Toggle(tr("バーに表示", "Show on bar", "在工具栏显示"), isOn: Binding(
+            get: { model.prompts.first { $0.id == prompt.id }?.isEnabled ?? false },
+            set: { model.setEnabled(prompt, $0) }))
+            .toggleStyle(.switch).controlSize(.small)
+            .font(Tokens.LightFont.body(13))
+            .fixedSize()
+            .disabled(model.isReorderingButtons)
+    }
+
+    private func orderControls(_ prompt: UserPrompt, index: Int) -> some View {
+        SavedButtonOrderControls(canMoveUp: index > 0,
+            canMoveDown: index < model.prompts.count - 1,
+            moveUp: { _ = model.movePrompt(id: prompt.id, by: -1) },
+            moveDown: { _ = model.movePrompt(id: prompt.id, by: 1) })
+            .fixedSize()
     }
 
     private func confirmChange(_ action: @escaping () -> Void) {

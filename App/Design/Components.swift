@@ -749,3 +749,86 @@ struct LightPressStyle: ButtonStyle {
             .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
+
+
+struct SavedButtonEditorFields: View {
+    @Binding var name: String
+    @Binding var instruction: String
+    var onboarding = false
+    @FocusState private var focusedField: Field?
+    private enum Field { case name, instruction }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(tr("ボタン名", "Button name", "按钮名称"))
+                    .font(Tokens.LightFont.body(13, weight: .medium))
+                TextField("", text: $name)
+                    .textFieldStyle(.plain)
+                    .font(Tokens.LightFont.body(onboarding ? 16 : 14))
+                    .padding(.horizontal, 12)
+                    .frame(height: onboarding ? 40 : 36)
+                    .modifier(SavedButtonFieldSurface(focused: focusedField == .name))
+                    .focused($focusedField, equals: .name)
+                    .accessibilityLabel(tr("ボタン名", "Button name", "按钮名称"))
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text(tr("書き方の指示", "Writing instructions", "写作指令"))
+                    .font(Tokens.LightFont.body(13, weight: .medium))
+                TextEditor(text: $instruction)
+                    .font(Tokens.LightFont.body(onboarding ? 16 : 14))
+                    .lineSpacing(4)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(height: 160)
+                    .modifier(SavedButtonFieldSurface(focused: focusedField == .instruction))
+                    .focused($focusedField, equals: .instruction)
+                    .accessibilityLabel(tr("書き方の指示", "Writing instructions", "写作指令"))
+            }
+        }
+        .foregroundStyle(Tokens.Window.textPrimary)
+    }
+}
+
+private struct SavedButtonFieldSurface: ViewModifier {
+    var focused: Bool
+    func body(content: Content) -> some View {
+        content
+            .background(Tokens.Window.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(focused ? Tokens.Window.accentText : Tokens.Window.borderControl))
+    }
+}
+
+struct SavedButtonRowSurface: ViewModifier {
+    var selected: Bool
+    func body(content: Content) -> some View {
+        content
+            .background(selected ? Tokens.Window.selectionLocal : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+struct SavedButtonOrderControls: View {
+    var canMoveUp: Bool
+    var canMoveDown: Bool
+    let moveUp: () -> Void
+    let moveDown: () -> Void
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Button(action: moveUp) {
+                Label(tr("上へ移動", "Move up", "上移"), systemImage: "arrow.up")
+                    .padding(.vertical, 6).contentShape(Rectangle())
+            }.disabled(!canMoveUp)
+            Button(action: moveDown) {
+                Label(tr("下へ移動", "Move down", "下移"), systemImage: "arrow.down")
+                    .padding(.vertical, 6).contentShape(Rectangle())
+            }.disabled(!canMoveDown)
+        }
+        .buttonStyle(.plain)
+        .font(Tokens.LightFont.body(13))
+        .foregroundStyle(Tokens.Window.textSecondary)
+    }
+}

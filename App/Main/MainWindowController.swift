@@ -13,6 +13,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard let model else { return true }
         model.leaveButtons {
+            if model.showsWhatsNew { model.dismissWhatsNew(returnToAbout: false) }
             sender.orderOut(nil)
         }
         return false

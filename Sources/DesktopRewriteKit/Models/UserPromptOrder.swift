@@ -2,7 +2,7 @@ import Foundation
 
 /// The shared toolbar order expressed as one desktop list.
 ///
-/// Position zero owns the iPhone's `main` slot; every later position is `sub`.
+/// Position zero owns the desktop's `main` slot; every later position is `sub`.
 /// Keeping this rule pure makes arrow reordering and main-button deletion testable without
 /// SwiftUI or a live Supabase project.
 public enum UserPromptOrder {
@@ -32,6 +32,18 @@ public enum UserPromptOrder {
         let row = next.remove(at: source)
         guard let target = next.firstIndex(where: { $0.id == destination }) else { return nil }
         next.insert(row, at: target)
+        return normalized(next)
+    }
+
+    /// The insertion index is a gap in the original list, including the gap after its last row.
+    public static func moving(_ prompts: [UserPrompt], id: UUID, toInsertionIndex insertion: Int) -> [UserPrompt]? {
+        guard (0...prompts.count).contains(insertion),
+              let source = prompts.firstIndex(where: { $0.id == id }) else { return nil }
+        let destination = insertion > source ? insertion - 1 : insertion
+        guard destination != source else { return nil }
+        var next = prompts
+        let row = next.remove(at: source)
+        next.insert(row, at: destination)
         return normalized(next)
     }
 

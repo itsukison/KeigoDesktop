@@ -63,11 +63,32 @@ final class OnboardingProgressStoreTests: XCTestCase {
         let store = OnboardingProgressStore(defaults: defaults)
         var drafts = OnboardingPresetPack.work.drafts()
         drafts[0].title = "社内"
-        store.save(pack: .work, drafts: drafts)
+        store.save(pack: .work, drafts: drafts, accountID: "A")
 
         let reloaded = OnboardingProgressStore(defaults: defaults)
-        XCTAssertEqual(reloaded.savedPack, .work)
-        XCTAssertEqual(reloaded.savedDrafts, drafts)
+        XCTAssertEqual(reloaded.savedPack(for: "A"), .work)
+        XCTAssertEqual(reloaded.savedDrafts(for: "A"), drafts)
+    }
+
+    func testDraftsAreAccountScopedAndUnownedLegacyDraftsAreIgnored() throws {
+        let drafts = OnboardingPresetPack.work.drafts(writtenIn: .english)
+        defaults.set("work", forKey: "desktopOnboarding.pack")
+        defaults.set(try JSONEncoder().encode(drafts), forKey: "desktopOnboarding.drafts")
+        let store = OnboardingProgressStore(defaults: defaults)
+        XCTAssertNil(store.savedPack(for: "A"))
+        XCTAssertTrue(store.savedDrafts(for: "A").isEmpty)
+        store.save(pack: .work, drafts: drafts, accountID: "A")
+        XCTAssertTrue(store.savedDrafts(for: "B").isEmpty)
+        XCTAssertNil(store.savedPack(for: "B"))
+        let other = OnboardingPresetPack.social.drafts(writtenIn: .english)
+        store.save(pack: .social, drafts: other, accountID: "B")
+        XCTAssertEqual(store.savedDrafts(for: "A"), drafts)
+        XCTAssertEqual(store.savedDrafts(for: "B"), other)
+        store.complete(accountID: "B")
+        XCTAssertTrue(store.savedDrafts(for: "B").isEmpty)
+        XCTAssertEqual(store.savedDrafts(for: "A"), drafts)
+        store.replayCopy().save(pack: .social, drafts: other, accountID: "A")
+        XCTAssertEqual(store.savedDrafts(for: "A"), drafts)
     }
 
     /// Every pack in every language — §17 gives English its own four-button sets and
