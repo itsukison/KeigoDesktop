@@ -272,4 +272,3 @@ Input: Me and Sam was going to send the report yesterday, but we didn’t had th
 ```text
 Sam and I were going to send the report yesterday, but we didn’t have the final numbers.
 ```
-
