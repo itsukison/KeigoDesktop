@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>filmset — slack</title>
+<style>
+/* ─────────────────────────────────────────────────────────────────────────────
+   Film set, not a plate. Every length is a multiple of --u so the whole mockup
+   scales to whatever display it is filmed on; the design grid is 1080 units tall,
+   which is where the numbers below come from (they match Raylight/mockups-en).
+   Width is fluid on purpose — a wide desk display just gets a wider message pane,
+   which is what a real Slack window does.
+   ───────────────────────────────────────────────────────────────────────────── */
+:root{
+  /* The two knobs. A 27"+ desk display is far bigger than the frame a phone keeps,
+     so the window is drawn small and parked bottom-centre — where the pill lives —
+     with free space above and to the sides.
+       --fill  how much of the display height the Slack window takes (0.4–1.0)
+       --lift  space kept below it; 0 parks the window flush on the bottom edge
+     Everything below is a multiple of --u, so changing --fill rescales the whole
+     mockup — chrome, icons and type together — with no ratio change.
+     Override on the fly with a hash token: slack.html#fill=.7 */
+  --fill: .80;
+  --lift: 0px;
+  --desk: #2B2D33;
+  /* flush with the bottom edge, so only the top corners are rounded.
+     Raise --lift above 0 and this wants all four: calc(22 * var(--u)) */
+  --radius: calc(22 * var(--u)) calc(22 * var(--u)) 0 0;
+  --u: calc(100vh * var(--fill) / 1080);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--desk)}
+body{font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
+     -webkit-font-smoothing:antialiased;cursor:default;
+     display:flex;align-items:flex-end;justify-content:center}
+svg{flex:none;display:block}
+
+.win{width:calc(1468 * var(--u));height:calc(1080 * var(--u));
+     margin-bottom:var(--lift);display:flex;flex-direction:column;background:#fff;
+     border-radius:var(--radius);overflow:hidden;
+     box-shadow:0 calc(30 * var(--u)) calc(90 * var(--u)) rgba(0,0,0,.45),
+                0 calc(4 * var(--u)) calc(14 * var(--u)) rgba(0,0,0,.30)}
+.body{flex:1;display:flex;min-height:0}
+
+/* ---- window top bar: Slack's own aubergine chrome, and the traffic lights the
+        fullscreen browser no longer draws for us ---- */
+.top{height:calc(64 * var(--u));background:#3F0E40;flex:none;display:flex;
+     align-items:center;padding:0 calc(20 * var(--u));position:relative}
+.tl{display:flex;gap:calc(11 * var(--u))}
+.tl i{width:calc(17 * var(--u));height:calc(17 * var(--u));border-radius:50%;display:block}
+.srch{position:absolute;left:50%;transform:translateX(-50%);
+      width:calc(560 * var(--u));height:calc(38 * var(--u));
+      background:rgba(255,255,255,.13);border-radius:calc(9 * var(--u));
+      display:flex;align-items:center;gap:calc(10 * var(--u));
+      padding:0 calc(14 * var(--u));color:rgba(255,255,255,.62);
+      font-size:calc(22 * var(--u))}
+
+/* ---- sidebar ---- */
+.sb{width:calc(392 * var(--u));background:#3F0E40;color:#fff;
+    padding:calc(26 * var(--u)) 0;flex:none;overflow:hidden}
+.ws{display:flex;align-items:center;gap:calc(14 * var(--u));
+    padding:0 calc(24 * var(--u)) calc(22 * var(--u));
+    border-bottom:1px solid rgba(255,255,255,.14);margin-bottom:calc(20 * var(--u))}
+.ws b{font-size:calc(38 * var(--u));letter-spacing:-.02em;white-space:nowrap;overflow:hidden}
+.sec{font-size:calc(26 * var(--u));color:rgba(255,255,255,.62);
+     padding:calc(18 * var(--u)) calc(24 * var(--u)) calc(8 * var(--u));font-weight:500}
+.ch{font-size:calc(31 * var(--u));color:rgba(255,255,255,.82);
+    padding:calc(11 * var(--u)) calc(24 * var(--u));display:flex;align-items:center;
+    gap:calc(12 * var(--u))}
+.dm{display:flex;align-items:center;gap:calc(14 * var(--u));
+    padding:calc(10 * var(--u)) calc(24 * var(--u));font-size:calc(30 * var(--u));
+    color:rgba(255,255,255,.82);border-radius:calc(8 * var(--u))}
+.dm.on{background:#1164A3;color:#fff;font-weight:600;
+       margin:0 calc(10 * var(--u));padding-left:calc(14 * var(--u))}
+.dot{width:calc(15 * var(--u));height:calc(15 * var(--u));border-radius:50%;
+     border:calc(3 * var(--u)) solid rgba(255,255,255,.55);flex:none}
+.dot.g{background:#2BAC76;border-color:#2BAC76}
+
+/* ---- main ---- */
+.main{flex:1;display:flex;flex-direction:column;background:#fff;min-height:0}
+.hd{padding:calc(26 * var(--u)) calc(34 * var(--u));border-bottom:1px solid #E4E4E6;
+    display:flex;align-items:center;gap:calc(14 * var(--u));flex:none}
+.hd .avatar{width:calc(46 * var(--u));height:calc(46 * var(--u));font-size:calc(22 * var(--u))}
+.hd b{font-size:calc(40 * var(--u));letter-spacing:-.02em;color:#1D1C1D}
+.hd .mem{font-size:calc(26 * var(--u));color:#8D8D8E;margin-left:calc(6 * var(--u))}
+
+.msgs{flex:1;padding:calc(26 * var(--u)) calc(34 * var(--u));display:flex;
+      flex-direction:column;gap:calc(30 * var(--u));justify-content:flex-end;
+      min-height:0;overflow:hidden}
+.msg{display:flex;gap:calc(18 * var(--u))}
+.avatar{border-radius:calc(12 * var(--u));flex:none;display:grid;place-items:center;
+        color:#fff;font-weight:700}
+.msg .avatar{width:calc(60 * var(--u));height:calc(60 * var(--u));font-size:calc(26 * var(--u))}
+.msg .nm{font-size:calc(30 * var(--u));font-weight:700;color:#1D1C1D}
+.msg .tm{font-size:calc(24 * var(--u));color:#8D8D8E;margin-left:calc(12 * var(--u));font-weight:400}
+.msg .tx{font-size:calc(33 * var(--u));color:#1D1C1D;margin-top:calc(5 * var(--u));
+         line-height:1.38;max-width:calc(1080 * var(--u))}
+
+/* ---- composer: a real editable field, because the joke is the typing ---- */
+.cp{margin:0 calc(34 * var(--u)) calc(24 * var(--u));border:calc(1.5 * var(--u)) solid #C9C9CB;
+    border-radius:calc(16 * var(--u));overflow:hidden;background:#fff;
+    box-shadow:0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(0,0,0,.05);flex:none}
+.cp.focus{border-color:#8D8D8E;box-shadow:0 0 0 calc(1.5 * var(--u)) rgba(0,0,0,.06)}
+.cpt{display:flex;gap:calc(24 * var(--u));padding:calc(13 * var(--u)) calc(18 * var(--u));
+     border-bottom:1px solid #EDEDED;align-items:center;color:#616061}
+/* A native <textarea>, deliberately — not a contenteditable div. Slack's own
+   composer is contenteditable, but a contenteditable root is a weak Accessibility
+   target: the text lives in child nodes, so kAXValue can come back empty and the
+   pill reports "no text to rewrite" over a field that visibly has text in it.
+   A textarea is a real text control — kAXValue, kAXSelectedText and
+   kAXSelectedTextRange all answer properly, which is the whole point here. */
+#box{display:block;width:100%;border:0;background:transparent;resize:none;
+     padding:calc(20 * var(--u)) calc(22 * var(--u));font-size:calc(33 * var(--u));
+     color:#1D1C1D;letter-spacing:-.01em;line-height:1.3;outline:none;
+     word-break:break-word;caret-color:#1D1C1D;
+     min-height:calc(60 * var(--u));max-height:calc(300 * var(--u));overflow:hidden;
+     font-family:inherit}
+#box::placeholder{color:#8D8D8E}
+.cpf{display:flex;align-items:center;padding:calc(13 * var(--u)) calc(18 * var(--u));
+     gap:calc(24 * var(--u));color:#616061}
+.send{margin-left:auto;background:#007A5A;color:#fff;border-radius:calc(10 * var(--u));
+      padding:calc(11 * var(--u)) calc(20 * var(--u));font-size:calc(26 * var(--u));font-weight:600;
+      display:flex;align-items:center;gap:calc(10 * var(--u))}
+.send.off{background:#F6F6F6;color:#B9B9BA}
+
+/* ---- dark theme (K) — a bright monitor is the worst thing to point a phone at ---- */
+body.dark .main,body.dark .cp{background:#1A1D21}
+body.dark .sb{background:#19171D}
+body.dark .top{background:#1A1D21}
+body.dark .hd{border-bottom-color:#35373B}
+body.dark .hd b,body.dark .msg .nm,body.dark .msg .tx,body.dark #box{color:#D1D2D3}
+body.dark .cp{border-color:#35373B}
+body.dark .cpt{border-bottom-color:#2C2D30}
+body.dark #box{caret-color:#D1D2D3}
+
+/* ---- filming aids. Both off by default so neither can end up in a take ---- */
+body.nosb .sb{display:none}
+#hud{position:fixed;top:calc(14 * var(--u));right:calc(16 * var(--u));z-index:99;
+     display:none;font:500 calc(20 * var(--u))/1.5 ui-monospace,Menlo,monospace;
+     color:#fff;background:rgba(0,0,0,.72);padding:calc(10 * var(--u)) calc(16 * var(--u));
+     border-radius:calc(10 * var(--u));pointer-events:none;white-space:pre}
+body.hud #hud{display:block}
+#guide{position:fixed;inset:0;z-index:98;display:none;pointer-events:none;
+       align-items:center;justify-content:center}
+body.guide #guide{display:flex}
+#guide i{display:block;height:100%;aspect-ratio:9/16;
+         outline:calc(3 * var(--u)) dashed rgba(255,0,80,.75);
+         box-shadow:0 0 0 100vmax rgba(0,0,0,.28)}
+</style>
+</head>
+<body>
+
+<div class="win">
+  <div class="top">
+    <div class="tl"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+    <div class="srch">
+      <svg style="width:calc(20 * var(--u));height:calc(20 * var(--u))" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="m21 21l-4.34-4.34"/><circle cx="11" cy="11" r="8"/></g></svg>
+      <span id="srch">Search Meridian Group</span>
+    </div>
+  </div>
+  <div class="body">
+  <div class="sb">
+    <div class="ws">
+      <svg viewBox="0 0 256 256" style="width:calc(40 * var(--u));height:calc(40 * var(--u))"><path fill="#e01e5a" d="M53.841 161.32c0 14.832-11.987 26.82-26.819 26.82S.203 176.152.203 161.32c0-14.831 11.987-26.818 26.82-26.818H53.84zm13.41 0c0-14.831 11.987-26.818 26.819-26.818s26.819 11.987 26.819 26.819v67.047c0 14.832-11.987 26.82-26.82 26.82c-14.83 0-26.818-11.988-26.818-26.82z"/><path fill="#36c5f0" d="M94.07 53.638c-14.832 0-26.82-11.987-26.82-26.819S79.239 0 94.07 0s26.819 11.987 26.819 26.819v26.819zm0 13.613c14.832 0 26.819 11.987 26.819 26.819s-11.987 26.819-26.82 26.819H26.82C11.987 120.889 0 108.902 0 94.07s11.987-26.819 26.819-26.819z"/><path fill="#2eb67d" d="M201.55 94.07c0-14.832 11.987-26.82 26.818-26.82s26.82 11.988 26.82 26.82c0 14.831-11.988 26.818-26.82 26.818H201.55zm-13.41 0c0 14.831-11.988 26.818-26.82 26.818s-26.819-11.987-26.819-26.819V26.82C134.5 11.987 146.488 0 161.32 0s26.819 11.987 26.819 26.819z"/><path fill="#ecb22e" d="M161.32 201.55c14.832 0 26.82 11.987 26.82 26.818s-11.988 26.82-26.82 26.82s-26.819-11.988-26.819-26.82V201.55zm0-13.41c-14.832 0-26.819-11.988-26.819-26.82s11.987-26.819 26.819-26.819h67.25c14.832 0 26.82 11.987 26.82 26.819s-11.988 26.82-26.82 26.82z"/></svg>
+      <b id="ws">Meridian Group</b>
+    </div>
+    <div class="sec">Channels</div>
+    <div class="ch"><svg style="width:calc(26 * var(--u));height:calc(26 * var(--u));color:rgba(255,255,255,.6)" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9h16M4 15h16M10 3L8 21m8-18l-2 18"/></svg> general</div>
+    <div class="ch"><svg style="width:calc(26 * var(--u));height:calc(26 * var(--u));color:rgba(255,255,255,.6)" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9h16M4 15h16M10 3L8 21m8-18l-2 18"/></svg> marketing</div>
+    <div class="ch"><svg style="width:calc(26 * var(--u));height:calc(26 * var(--u));color:rgba(255,255,255,.6)" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9h16M4 15h16M10 3L8 21m8-18l-2 18"/></svg> q3-planning</div>
+    <div class="sec">Direct messages</div>
+    <div class="dm on"><span class="dot g"></span><span id="dm1">Diane Whitaker</span></div>
+    <div class="dm"><span class="dot g"></span> Marco Reyes</div>
+    <div class="dm"><span class="dot"></span> Aya Mori</div>
+  </div>
+
+  <div class="main">
+    <div class="hd">
+      <div class="avatar" id="hdav">D</div>
+      <b id="hdname">Diane Whitaker</b>
+      <span class="mem" id="hdsub"></span>
+    </div>
+
+    <div class="msgs" id="msgs"></div>
+
+    <div class="cp" id="cp">
+      <div class="cpt">
+        <svg style="width:calc(26 * var(--u));height:calc(26 * var(--u))" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/></svg>
+        <svg style="width:calc(26 * var(--u));height:calc(26 * var(--u))" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 4h-9m4 16H5M15 4L9 20"/></svg>
+        <svg style="width:calc(26 * var(--u));height:calc(26 * var(--u))" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 4H9a3 3 0 0 0-2.83 4M14 12a4 4 0 0 1 0 8H6m-2-8h16"/></svg>
+        <svg style="width:calc(26 * var(--u));height:calc(26 * var(--u))" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></g></svg>
+        <svg style="width:calc(26 * var(--u));height:calc(26 * var(--u))" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h.01M3 12h.01M3 19h.01M8 5h13M8 12h13M8 19h13"/></svg>
+      </div>
+
+      <textarea id="box" rows="1" spellcheck="false" autocomplete="off"
+                aria-label="Message" placeholder="Message Diane Whitaker"></textarea>
+
+      <div class="cpf">
+        <svg style="width:calc(28 * var(--u));height:calc(28 * var(--u))" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-7-7v14"/></svg>
+        <svg style="width:calc(28 * var(--u));height:calc(28 * var(--u))" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2s4-2 4-2M9 9h.01M15 9h.01"/></g></svg>
+        <svg style="width:calc(28 * var(--u));height:calc(28 * var(--u))" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></g></svg>
+        <svg style="width:calc(28 * var(--u));height:calc(28 * var(--u))" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16 6l-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg>
+        <span class="send off" id="send">
+          <svg style="width:calc(22 * var(--u));height:calc(22 * var(--u))" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11zm7.318-19.539l-10.94 10.939"/></svg>
+        </span>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<div id="guide"><i></i></div>
+<div id="hud"></div>
+
+<script src="scenarios.js"></script>
+<script>
+/* ─── state ───────────────────────────────────────────────────────────────── */
+const box = document.getElementById('box');
+const cp  = document.getElementById('cp');
+const hud = document.getElementById('hud');
+let idx = 0;
+
+const S = () => window.SCENARIOS[idx];
+
+/* ─── render ──────────────────────────────────────────────────────────────── */
+function esc(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function render(){
+  const s = S(), me = window.ME;
+  document.getElementById('ws').textContent     = s.workspace;
+  document.getElementById('srch').textContent   = 'Search ' + s.workspace;
+  document.getElementById('dm1').textContent    = s.dm;
+  document.getElementById('hdname').textContent = s.dmTitle || s.dm;
+  document.getElementById('hdsub').textContent  = s.dmSubtitle || '';
+  box.placeholder = 'Message ' + s.dm;
+
+  const boss = s.thread.find(m => !m.me) || {};
+  const av = document.getElementById('hdav');
+  av.textContent = boss.initial || '?';
+  av.style.background = boss.color || '#8D8D8E';
+
+  document.getElementById('msgs').innerHTML = s.thread.map(m => {
+    const nm  = m.me ? me.name    : m.from;
+    const ini = m.me ? me.initial : m.initial;
+    const col = m.me ? me.color   : m.color;
+    return `<div class="msg">
+      <div class="avatar" style="background:${col}">${esc(ini)}</div>
+      <div><div><span class="nm">${esc(nm)}</span><span class="tm">${esc(m.time)}</span></div>
+      <div class="tx">${esc(m.text)}</div></div></div>`;
+  }).join('');
+
+  setText('');
+  drawHud();
+}
+
+function drawHud(){
+  const s = S();
+  hud.textContent = `${s.id}  ${idx + 1}/${window.SCENARIOS.length}\n${s.situation}`;
+}
+
+/* ─── composer ────────────────────────────────────────────────────────────── */
+/* The box is a normal editable field and stays that way: the message is typed and
+ * deleted by hand on camera, so nothing here animates or drives it. */
+function grow(){ box.style.height = 'auto'; box.style.height = box.scrollHeight + 'px'; }
+
+function setText(t){
+  box.value = t;
+  document.getElementById('send').classList.toggle('off', !t);
+  grow();
+  box.focus();
+  box.setSelectionRange(t.length, t.length);
+  cp.classList.add('focus');
+}
+
+function go(n){
+  idx = (n + window.SCENARIOS.length) % window.SCENARIOS.length;
+  render();
+}
+
+/* ─── keys ────────────────────────────────────────────────────────────────── */
+/* Typing is yours. Only two interventions:
+ *   - Enter and Tab are swallowed, so a real key never sends the message or
+ *     tabs out of the field mid-take.
+ *   - Set-up commands all sit behind ⌥, which cannot be hit by accident while
+ *     typing, and never behind ⌘ — ⌘A / ⌘C / ⌘V are the product's own path into
+ *     this field (AGENTS.md §5: a browser is read via AX, written via ⌘V).
+ * e.code, not e.key: ⌥K reports "˚" on a Mac keyboard. */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); return; }
+  if (!e.altKey || e.metaKey || e.ctrlKey) return;
+
+  const cmd = {
+    ArrowRight: () => go(idx + 1),
+    ArrowLeft:  () => go(idx - 1),
+    KeyC: () => setText(''),
+    KeyK: () => document.body.classList.toggle('dark'),
+    KeyS: () => document.body.classList.toggle('nosb'),
+    KeyG: () => document.body.classList.toggle('guide'),
+    KeyH: () => document.body.classList.toggle('hud'),
+    KeyF: () => document.documentElement.requestFullscreen?.(),
+  }[e.code];
+
+  if (cmd){ e.preventDefault(); cmd(); return; }
+
+  const d = /^Digit([1-9])$/.exec(e.code);
+  if (d){ e.preventDefault(); go(parseInt(d[1], 10) - 1); }
+}, true);
+
+/* Clicking the mockup outside the composer puts the caret back, without blocking
+ * a click or a drag-select inside it. */
+document.addEventListener('mousedown', e => { if (!cp.contains(e.target)) { e.preventDefault(); box.focus(); } });
+box.addEventListener('focus', () => cp.classList.add('focus'));
+box.addEventListener('input', () => {
+  document.getElementById('send').classList.toggle('off', !box.value);
+  grow();
+});
+
+/* Framing helpers. Hash tokens, combinable with - or +:
+ *   #genz #corp   the line already in the box, so a shot can be framed before rolling
+ *   #dark #nosb #guide #hud   same as the ⌥K / ⌥S / ⌥G / ⌥H commands, set at load
+ *   #fill=.7      resize the window without editing the CSS knob */
+render();
+const H = location.hash.slice(1).split(/[-,+]/);
+if (H.includes('dark'))  document.body.classList.add('dark');
+if (H.includes('nosb'))  document.body.classList.add('nosb');
+if (H.includes('guide')) document.body.classList.add('guide');
+if (H.includes('hud'))   document.body.classList.add('hud');
+const fill = H.map(t => /^fill=([\d.]+)$/.exec(t)).find(Boolean);
+if (fill) document.documentElement.style.setProperty('--fill', fill[1]);
+if (H.includes('genz'))  setText(S().genz);
+if (H.includes('corp'))  setText(S().corporate);
+box.focus();
+</script>
+</body>
+</html>

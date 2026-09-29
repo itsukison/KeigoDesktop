@@ -1,0 +1,557 @@
+{
+ "retrieved_at": "2026-08-22",
+ "notes": [
+  "GitHub raw URLs are pinned to the exact commit fetched.",
+  "Website assets are preserved locally and identified by SHA-256 because their URLs are not versioned.",
+  "The three legacy hook photos retain only a Pinterest origin in macOS metadata; their exact pin URLs were not preserved. New hook photos must record the exact source URL before use.",
+  "App Store visuals are storefront-specific. The `visual` entries were pulled for the Japanese campaign; two of them (amphetamine, coteditor) render a Japanese UI, so the English cards use `visual_en` from the US storefront instead. Check any new App Store asset against the language of the campaign that will use it.",
+  "Posts 007-012 (18 apps, added 2026-08-22) were pulled from the US storefront only: icon at 512x512bb.png, first screenshot at 800x500bb.jpg. Four candidates (Bezel, Session, Soulver, Hyperduck) ship only portrait screenshots and were dropped rather than squeezed into a landscape card; HazeOver, PDF Squeezer, Folder Peek and One Thing replaced them. The JA cards for 007-012 therefore carry English-language product art, as ja-002/003 already did."
+ ],
+ "hooks": {
+  "_.jpeg": {
+   "source_page": "https://jp.pinterest.com/",
+   "exact_source_url": null,
+   "provenance_status": "legacy-incomplete",
+   "sha256": "1d5eea421ef896b883a029c80c9c51edc18db26e75bdad8b69df47e6a5737a1a"
+  },
+  "Macbook Air M4 Sky Blue.jpeg": {
+   "source_page": "https://jp.pinterest.com/",
+   "exact_source_url": null,
+   "provenance_status": "legacy-incomplete",
+   "sha256": "e46b18b90355367d064c8a345b55e2442d459858ca4052398c44212cec08827c"
+  },
+  "Macbook ios ideas.jpeg": {
+   "source_page": "https://jp.pinterest.com/",
+   "exact_source_url": null,
+   "provenance_status": "legacy-incomplete",
+   "sha256": "d8adcf40f5cd88ea9b1d1451cbc132bf0b06aa55b80719492fc89f7c286f284a"
+  },
+  "summer.jpeg": {
+   "source_page": "https://jp.pinterest.com/",
+   "exact_source_url": null,
+   "provenance_status": "legacy-incomplete",
+   "sha256": "1613e9fd15706dd90902ebc4088e34469afa22fb8e5d6f7f756b24a92a89ebaa"
+  },
+  "macbook wallpaper.jpeg": {
+   "source_page": "https://jp.pinterest.com/",
+   "exact_source_url": null,
+   "provenance_status": "legacy-incomplete",
+   "sha256": "ea71295321e203d92c4ba9bc917d0f1da36dc618c66c1f39555d6d304988d16c"
+  }
+ },
+ "apps": {
+  "shottr": {
+   "product_page": "https://shottr.cc/",
+   "icon": {
+    "source_url": "https://shottr.cc/dl/Shottr-1.9.1.pkg",
+    "source_path": "Payload/Shottr.app (CFBundleIconName=AppIcon)",
+    "local_file": "apps/shottr/icon.png",
+    "sha256": "1d6f55c97ee52db48db4d6f4a20baade5f0b1833eb8710a04448a8c9c42d6399"
+   },
+   "visual": {
+    "source_url": "https://shottr.cc/assets/19-preview.jpg",
+    "local_file": "apps/shottr/visual.jpg",
+    "sha256": "2518708110317a8604b9c1d913499aadc8738637e446c96b8fa352905ca95837"
+   }
+  },
+  "rectangle": {
+   "product_page": "https://rectangleapp.com/",
+   "source_commit": "425d5dc8a07f8411e737071e0fc7228801ee071d",
+   "icon": {
+    "source_url": "https://raw.githubusercontent.com/rxhanson/Rectangle/425d5dc8a07f8411e737071e0fc7228801ee071d/Rectangle/Assets.xcassets/AppIcon.appiconset/mac512pts1x.png",
+    "local_file": "apps/rectangle/icon.png",
+    "sha256": "7d1b59193f6caf316803371cd6df96a8db32c49cefce2e52d3d9a163dc9dd8c2"
+   },
+   "visual": {
+    "source_url": "https://rectangleapp.com/assets/images/snapAreaScreenshot.jpg",
+    "local_file": "apps/rectangle/visual.jpg",
+    "sha256": "559bc2cee807244c39f33e3830aaf7e8f6c77737d83feff2e149dde166880d40"
+   }
+  },
+  "maccy": {
+   "product_page": "https://maccy.app/",
+   "source_commit": "d994f91f11e4836d155f41119577237ce7d9d5b4",
+   "icon": {
+    "source_url": "https://raw.githubusercontent.com/p0deje/Maccy/d994f91f11e4836d155f41119577237ce7d9d5b4/Maccy/Assets.xcassets/AppIcon.appiconset/AppIcon%20%28Big%20Sur%29-1024w.png",
+    "local_file": "apps/maccy/icon.png",
+    "sha256": "01492092f1aaad104d3d4fd535b35da7e2b3887d5fd3ca787744fa6156472ea9"
+   },
+   "visual": {
+    "source_url": "https://raw.githubusercontent.com/p0deje/Maccy/d994f91f11e4836d155f41119577237ce7d9d5b4/Designs/Instructions.png",
+    "local_file": "apps/maccy/visual.png",
+    "sha256": "4b4ffba0c3f8cd41b28e44188fd3b922e6b157919ce22e9f7f17403156c838ce"
+   }
+  },
+  "stats": {
+   "product_page": "https://mac-stats.com/",
+   "source_commit": "db5fee1eae913e24a7e0c4a0395092d867cf902d",
+   "icon": {
+    "source_url": "https://raw.githubusercontent.com/exelban/stats/db5fee1eae913e24a7e0c4a0395092d867cf902d/Stats/Supporting%20Files/Assets.xcassets/AppIcon.appiconset/icon_512x512%402x.png",
+    "local_file": "apps/stats/icon.png",
+    "sha256": "6e75559458751c34148d3f7a96c7282ac01ecbd87f4a030e1bca635bb0a5ad10"
+   },
+   "visual": {
+    "source_url": "https://mac-stats.com/img/Stats.webp",
+    "local_file": "apps/stats/visual.webp",
+    "sha256": "ec71ea61b109d16738727ce556bdc4cc63d6c776c17441ee9719e42011ab0fed"
+   }
+  },
+  "alttab": {
+   "product_page": "https://alt-tab.app/",
+   "source_commit": "941d841e7bacb6dec2134e11df93e6991b6584fc",
+   "icon": {
+    "source_url": "https://alt-tab.app/public/icon-big-3e83b6f7.webp",
+    "local_file": "apps/alttab/icon.webp",
+    "sha256": "3e83b6f7865ea4f4460d012316230594b5299bee6ce68f947693290e9c2a4b90"
+   },
+   "visual": {
+    "source_url": "https://alt-tab.app/public/pro/hero-18f0ec20.webp",
+    "local_file": "apps/alttab/visual.webp",
+    "sha256": "18f0ec20b2de91ca9aff29881059f793acbdf5ffffc40ffe3df3fc51ee39788e"
+   }
+  },
+  "monitorcontrol": {
+   "product_page": "https://monitorcontrol.app/",
+   "source_commit": "f16d90f29cefbd9fff47e26fc8f99fe7a5280deb",
+   "icon": {
+    "source_url": "https://raw.githubusercontent.com/MonitorControl/MonitorControl/f16d90f29cefbd9fff47e26fc8f99fe7a5280deb/MonitorControl/Assets.xcassets/AppIcon.appiconset/Icon-1024.png",
+    "local_file": "apps/monitorcontrol/icon.png",
+    "sha256": "aca32b4d7e1751ee9a966343958f29d8b3336ad41263f91f2f65c9e662dc299d"
+   },
+   "visual": {
+    "source_url": "https://raw.githubusercontent.com/MonitorControl/MonitorControl/f16d90f29cefbd9fff47e26fc8f99fe7a5280deb/.github/screenshot.png",
+    "local_file": "apps/monitorcontrol/visual.png",
+    "sha256": "dedc0a5c28bb5604b71b7917d2072f94b7ade094e64674b2d35def3ec7720736"
+   }
+  },
+  "meetingbar": {
+   "product_page": "https://apps.apple.com/jp/app/meetingbar/id1532419400?mt=12",
+   "app_store_id": 1532419400,
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/10/ca/83/10ca833d-011c-1a65-fdb5-f6156b6166e7/AppIcon-0-0-85-220-0-0-5-0-2x.png/512x512bb.png",
+    "local_file": "apps/meetingbar/icon.png",
+    "sha256": "7028eb04c5479d2212f4c2d996c0e505db7a86d9699b5da5015ecb4c2874d9f0"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/0c/09/74/0c097471-c6e2-9ef2-ccea-54a4fb33c536/b4d383d6-bd89-4bf0-8bcc-7614da2a1a04_screenshot__U00284_U0029.png/800x500bb.jpg",
+    "local_file": "apps/meetingbar/visual.jpg",
+    "sha256": "1eba3e0090452b4c4461d61deb4257b8a91ac8b1c662a5cd7fbc33781a415180"
+   }
+  },
+  "handmirror": {
+   "product_page": "https://apps.apple.com/jp/app/hand-mirror/id1502839586?mt=12",
+   "app_store_id": 1502839586,
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/0a/03/a5/0a03a5c7-0811-0d8c-996b-54c14a4ccc6e/AppIcon-0-0-85-220-0-0-6-0-2x-sRGB.png/512x512bb.png",
+    "local_file": "apps/handmirror/icon.png",
+    "sha256": "e8bf8070f68f2bff35eee68c3050cbba8f3120d720c6131682bca3ac90725b06"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/c5/b6/d0/c5b6d0df-cbc0-1ba6-f447-12c89cbed77c/screenshot-1.png/800x500bb.jpg",
+    "local_file": "apps/handmirror/visual.jpg",
+    "sha256": "24f0f50888d7006cafe422c0eb6ab0544274dd66b613410a14818b33e8b0c44d"
+   }
+  },
+  "localsend": {
+   "product_page": "https://localsend.org/",
+   "app_store_page": "https://apps.apple.com/jp/app/localsend/id1661733229",
+   "app_store_id": 1661733229,
+   "icon": {
+    "source_url": "https://localsend.org/img/logo.png",
+    "local_file": "apps/localsend/icon.png",
+    "sha256": "2434b6e64d484544322d2aedc8dee8b2e7511a3a56c134ea6be794385ca8878f"
+   },
+   "visual": {
+    "source_url": "https://localsend.org/img/hero-desktop.webp",
+    "local_file": "apps/localsend/visual.png",
+    "sha256": "a18a7846e66da25b31fb25d96efafda597dfa40fba08891ce9822796d4240478"
+   }
+  },
+  "velja": {
+   "product_page": "https://apps.apple.com/jp/app/velja/id1607635845?mt=12",
+   "app_store_id": 1607635845,
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/0a/ec/6f/0aec6fd1-b427-80e4-4610-2574afe54e0b/AppIcon-0-0-85-220-0-6-0-2x-sRGB.png/512x512bb.png",
+    "local_file": "apps/velja/icon.png",
+    "sha256": "4b724094465fcecdad979aa6f8e66fd8107f4ba383253a32235faf2453d89e6f"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/48/5f/f4/485ff434-06ed-d55d-6f8d-a5dbaf81396b/32f69bf9-7bcc-4230-ad00-f72015a7f9a4_screenshot1.png/800x500bb.jpg",
+    "local_file": "apps/velja/visual.jpg",
+    "sha256": "a765d7ca9b6a59bf8dece650b8bdd8b99dce6d4cc748b36fc5f137f231684010"
+   }
+  },
+  "keka": {
+   "product_page": "https://apps.apple.com/jp/app/keka/id470158793?mt=12",
+   "app_store_id": 470158793,
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/f1/16/84/f11684b8-e695-d9ea-4ff4-692c130876a9/Keka-0-0-85-220-0-5-0-2x.png/512x512bb.png",
+    "local_file": "apps/keka/icon.png",
+    "sha256": "61d1459dbbfefcbff2cb819a48c8f6e676675dcf91ca4581bd39683f34e7244d"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource116/v4/83/dd/7b/83dd7b5c-5930-4ee2-822f-945896434150/66b8db12-a471-47b8-b1d6-94cf25f5dfca_1.png/800x500bb.jpg",
+    "local_file": "apps/keka/visual.jpg",
+    "sha256": "07de1d3887436aa4a93ef1900be7b0d9f01eed17148cc73c30f66284adef5f95"
+   }
+  },
+  "coteditor": {
+   "product_page": "https://apps.apple.com/jp/app/coteditor/id1024640650?mt=12",
+   "app_store_id": 1024640650,
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/ce/79/16/ce791630-90ff-4cd8-c87a-f1c1cc7b56ce/AppIcon-0-0-85-220-0-0-0-6-0-2x-0-0-0.png/512x512bb.png",
+    "local_file": "apps/coteditor/icon.png",
+    "sha256": "135f27761b00d16a54fbe35e4738af48c62733abe8794e2420b78c060bcc933e"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/d2/b8/3c/d2b83cd9-d575-fe0b-c7d5-6e937a5ed61a/Editor@2x.png/800x500bb.jpg",
+    "local_file": "apps/coteditor/visual.jpg",
+    "sha256": "810de8065e7629fc6dd75f64de1e052ebfba72f1b2656f5367f1dd3de4946b02"
+   },
+   "visual_en": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/4b/fe/48/4bfe48e9-2dfd-19b6-60be-9ee8a1621371/Editor@2x.png/800x500bb.jpg",
+    "storefront": "us",
+    "note": "English-UI equivalent of visual.jpg, whose JP-storefront original shows Japanese menus and a Japanese Find & Replace panel. Used by the en-* cards only.",
+    "local_file": "apps/coteditor/visual_en.jpg",
+    "sha256": "af00a8e5bfc4d2054788ddf4cfce0e0707b7ed926f9a85a423ba60d3d75ed1c8"
+   }
+  },
+  "amphetamine": {
+   "product_page": "https://apps.apple.com/jp/app/amphetamine/id937984704?mt=12",
+   "app_store_id": 937984704,
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple116/v4/b9/93/46/b99346d8-5dcd-e78a-25fe-8810a64771ce/AppIcon-0-0-85-220-0-4-0-2x.png/512x512bb.png",
+    "local_file": "apps/amphetamine/icon.png",
+    "sha256": "10acd249af1ee46ab628aa9af99fdd904883d04a9c9613dcc3777aed40823d8a"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource114/v4/ff/12/fd/ff12fd3d-f81a-0bac-2680-2895e5d4e1c2/6ee56f4d-40d9-4302-b747-4a7723e85310_Amph_2021_Jp_001.jpg/800x500bb.jpg",
+    "local_file": "apps/amphetamine/visual.jpg",
+    "sha256": "d0c6d95b53a39551746f2761fe24b840f1a1d9cdaf1cf81d1eef3dcdc22f35db"
+   },
+   "visual_en": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource114/v4/43/a8/76/43a876c0-da3d-a7a0-dc88-a9961ad1d6d3/0d81778e-b695-4487-9f29-b91ad7b68eb5_amph_ASC_2021_01.jpg/800x500bb.jpg",
+    "storefront": "us",
+    "note": "English-UI equivalent of visual.jpg, which came from the JP storefront (Amph_2021_Jp_001.jpg) and shows a Japanese menu. Used by the en-* cards only.",
+    "local_file": "apps/amphetamine/visual_en.jpg",
+    "sha256": "2bb2f26e25a06c3a4e172200e740cb26c1bc8f965fb449d02f43ca38c15ebb52"
+   }
+  },
+  "purepaste": {
+   "product_page": "https://apps.apple.com/jp/app/pure-paste/id1611378436?mt=12",
+   "app_store_id": 1611378436,
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/26/85/03/26850301-3ff8-4d1b-fed0-00d6a1a4b9fd/AppIcon-0-0-85-220-0-6-0-2x-sRGB.png/512x512bb.png",
+    "local_file": "apps/purepaste/icon.png",
+    "sha256": "036e6868104d6026ad43a886278f80ed03f2623b40f78d432213f25ce535edd8"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource126/v4/23/88/21/238821a0-ac22-9956-84e7-89aaacc3b319/8debd31c-183a-41c4-9ad8-b480cef8e5c7_screenshot1.png/800x500bb.jpg",
+    "local_file": "apps/purepaste/visual.jpg",
+    "sha256": "9f826f489b4ae714cf7563ecae88aed90bb7a9bfbc81a4b918de82f4bd4c968c"
+   }
+  },
+  "grandperspective": {
+   "product_page": "https://apps.apple.com/jp/app/grandperspective/id1111570163?mt=12",
+   "app_store_id": 1111570163,
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/2a/d4/6f/2ad46f0d-3ea5-f14a-e998-f2789ca4fb5e/GrandPerspectiveLogo-0-0-85-220-0-6-0-2x.png/512x512bb.png",
+    "local_file": "apps/grandperspective/icon.png",
+    "sha256": "8961a164ef162fda056a51decf50f7f09ac5425dc4c4c84020395d6818295c35"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource116/v4/39/a7/52/39a75228-25c7-fb5a-fca1-45a834751c33/65947967-4c95-40fe-8eed-a017bf8f2a1e_3_4_1-Folders_Bujumbura.png/800x500bb.jpg",
+    "local_file": "apps/grandperspective/visual.jpg",
+    "sha256": "75683f46ae3ab2de4ed0de42c15f089a721219ba666691bf03f13c0d8681edd8"
+   }
+  },
+  "dato": {
+   "product_page": "https://apps.apple.com/us/app/dato/id1470584107",
+   "app_store_id": 1470584107,
+   "track_name": "Dato",
+   "seller": "Sindre Sorhus",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e0/1a/4d/e01a4dea-5680-13dd-0eb8-1e1609cdbfda/AppIcon-0-0-85-220-0-0-6-0-2x.png/512x512bb.png",
+    "local_file": "apps/dato/icon.png",
+    "sha256": "e72c6cda14b06e155bb3282edddbac3f962bb57b896417a8f0cdcd8824d9e038"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/1f/32/0e/1f320e43-74e8-3f96-fb1f-cfa263c6f981/280e858e-22c1-4d9d-9985-473500bc6325_screenshot1.png/800x500bb.jpg",
+    "local_file": "apps/dato/visual.jpg",
+    "sha256": "f10c448dfac60dadb971f24ec11a21b22e61700ab844ed01c4e09c4cff8d6f71"
+   }
+  },
+  "klack": {
+   "product_page": "https://apps.apple.com/us/app/klack/id6446206067",
+   "app_store_id": 6446206067,
+   "track_name": "Klack",
+   "seller": "Henrik Ruscon",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/1c/23/f5/1c23f550-b03c-7520-22ca-1668716409b5/AppIcon-0-0-85-220-0-0-6-0-2x-sRGB.png/512x512bb.png",
+    "local_file": "apps/klack/icon.png",
+    "sha256": "d04249e84293632fc775dc1367c4db26b2062aa4aa40e73d9297b7fda15750cf"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/f2/69/be/f269bed0-1a45-c010-7778-577812689d4f/screen_1.png/800x500bb.jpg",
+    "local_file": "apps/klack/visual.jpg",
+    "sha256": "9c9d2ba17d2d9062e5b8c9633b9c4691e20e3dc9c6f4d213bd12f57ad068374f"
+   }
+  },
+  "toothfairy": {
+   "product_page": "https://apps.apple.com/us/app/toothfairy/id1191449274",
+   "app_store_id": 1191449274,
+   "track_name": "ToothFairy",
+   "seller": "C-Command Software, LLC",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/5b/8b/c7/5b8bc715-02ae-3cf1-e691-937c16f8f620/AppIcon-0-0-85-220-0-0-6-0-2x-sRGB.png/512x512bb.png",
+    "local_file": "apps/toothfairy/icon.png",
+    "sha256": "ef06d7a8a6f67331c4439baacb031d2d207653e191998e686200ec4228772042"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/40/9f/2f/409f2f1a-3e78-adbc-67f8-675f30177883/Screenshot1.png/800x500bb.jpg",
+    "local_file": "apps/toothfairy/visual.jpg",
+    "sha256": "c9f0abb183a4e624adf7b1a1a4b5e6cd47d594a9465fcbecfef70a22e562ba37"
+   }
+  },
+  "commandx": {
+   "product_page": "https://apps.apple.com/us/app/command-x/id6448461551",
+   "app_store_id": 6448461551,
+   "track_name": "Command X",
+   "seller": "Sindre Sorhus",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/cf/20/e3/cf20e3f6-b9f5-db90-ef5c-f4e480bc87cb/AppIcon-0-0-85-220-0-6-0-2x.png/512x512bb.png",
+    "local_file": "apps/commandx/icon.png",
+    "sha256": "30439ef725e7910b2e68a7a570fc115cc30752bad9863dc911b9e75e14bb63bb"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource126/v4/45/0f/6c/450f6cba-1b02-4142-ed5e-77008640bbbb/539d6360-ace5-47d4-85e4-362bef62eced_screenshot1.png/800x500bb.jpg",
+    "local_file": "apps/commandx/visual.jpg",
+    "sha256": "1be2f89cde553bcd985a34c892759c1c5bf156629511ceb950d95e5a1403de05"
+   }
+  },
+  "permute": {
+   "product_page": "https://apps.apple.com/us/app/permute-3/id1444998321",
+   "app_store_id": 1444998321,
+   "track_name": "Permute 3",
+   "seller": "Charlie Monroe Software, s.r.o.",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/2b/be/57/2bbe577c-9bc6-8bda-3fba-0991ca4f004e/AppIcon-0-0-85-220-0-0-6-0-2x-sRGB.png/512x512bb.png",
+    "local_file": "apps/permute/icon.png",
+    "sha256": "c3a8f0cb23cda6c4ccdf83bd788af08e55d699bda3fbf6be3a4ffb79e45743af"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple118/v4/55/6f/56/556f5699-ee40-2c97-4a3d-b83ca4b25bf4/pr_source.jpg/800x500bb.jpg",
+    "local_file": "apps/permute/visual.jpg",
+    "sha256": "404150c2e652902ee980f46a8dbae2827353761d4d69faa5d362cbcd4826e469"
+   }
+  },
+  "transloader": {
+   "product_page": "https://apps.apple.com/us/app/transloader/id572281534",
+   "app_store_id": 572281534,
+   "track_name": "Transloader",
+   "seller": "Matthias Gansrigler-Hrad",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/f4/ae/8c/f4ae8c61-ad2f-b323-5b7e-8f9ec9d0240f/AppIcon-0-0-85-220-0-0-6-0-2x.png/512x512bb.png",
+    "local_file": "apps/transloader/icon.png",
+    "sha256": "f719e72f6bf5539067bef607908725e64b062a1afb882afbeb90932c91a2359b"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource115/v4/9a/d4/e4/9ad4e4be-471e-c509-4770-fe1430e0d509/44fb1a72-2215-4b25-b400-ed69bc627921_MAS_Transloader_Screen_1_-_Intro.jpg/800x500bb.jpg",
+    "local_file": "apps/transloader/visual.jpg",
+    "sha256": "5ff600199d8be1d86600e39aa55c804ecdb6076cd22cf9acfc3cdc5a70b489f6"
+   }
+  },
+  "gifski": {
+   "product_page": "https://apps.apple.com/us/app/gifski/id1351639930",
+   "app_store_id": 1351639930,
+   "track_name": "Gifski",
+   "seller": "Sindre Sorhus",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/0d/ce/09/0dce099f-0180-c44d-92a7-038b4ad410bd/AppIcon-0-0-85-220-0-6-0-2x.png/512x512bb.png",
+    "local_file": "apps/gifski/icon.png",
+    "sha256": "d1731cb034f133fee416371741113397a4e5dcaa07170e525e36379ea44eedea"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple113/v4/b2/f5/6c/b2f56c85-dc7b-d3de-8d84-94a4c8e5fea3/pr_source.png/800x500bb.jpg",
+    "local_file": "apps/gifski/visual.jpg",
+    "sha256": "5954b76b4fc40582eb6ef1be7c2b7147db7024813ca5355ed03a0720765980e7"
+   }
+  },
+  "meta": {
+   "product_page": "https://apps.apple.com/us/app/meta-music-tag-editor/id558317092",
+   "app_store_id": 558317092,
+   "track_name": "Meta — Music Tag Editor",
+   "seller": "Benjamin Jaeger",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/5d/3a/a2/5d3aa25a-1923-eb94-cbbb-9f7a0c30773f/Meta-0-0-85-181-0-0-0-0-1x-0-0-0.png/512x512bb.png",
+    "local_file": "apps/meta/icon.png",
+    "sha256": "0dcb3ea194658c2b3c58726a630ee2d2ce2be75ec06dfe66ecaff9509b137ee5"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource122/v4/c5/0e/bd/c50ebd2d-dbe7-2ab0-e3fd-3d00ee4ce74f/0aad4517-4c38-4dfc-a2e8-89526a6c58c5_1.png/800x500bb.jpg",
+    "local_file": "apps/meta/visual.jpg",
+    "sha256": "be5eb1caf5da750fe917285710c6a9abb111a595960997a267daa611ccd3fb92"
+   }
+  },
+  "timeout": {
+   "product_page": "https://apps.apple.com/us/app/time-out-break-reminders/id402592703",
+   "app_store_id": 402592703,
+   "track_name": "Time Out - Break Reminders",
+   "seller": "Dejal Systems, LLC",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/15/7a/a1/157aa18f-827a-ea2a-2121-44139441b971/AppIcon-0-0-85-220-0-0-5-0-2x.png/512x512bb.png",
+    "local_file": "apps/timeout/icon.png",
+    "sha256": "600e96db94fb783f44fd6017f4911835a441f1fb5910364ea395c5cfcc35c9ae"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/3d/ac/d6/3dacd636-9fe5-34bb-1c85-f417cbee3eda/break.png/800x500bb.jpg",
+    "local_file": "apps/timeout/visual.jpg",
+    "sha256": "b3cce9f123f3a77a367df427ac21405e138e94a9246572287ab2c298158b46c3"
+   }
+  },
+  "plash": {
+   "product_page": "https://apps.apple.com/us/app/plash/id1494023538",
+   "app_store_id": 1494023538,
+   "track_name": "Plash",
+   "seller": "Sindre Sorhus",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/3a/9f/7a/3a9f7a8d-c594-baaa-1deb-4a38026b2ee2/AppIcon-0-0-85-220-0-6-0-2x.png/512x512bb.png",
+    "local_file": "apps/plash/icon.png",
+    "sha256": "9272c6bacef7395bdae1972d59f838bbee29085d9894e6a39f4adb75ed3e7d73"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource124/v4/15/ec/a7/15eca76f-740e-3832-7ae4-819cde210d3b/5a271698-1dce-448d-88a8-a75e7b0bd1f4_screenshot1.png/800x500bb.jpg",
+    "local_file": "apps/plash/visual.jpg",
+    "sha256": "d79cf46e49743beb9bcd78738697c3d3cf2a0d34011684f58ddb9358393af159"
+   }
+  },
+  "syscolorpicker": {
+   "product_page": "https://apps.apple.com/us/app/system-color-picker/id1545870783",
+   "app_store_id": 1545870783,
+   "track_name": "System Color Picker",
+   "seller": "Sindre Sorhus",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/ee/ae/b2/eeaeb288-17a6-92eb-fa21-31ff50ed360b/AppIcon-0-0-85-220-0-6-0-2x.png/512x512bb.png",
+    "local_file": "apps/syscolorpicker/icon.png",
+    "sha256": "8cd07a298e343316d1ab5a4ba90b77d0bae320a8b4ab786c5e5418d845178b9e"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource115/v4/2f/ab/f4/2fabf471-e24e-9a20-2824-48cf6a60d6a6/c885766a-39ec-4853-9253-624ccab7d55e_screenshot1.png/800x500bb.jpg",
+    "local_file": "apps/syscolorpicker/visual.jpg",
+    "sha256": "cafd3a2e2749c1818100fcda90f3f796c4654cb59640149eda2836fa438b3b90"
+   }
+  },
+  "charmstone": {
+   "product_page": "https://apps.apple.com/us/app/charmstone/id1563735522",
+   "app_store_id": 1563735522,
+   "track_name": "Charmstone",
+   "seller": "Ryan Hanson",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/66/35/b0/6635b083-4d25-e601-7ff1-feef7423e808/AppIcon-0-0-85-220-0-0-5-0-2x.png/512x512bb.png",
+    "local_file": "apps/charmstone/icon.png",
+    "sha256": "8a84b56ed72b975a82c6fc67dd4df1554db0488308cc41ab0cb5d09c6e9779d5"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource125/v4/25/18/02/25180291-9abf-99a6-2914-47d66ad0d42b/b2f3dfa6-e2a1-438e-a12b-3cd680e58e51_MAS_screenshot_mods.png/800x500bb.jpg",
+    "local_file": "apps/charmstone/visual.jpg",
+    "sha256": "2da8f23ddc40f20e4dc728ffb3a196c697fe7958372d6b4acdd93f2805d3909b"
+   }
+  },
+  "cardhop": {
+   "product_page": "https://apps.apple.com/us/app/cardhop-contacts/id1290358394",
+   "app_store_id": 1290358394,
+   "track_name": "Cardhop - Contacts",
+   "seller": "Flexibits Inc.",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/09/f1/e4/09f1e4f2-4f9f-1dc7-a2e9-93888f3aee29/AppIcon-0-0-85-220-0-0-6-0-2x-sRGB.png/512x512bb.png",
+    "local_file": "apps/cardhop/icon.png",
+    "sha256": "11ae1247124c74d2d77192a706571cb660ba15b2db67f76688ca62fcd0e7cb15"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/ae/1e/e2/ae1ee2a9-1741-5700-92b4-82778d463765/Screen_1.png/800x500bb.jpg",
+    "local_file": "apps/cardhop/visual.jpg",
+    "sha256": "4886b8e63846fb8857f899124c3eebc0e8be48dc75353ca5b34505d4528be49e"
+   }
+  },
+  "shareful": {
+   "product_page": "https://apps.apple.com/us/app/shareful/id1522267256",
+   "app_store_id": 1522267256,
+   "track_name": "Shareful",
+   "seller": "Sindre Sorhus",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/75/f1/67/75f1678e-56f2-ef58-42db-ec539004cb52/AppIcon-0-0-85-220-0-6-0-2x.png/512x512bb.png",
+    "local_file": "apps/shareful/icon.png",
+    "sha256": "0ed72521cd71f1be3dabf8c587f7d84176b2397141f82aa52754bbad8f0f8925"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/81/16/06/811606eb-02dd-075b-e085-7741c580c51d/screenshot1.png/800x500bb.jpg",
+    "local_file": "apps/shareful/visual.jpg",
+    "sha256": "405d03b6fdf5fa8481e91289dc046c382cb55339b1b763dc410f763bae63a934"
+   }
+  },
+  "hazeover": {
+   "product_page": "https://apps.apple.com/us/app/hazeover-distraction-dimmer/id430798174",
+   "app_store_id": 430798174,
+   "track_name": "HazeOver • Distraction Dimmer™",
+   "seller": "Maxim Ananov",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/49/0d/24/490d24b1-b684-fb06-0bd7-02a2c3b2b198/HazeOver.png/512x512bb.png",
+    "local_file": "apps/hazeover/icon.png",
+    "sha256": "2b89377bda53946ba6c1086ad66bcff279a585dc1092698ca9a4938773df4eef"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple114/v4/ed/f8/6d/edf86d42-541a-c190-37aa-8e911e42199d/displays.png/800x500bb.jpg",
+    "local_file": "apps/hazeover/visual.jpg",
+    "sha256": "4d0ef2070318b3c159b56db597109ff9f5a19fbc6586f01687fe4714abae87c1"
+   }
+  },
+  "pdfsqueezer": {
+   "product_page": "https://apps.apple.com/us/app/pdf-squeezer-4/id1502111349",
+   "app_store_id": 1502111349,
+   "track_name": "PDF Squeezer 4",
+   "seller": "Daniel Witt",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/61/d4/f9/61d4f915-ac8b-cb9b-930c-67c48fbb3d61/AppIcon-0-0-85-220-0-0-6-0-2x.png/512x512bb.png",
+    "local_file": "apps/pdfsqueezer/icon.png",
+    "sha256": "1f6f907930a21861f8feb062802776964872398e3ae343e9e55ac1d808e789d8"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/6b/3c/dd/6b3cdde4-f127-1bed-72ab-70765e6fe203/Screenshot-1.png/800x500bb.jpg",
+    "local_file": "apps/pdfsqueezer/visual.jpg",
+    "sha256": "63d4d94b3a8bd89875e9ac58042b4e48036bd57bd29a2a0b352051a924998761"
+   }
+  },
+  "folderpeek": {
+   "product_page": "https://apps.apple.com/us/app/folder-peek/id1615988943",
+   "app_store_id": 1615988943,
+   "track_name": "Folder Peek",
+   "seller": "Sindre Sorhus",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/c8/8b/fa/c88bfa24-85ef-c19e-52f5-e185247e3292/AppIcon-0-0-85-220-0-6-0-2x-sRGB.png/512x512bb.png",
+    "local_file": "apps/folderpeek/icon.png",
+    "sha256": "5e54272e18a29183aa2eacc324cb7961f650c14d5f5b59dee4a1290e2ac03725"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource122/v4/d7/a6/77/d7a677cc-5fb9-7dbf-c160-b060bc896461/a3cf081e-0876-4965-b3a3-69470e060d5f_screenshot1.png/800x500bb.jpg",
+    "local_file": "apps/folderpeek/visual.jpg",
+    "sha256": "6db445edef56f498cb344bcd36fe8b3938ab6297f4f70071e560910a51e54b51"
+   }
+  },
+  "onething": {
+   "product_page": "https://apps.apple.com/us/app/one-thing/id1604176982",
+   "app_store_id": 1604176982,
+   "track_name": "One Thing",
+   "seller": "Sindre Sorhus",
+   "icon": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/80/92/a7/8092a7eb-00a6-b0d5-b2b3-0fd16e40cfb2/AppIcon-0-0-85-220-0-6-0-2x-sRGB.png/512x512bb.png",
+    "local_file": "apps/onething/icon.png",
+    "sha256": "bd4e78867d499c8be15de8957860c137c9f5fe9deadcd6a99cb38e2b90825850"
+   },
+   "visual": {
+    "source_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource116/v4/f5/47/c8/f547c84e-4ea9-d757-a63f-0feae9e9f2fe/fec70b04-3937-4bea-91ef-ff6fabd0238c_screenshot1.png/800x500bb.jpg",
+    "local_file": "apps/onething/visual.jpg",
+    "sha256": "b96ccf928e154e0f72813fb0512b60404da6e91a01c3189678b954b827dc95e6"
+   }
+  }
+ }
+}
