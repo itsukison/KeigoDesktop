@@ -1,71 +1,138 @@
 # KeigoButton for Mac
 
-[KeigoButton](https://keigobutton.com/) is an AI rewrite assistant for macOS and iPhone. This repository contains the Mac app: the same account and saved rewrite buttons as the iPhone keyboard, on a desktop surface.
+The iPhone version of KeigoButton started with a simple idea: rewriting a message should happen where you are already typing.
 
-A small bar sits at the bottom of the screen above the Dock. Hover to expand your configured buttons, run a saved or one-off instruction against the text you are editing, review the result, and insert it in place. Copying an incoming message can also provide explicit context for a complete reply.
+The Mac version asks the same question at a larger scale: **what if every text field on your computer could act like an AI input field?**
 
-## Features
+Instead of opening a separate chatbot, copying context, writing a prompt, and pasting the answer back, KeigoButton sits quietly near the bottom of the screen. Hover over it, choose a saved instruction or write a one-off request, and it works against the text field you were already using.
 
-- **Hover bar** — your `user_prompts` buttons from the phone, plus a custom free-text input
-- **Accessibility-first I/O** — reads and writes via AX; clipboard fallback when needed
-- **Reply mode** — copy a message, hover the bar, describe how you want to answer
-- **Settings window** — edit buttons, view local history and stats, manage account
-- **Shared backend** — Supabase auth, `user_prompts`, and billing with the iOS app
+**Product:** https://keigobutton.com/
 
-## Requirements
+## Why I built it
 
-- macOS 14.0 or later
-- Xcode 15+ with XcodeGen (`brew install xcodegen`)
-- Accessibility permission (prompted on first launch)
+After shipping the iOS keyboard, I noticed that the underlying problem was not really “people need a keigo button.”
 
-## Build
+The repeated behavior was closer to:
+
+1. receive some context,
+2. know roughly what you want to say,
+3. ask an LLM to turn that intent into the final message.
+
+On desktop, that workflow happens across Slack, Gmail, LinkedIn, browsers, native apps, and Electron apps. The interesting problem became figuring out how much of that context and text interaction could be handled without forcing the user into another interface.
+
+That is what this repo explores.
+
+## How it works
+
+KeigoButton is a native macOS app built with SwiftUI and AppKit.
+
+A small hover bar stays above the Dock. From there you can:
+
+- run one of your saved rewrite buttons,
+- enter a free-form instruction,
+- rewrite selected text or the current input,
+- use copied text as explicit reply context,
+- review the result before inserting it,
+- sync your account and saved buttons with the rest of KeigoButton.
+
+The main challenge is not generating text. It is reliably interacting with whatever app currently owns the text field.
+
+## The interesting engineering problem: text I/O
+
+The primary path uses the macOS Accessibility API.
+
+```text
+focused app
+   ↓
+AXUIElement
+   ↓
+capture text / selection / cursor context
+   ↓
+rewrite service
+   ↓
+write result back into the original field
+```
+
+When Accessibility cannot safely handle a field, the app has a clipboard-based fallback.
+
+This sounds straightforward until you deal with real applications. Native AppKit fields, Chrome, Electron apps, Slack, Gmail, and custom editors all expose slightly different accessibility behavior. Focus is also fragile: if the overlay becomes the key window too early, the original field can stop being the focused target.
+
+A lot of this project is therefore about **context acquisition, focus management, and graceful fallback**, not the LLM call itself.
+
+## Architecture
+
+```text
+App/
+├── Overlay/              # hover bar, generating state, result panel
+├── Main/                 # settings and account UI
+├── Design/               # shared native design system
+└── Resources/
+
+Sources/
+├── DesktopRewriteKit/    # auth, prompts, rewrite service, local history
+└── TextIO/               # Accessibility + clipboard capture/replace
+
+Tests/
+├── DesktopRewriteKitTests/
+└── TextIOTests/
+
+supabase/
+└── functions/
+    └── desktop-rewrite/  # authenticated rewrite endpoint
+```
+
+The testable core deliberately avoids AppKit where possible. That makes the capture/replacement logic easier to test independently from the window system.
+
+## A few decisions I care about
+
+### Don't steal focus
+
+The floating pill should never become the key window just because the user hovered over it. The original app needs to stay focused long enough for us to capture the correct text target.
+
+### Accessibility first, clipboard second
+
+The Accessibility API gives a much cleaner experience when an app exposes the right attributes. Clipboard interaction is kept as a fallback rather than the default.
+
+### Keep credentials off-device
+
+Provider API keys are not bundled in the Mac app. Rewrite requests go through an authenticated backend.
+
+### Share the product, not every implementation detail
+
+The Mac and iOS apps use the same account and product concepts, but desktop-specific usage and rewrite data live separately. The two surfaces have very different constraints.
+
+## Run locally
+
+Requirements:
+
+- macOS 14+
+- Xcode 15+
+- XcodeGen
+- Accessibility permission
 
 ```bash
-# Generate the Xcode project (after changing project.yml or adding files)
+brew install xcodegen
 xcodegen generate
+open KeigoButtonMac.xcodeproj
+```
 
-# Build and run
-xcodebuild -scheme KeigoButtonMac -configuration Debug build
+Run the testable Swift packages with:
 
-# Unit tests (AppKit-free core)
+```bash
 swift test
 ```
 
-Open `KeigoButtonMac.xcodeproj` in Xcode to run the app. The app uses `.accessory` activation policy — no Dock icon; reach the settings window from the menu-bar item.
+Because development rebuilds change the binary identity, macOS may ask you to grant Accessibility permission again after rebuilding.
 
-Grant **Accessibility** in System Settings when prompted. Dev rebuilds change the binary identity and usually require re-granting the permission.
+## More detail
 
-## Project layout
+This README is intentionally the short version. The repo contains much deeper notes from building and testing the app:
 
-```
-App/           SwiftUI + AppKit — overlay bar, main window, onboarding
-Sources/       Testable core (no AppKit)
-  DesktopRewriteKit/   Models, auth, rewrite service, prompts, history
-  TextIO/              AX + clipboard capture/replace
-Tests/         Unit tests for the core packages
-supabase/      desktop-rewrite Edge Function and desktop schema migrations
-docs/          Design reference (design.md), pricing notes, todos
-reference/     Visual reference screenshots
-scripts/       Diagnostics (e.g. axdiag.swift for AX debugging)
-```
+- [AGENTS.md](./AGENTS.md) — current architecture and implementation constraints
+- [design.md](./design.md) — visual direction
+- [docs/](./docs/) — investigations and supporting technical notes
+- [scripts/](./scripts/) — diagnostics for Accessibility and text I/O
 
-Generated artifacts (`.build/`, `*.xcodeproj/`) are gitignored; run `xcodegen generate` after clone.
+---
 
-## Architecture notes
-
-- **No App Sandbox** — required for cross-process Accessibility; distribution is Developer ID + notarization, not Mac App Store
-- **No provider API keys in the bundle** — all AI calls go through the `desktop-rewrite` Edge Function with the user's JWT
-- **Separate desktop schema** — `desktop.rewrite_events`, usage buckets, and activations; does not touch the keyboard's tables
-- **`user_prompts` is shared** — button edits on Mac sync to the phone and vice versa
-
-For full architectural detail, state machines, and implementation constraints, see [AGENTS.md](AGENTS.md).
-
-## Related
-
-- [Official product site](https://keigobutton.com/)
-- [Mac workflow guides](https://keigobutton.com/mac/custom-rewrite-prompts)
-- iOS keyboard app: sibling repo (`Japanese` / KeigoButton)
-
-## License
-
-Private — all rights reserved unless otherwise noted. Reicon Outline icons in `App/Resources/Icons.xcassets` are MIT (see catalog README).
+What I like about this project is that the hard part sits outside the model. The LLM can already write a good reply. The product problem is making that capability available with almost no ceremony, inside software that was never designed for it.
