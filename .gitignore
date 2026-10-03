@@ -66,8 +66,23 @@ sparkle-private-key
 # Editor / agent local state
 .claude/
 .cursor/
+.local-recovery/
 *.swp
 *~
+
+# Installed dependencies and Python tooling caches
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local screen-capture exports and diagnostic screenshots
+/visual-intent-*/
+/log/
 
 # Per-developer build settings (PostHog token). See Config/Local.example.xcconfig.
 Config/Local.xcconfig

@@ -1,0 +1,9 @@
+{
+  "case": "browser-raw",
+  "repeat": 1,
+  "expectedModel": "gpt-4.1-mini-2025-04-14",
+  "returncode": 0,
+  "wallMs": 3464,
+  "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/browser-raw/1/5A66A96B-EDAB-44A8-937D-381F80F59856-32457041-221B-4882-B3C5-A1E6AAE952DD-run1.json",
+  "status": "ready"
+}

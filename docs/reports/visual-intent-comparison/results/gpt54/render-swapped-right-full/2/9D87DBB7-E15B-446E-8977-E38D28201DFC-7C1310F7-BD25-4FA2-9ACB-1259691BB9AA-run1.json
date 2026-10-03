@@ -1,0 +1,50 @@
+{
+  "inputTokens" : 1828,
+  "model" : "gpt-5.4-2026-03-05",
+  "modelMs" : 2578,
+  "outputTokens" : 228,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "9D87DBB7-E15B-446E-8977-E38D28201DFC",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 194,
+          "width" : 507,
+          "x" : 629,
+          "y" : 28
+        },
+        "label" : "Channel · Delivery conversation"
+      }
+    ],
+    "draft" : "Yes — I can finish my part by Thursday at 14:20. I’ve noted the reference CEDAR-482.",
+    "evidence" : [
+      {
+        "box" : {
+          "height" : 31,
+          "width" : 256,
+          "x" : 629,
+          "y" : 28
+        },
+        "excerpt" : "Channel · Delivery",
+        "partial" : false
+      },
+      {
+        "author" : "Mina",
+        "box" : {
+          "height" : 47,
+          "width" : 480,
+          "x" : 628,
+          "y" : 144
+        },
+        "excerpt" : "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "50F3C44C-AF6F-4DB5-B23D-9F8E877CBE5A"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "status": "Unattributed baseline; no confirmed manual Scribe test",
+  "start_utc": "2026-09-27T01:49:39.635596+00:00",
+  "end_utc": "2026-09-27T02:01:23.408896+00:00",
+  "samples": 100,
+  "process_sets": [
+    [
+      "31817     1 /Applications/Willow Voice.app/Contents/MacOS/Willow Voice"
+    ]
+  ],
+  "samples_with_socket_endpoints": 0,
+  "async_log_size_bytes": [
+    0
+  ],
+  "first_nettop_snapshot": ",bytes_in,bytes_out,\nWillow Voice.31817,5402,5277,",
+  "last_nettop_snapshot": ",bytes_in,bytes_out,\nWillow Voice.31817,11795,11663,",
+  "counter_caution": "Independent nettop snapshots fluctuate as connections change. They are not an integrated byte total or a Scribe request size.",
+  "cache_metadata_first": [
+    {
+      "name": "async.log",
+      "size": 0,
+      "mtime": 1790383958.3064063
+    },
+    {
+      "name": "Cache.db",
+      "size": 360448,
+      "mtime": 1790473035.1613066
+    },
+    {
+      "name": "Cache.db-wal",
+      "size": 189552,
+      "mtime": 1790473512.145159
+    }
+  ],
+  "cache_metadata_last": [
+    {
+      "name": "async.log",
+      "size": 0,
+      "mtime": 1790383958.3064063
+    },
+    {
+      "name": "Cache.db",
+      "size": 360448,
+      "mtime": 1790473035.1613066
+    },
+    {
+      "name": "Cache.db-wal",
+      "size": 486192,
+      "mtime": 1790474419.702022
+    }
+  ],
+  "observer_stopped": true
+}

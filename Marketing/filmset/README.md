@@ -1,5 +1,68 @@
 # filmset — the Slack film set for Format E
 
+## Japanese: controlled KeigoButton overlay
+
+`slack-ja.html` now includes a stationary browser reconstruction of KeigoButton.
+All 12 Japanese scripts use the authored outputs in `scenarios-ja.js`; no model,
+account, API, or real app is needed. These are scripted demonstrations, not recorded
+model responses. This workflow supersedes the live-generation/fallback instructions
+below for the Japanese set. English stays in its original live-app mode by default;
+add `overlay` to its hash to opt into the same reconstruction.
+
+Japanese framing fills the full viewport, with the entire overlay
+enlarged to 150% for small-monitor demos. Override with `fill=.8` and
+`buttonscale=1` for shorter framing and native button size; button scale
+accepts values from 1 to 2. Composer/result widths are capped to the viewport.
+
+The overlay uses the current native proportions, Inter font, actual mascot
+animation atlases at 4 fps, and native macOS SF Symbol renders. CSS approximates the
+AppKit smoked-glass backdrop; it does not use a screenshot as an interactive control.
+Its fixed bottom-center anchor is 6 px above the viewport edge. It is not draggable.
+The four saved-button labels match `bar_jap.png`. Outputs are fixed per scenario,
+regardless of which saved button or custom guidance is used; use 敬語 or Reply for
+these takes. Regenerate replays the same output and adds a result page.
+
+```sh
+./run.sh ja dark                       # first take, empty Slack composer
+./run.sh ja dark+scenario=4+genz        # take 4, input preloaded for framing
+./run.sh ja dark+scenario=10            # take 10, copy the received message first
+./run.sh ja dark+scenario=10+intent     # take 10, Reply intent preloaded
+./run.sh ja dark+scenario=10+result     # result card for framing
+./run.sh ja dark+delay=1800             # fixed 1.8 s generating animation (default 1.1 s)
+./run.sh ja dark+overlay=off            # use the real native app instead
+```
+
+- **敬語:** type the scenario's casual line in Slack → hover the mascot → 敬語 →
+  result → 挿入 (or Enter). The result replaces the draft or selected range.
+- **Reply:** select the boss's message → ⌘C → click the empty Slack composer →
+  hover → 返信 → type the short intent → Enter → 挿入. Copy reveals Reply and its ×;
+  selecting without copying does not. The original received message remains intact.
+- **Escape** closes the instruction/result surface or cancels generation. Clicking
+  outside the instruction composer cancels it. Hover collapses after 300 ms.
+- **⌥I** preloads the current take: Slack text for 1–6, attached source plus Reply
+  intent for 7–12. **⌥R** arms the last received message for framing without copying.
+  **⌥C** resets the take. **⌥→ / ⌥←** reach all 12; **⌥1–9** jump to the first nine.
+  The POV hook and scenario number appear only in the optional **⌥H** HUD.
+- Snooze or quit the real native app before filming the reconstruction to avoid two
+  bars. Hide the filming HUD and crop guide before rolling.
+
+| Take | Feature | Hook |
+|---|---|---|
+| 1 | 敬語 | 社会人1年目、いきなりラスボス |
+| 2 | 敬語 | 上司にだけ正直すぎる新卒 |
+| 3 | 敬語 | 3週間、意味も分からずうなずいてた |
+| 4 | 敬語 | 「最終版」なのはファイル名だけ |
+| 5 | 敬語 | 勢いで「できます」って言った新卒 |
+| 6 | 敬語 | 部長を完全に友達だと思ってる |
+| 7 | Reply | 17:59に「今日中」って言う上司 |
+| 8 | Reply | 有休を成長イベントに変えてくる上司 |
+| 9 | Reply | 上司の指示、矛盾してて詰んだ |
+| 10 | Reply | 会社のSlackをマッチングアプリだと思ってる上司 |
+| 11 | Reply | 業務連絡より服装チェックが多い上司 |
+| 12 | Reply | なぜか休日の写真を欲しがる上司 |
+
+## Original live-app filming workflow
+
 The mockup that gets **filmed**, not rendered. `GTM.md` §4.5 is the format;
 `FORMAT-TESTS.md` §4 (T2) is the test it feeds. This is a live page with a **real
 editable composer**, because the joke in Format E is the typing: an unhinged message

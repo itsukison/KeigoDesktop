@@ -1,0 +1,55 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 2848,
+  "model" : "gpt-5.4-mini-2026-03-17",
+  "modelMs" : 2168,
+  "outputTokens" : 271,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "670BDD1B-8028-4FC2-84B7-3BFA29216BCC",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 771,
+          "width" : 524,
+          "x" : 689,
+          "y" : 75
+        },
+        "label" : "conversation"
+      }
+    ],
+    "draft" : "興味があります。応募したいのですが、詳細はどこで確認できますか？",
+    "evidence" : [
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 52,
+          "width" : 376,
+          "x" : 746,
+          "y" : 289
+        },
+        "excerpt" : "【株式会社メルカリ】選考直結・就業型インターンシップ（Product Manager職）へのご案内",
+        "partial" : false
+      },
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 67,
+          "width" : 357,
+          "x" : 753,
+          "y" : 427
+        },
+        "excerpt" : "現在メルカリでは、2028年新卒入社の方を対象に、プロダクトマネージャー職（以下PM職）の就業型インターンシップを募集しております。",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "4FA630C2-CFF6-43DF-B41D-1ADD9812AE72"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

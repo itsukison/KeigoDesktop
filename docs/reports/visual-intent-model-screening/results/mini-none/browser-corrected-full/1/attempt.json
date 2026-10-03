@@ -1,0 +1,9 @@
+{
+  "case": "browser-corrected-full",
+  "repeat": 1,
+  "expectedModel": "gpt-5.4-mini-2026-03-17",
+  "returncode": 0,
+  "wallMs": 2571,
+  "responseFile": "docs/reports/visual-intent-model-screening/results/mini-none/browser-corrected-full/1/A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5-7F558A8D-67A4-48A2-9F27-DDF3CD0318A6-run1.json",
+  "status": "ready"
+}

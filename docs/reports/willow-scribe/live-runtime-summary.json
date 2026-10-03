@@ -1,0 +1,119 @@
+{
+  "start_utc": "2026-09-27T03:29:17.390783+00:00",
+  "last_sample_utc": "2026-09-27T03:53:56.338919+00:00",
+  "samples": 727,
+  "process_variants": [
+    [
+      "31817     1 /Applications/Willow Voice.app/Contents/MacOS/Willow Voice"
+    ]
+  ],
+  "samples_with_endpoint_output": 0,
+  "first_file_metadata": [
+    {
+      "name": "async.log",
+      "size": 0,
+      "mtime": 1790383958.3064063
+    },
+    {
+      "name": "Cache.db",
+      "size": 360448,
+      "mtime": 1790473035.1613066
+    },
+    {
+      "name": "Cache.db-wal",
+      "size": 1981752,
+      "mtime": 1790479689.2929611
+    }
+  ],
+  "last_file_metadata": [
+    {
+      "name": "async.log",
+      "size": 0,
+      "mtime": 1790383958.3064063
+    },
+    {
+      "name": "Cache.db",
+      "size": 360448,
+      "mtime": 1790473035.1613066
+    },
+    {
+      "name": "Cache.db-wal",
+      "size": 3543232,
+      "mtime": 1790481191.8779562
+    }
+  ],
+  "capture_recognition_events": [
+    {
+      "timestamp": "2026-09-26 23:30:34.053194-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "General"
+    },
+    {
+      "timestamp": "2026-09-26 23:30:34.055629-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "Recognition"
+    },
+    {
+      "timestamp": "2026-09-26 23:30:34.059009-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "Detection"
+    },
+    {
+      "timestamp": "2026-09-26 23:30:34.135687-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "Recognition"
+    },
+    {
+      "timestamp": "2026-09-26 23:30:34.163233-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "General"
+    },
+    {
+      "timestamp": "2026-09-26 23:38:20.083335-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "General"
+    },
+    {
+      "timestamp": "2026-09-26 23:38:21.634372-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "General"
+    },
+    {
+      "timestamp": "2026-09-26 23:40:48.052782-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "General"
+    },
+    {
+      "timestamp": "2026-09-26 23:44:21.362427-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "General"
+    },
+    {
+      "timestamp": "2026-09-26 23:46:15.862670-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "General"
+    },
+    {
+      "timestamp": "2026-09-26 23:49:13.577169-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "General"
+    },
+    {
+      "timestamp": "2026-09-26 23:49:34.246254-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "General"
+    },
+    {
+      "timestamp": "2026-09-26 23:52:12.655443-0400",
+      "subsystem": "com.apple.TextRecognition",
+      "category": "General"
+    }
+  ],
+  "allowlisted_packet_events": [],
+  "limitations": [
+    "Continuous nettop deltas were collected, but no packet payloads were read or identified.",
+    "No per-trial upload size is assigned; audio and other traffic share the process.",
+    "TextRecognition metadata does not establish source pixels or downstream Scribe use.",
+    "Process/socket sampling can miss short-lived activity."
+  ]
+}

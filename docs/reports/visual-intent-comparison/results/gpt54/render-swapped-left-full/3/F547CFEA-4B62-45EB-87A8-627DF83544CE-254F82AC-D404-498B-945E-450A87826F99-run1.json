@@ -1,0 +1,50 @@
+{
+  "inputTokens" : 1827,
+  "model" : "gpt-5.4-2026-03-05",
+  "modelMs" : 2651,
+  "outputTokens" : 221,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "F547CFEA-4B62-45EB-87A8-627DF83544CE",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 525,
+          "width" : 550,
+          "x" : 35,
+          "y" : 21
+        },
+        "label" : "Thread · Workshop"
+      }
+    ],
+    "draft" : "Yes, I can finish my part by Monday at 09:45. I’ll use reference INDIGO-917.",
+    "evidence" : [
+      {
+        "box" : {
+          "height" : 31,
+          "width" : 261,
+          "x" : 50,
+          "y" : 26
+        },
+        "excerpt" : "Thread · Workshop",
+        "partial" : false
+      },
+      {
+        "author" : "Ren",
+        "box" : {
+          "height" : 49,
+          "width" : 488,
+          "x" : 50,
+          "y" : 143
+        },
+        "excerpt" : "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "7837F57B-3CC5-4EF2-8E16-6DC7609EAE54"
+  }
+}

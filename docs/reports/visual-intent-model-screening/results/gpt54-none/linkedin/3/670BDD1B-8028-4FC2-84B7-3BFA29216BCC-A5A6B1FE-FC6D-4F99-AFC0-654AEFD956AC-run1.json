@@ -1,0 +1,66 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 2848,
+  "model" : "gpt-5.4-2026-03-05",
+  "modelMs" : 4162,
+  "outputTokens" : 341,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "670BDD1B-8028-4FC2-84B7-3BFA29216BCC",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 566,
+          "width" : 471,
+          "x" : 700,
+          "y" : 171
+        },
+        "label" : "conversation"
+      }
+    ],
+    "draft" : "ご連絡ありがとうございます。ぜひ興味があり、応募したいと考えています。応募情報はどちらで確認できますでしょうか？",
+    "evidence" : [
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 23,
+          "width" : 113,
+          "x" : 758,
+          "y" : 273
+        },
+        "excerpt" : "Yurino Horiuchi",
+        "partial" : false
+      },
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 39,
+          "width" : 311,
+          "x" : 759,
+          "y" : 298
+        },
+        "excerpt" : "【株式会社メルカリ】選考直結・就業型インターンシップ(Product Manager職)へのご案内】",
+        "partial" : false
+      },
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 77,
+          "width" : 355,
+          "x" : 756,
+          "y" : 433
+        },
+        "excerpt" : "現在メルカリでは、2028年新卒入社の方を対象に、プロダクトマネージャー職（以下PM職）の就業型インターンシップを募集しておりまして。ご経験を拝見し、ぜひご参加いただけないかと思いご連絡いたしました！",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "4FA630C2-CFF6-43DF-B41D-1ADD9812AE72"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

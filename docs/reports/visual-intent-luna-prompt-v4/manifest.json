@@ -1,0 +1,34 @@
+[
+  {
+    "case": "linkedin",
+    "family": "real",
+    "variant": "full",
+    "request": "/Users/itsuki/Desktop/key/laptop/visual-intent-670BDD1B-8028-4FC2-84B7-3BFA29216BCC-DE0780FA/request.json",
+    "width": 1920,
+    "height": 958,
+    "composerBox": {
+      "height": 100,
+      "width": 410,
+      "x": 713,
+      "y": 747
+    },
+    "requestSHA256": "d346603366255062b13d643655a6f81124aa66013412bcf8e11982d60f5c02f0",
+    "expected": "manual_source_and_draft_review"
+  },
+  {
+    "case": "slack",
+    "family": "real",
+    "variant": "full",
+    "request": "/Users/itsuki/Desktop/key/laptop/visual-intent-2A2C4BFA-AA0C-4DD5-8018-6BA8497CCFAB-43F5ED16/request.json",
+    "width": 1920,
+    "height": 992,
+    "composerBox": {
+      "height": 41,
+      "width": 520,
+      "x": 1379,
+      "y": 856
+    },
+    "requestSHA256": "e248d2d00f1f90a84183a600a8596f53219e8c291836aee68e633aa7434240ab",
+    "expected": "manual_source_and_draft_review"
+  }
+]

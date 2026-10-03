@@ -1,0 +1,9 @@
+{
+  "case": "render-original-right-crop",
+  "repeat": 1,
+  "expectedModel": "gpt-5.4-2026-03-05",
+  "returncode": 0,
+  "wallMs": 3111,
+  "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-right-crop/1/01BEED0E-4E6D-4366-B413-1903C6E2A078-ACF033E0-F51D-45BF-8EE9-82D5EF549170-run1.json",
+  "status": "ready"
+}

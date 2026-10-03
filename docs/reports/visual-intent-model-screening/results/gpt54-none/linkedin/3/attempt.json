@@ -1,0 +1,9 @@
+{
+  "case": "linkedin",
+  "repeat": 3,
+  "expectedModel": "gpt-5.4-2026-03-05",
+  "returncode": 0,
+  "wallMs": 5216,
+  "responseFile": "docs/reports/visual-intent-model-screening/results/gpt54-none/linkedin/3/670BDD1B-8028-4FC2-84B7-3BFA29216BCC-A5A6B1FE-FC6D-4F99-AFC0-654AEFD956AC-run1.json",
+  "status": "ready"
+}

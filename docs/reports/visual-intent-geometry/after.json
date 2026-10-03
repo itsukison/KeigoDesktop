@@ -1,0 +1,10 @@
+{
+  "filterContentRect" : "{{0, 122}, {1920, 958}}",
+  "SCStreamUpdateFrameBoundingRect" : "{\n    Height = 958;\n    Width = 1920;\n    X = 0;\n    Y = 0;\n}",
+  "SCStreamUpdateFrameContentRect" : "{\n    Height = 958;\n    Width = 1920;\n    X = 0;\n    Y = 0;\n}",
+  "SCStreamUpdateFrameContentScale" : "1",
+  "SCStreamUpdateFrameDisplayResolution" : "1",
+  "SCStreamUpdateFrameScreenRect" : "{\n    Height = 958;\n    Width = 1920;\n    X = 0;\n    Y = 122;\n}",
+  "SCStreamUpdateFrameStatus" : "0",
+  "windowFrame" : "{{0, 122}, {1920, 958}}"
+}

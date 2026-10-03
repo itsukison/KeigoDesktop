@@ -1,0 +1,9 @@
+{
+  "case": "render-swapped-left-full",
+  "repeat": 2,
+  "expectedModel": "gpt-4.1-mini-2025-04-14",
+  "returncode": 1,
+  "wallMs": 2939,
+  "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-left-full/2/F547CFEA-4B62-45EB-87A8-627DF83544CE-FB7CC03E-5A83-4039-9154-F072140B7057-run1.json",
+  "status": "request_failed"
+}

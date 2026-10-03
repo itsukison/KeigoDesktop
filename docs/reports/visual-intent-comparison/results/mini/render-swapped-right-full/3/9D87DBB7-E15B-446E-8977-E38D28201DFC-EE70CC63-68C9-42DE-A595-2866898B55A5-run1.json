@@ -1,0 +1,48 @@
+{
+  "inputTokens" : 2229,
+  "model" : "gpt-4.1-mini-2025-04-14",
+  "modelMs" : 1938,
+  "outputTokens" : 213,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "9D87DBB7-E15B-446E-8977-E38D28201DFC",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 200,
+          "width" : 600,
+          "x" : 0,
+          "y" : 0
+        },
+        "label" : "Thread · Workshop"
+      },
+      {
+        "box" : {
+          "height" : 100,
+          "width" : 520,
+          "x" : 630,
+          "y" : 350
+        },
+        "label" : "Reply to channel"
+      }
+    ],
+    "draft" : "Sure, I can finish my part by Thursday at 14:20. I'll refer to the CEDAR-482 for the details.",
+    "evidence" : [
+      {
+        "box" : {
+          "height" : 56,
+          "width" : 600,
+          "x" : 600,
+          "y" : 0
+        },
+        "excerpt" : "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "50F3C44C-AF6F-4DB5-B23D-9F8E877CBE5A"
+  }
+}

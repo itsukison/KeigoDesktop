@@ -20,6 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
 {
 
     private var overlay: OverlayController?
+    #if DEBUG
+    private var visualIntentResearch: VisualIntentResearch?
+    #endif
     private var mainWindow: MainWindowController?
     private var onboardingWindow: OnboardingWindowController?
     private var mainModel: MainModel?
@@ -80,6 +83,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, SPUUpd
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--visual-window-probe") {
+            NSApp.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await VisualWindowFrame.probe(); exit(0) }
+                catch { print("Window geometry probe failed: \(error.localizedDescription)"); exit(1) }
+            }
+            return
+        }
+        if ProcessInfo.processInfo.arguments.contains("--visual-intent-replay") {
+            NSApp.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do {
+                    try await VisualIntentReplay.run(config: config, auth: auth)
+                    exit(0)
+                } catch {
+                    switch error {
+                    case RewriteError.backend(let message): print("Research replay failed: \(message)")
+                    case RewriteError.notSignedIn: print("Research replay failed: sign in to KeigoButton first.")
+                    default: print("Research replay failed: \(error.localizedDescription)")
+                    }
+                    exit(1)
+                }
+            }
+            return
+        }
+        if ProcessInfo.processInfo.arguments.contains("--visual-intent-research") {
+            NSApp.setActivationPolicy(.accessory)
+            let research = VisualIntentResearch(config: config, auth: auth)
+            visualIntentResearch = research
+            research.show()
+            return
+        }
         if SavedButtonsVerification.isRunning {
             NSApp.setActivationPolicy(.prohibited)
             Task { @MainActor in

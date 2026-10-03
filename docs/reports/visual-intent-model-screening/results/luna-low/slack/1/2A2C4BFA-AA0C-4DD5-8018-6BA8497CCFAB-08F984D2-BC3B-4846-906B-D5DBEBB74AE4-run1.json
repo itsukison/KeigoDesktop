@@ -1,0 +1,66 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 2921,
+  "model" : "gpt-6-luna",
+  "modelMs" : 6820,
+  "outputTokens" : 632,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "2A2C4BFA-AA0C-4DD5-8018-6BA8497CCFAB",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 715,
+          "width" : 524,
+          "x" : 1376,
+          "y" : 91
+        },
+        "label" : "036_システム開発部のスレッド"
+      }
+    ],
+    "draft" : "Cloud Runの公開設定とBigQuery参照権限について、Botが rational-clock-468109-n7 を読む際に403になる問題がありましたが、秋田さんが対応済みで、笹原さんからお礼がありました。",
+    "evidence" : [
+      {
+        "author" : "笹原尚人",
+        "box" : {
+          "height" : 48,
+          "width" : 476,
+          "x" : 1422,
+          "y" : 414
+        },
+        "excerpt" : "最後にBigQueryの参照権限だけお願いできますでしょうか。Botが rational-clock-468109-n7 を読むところで403になっています。",
+        "partial" : false
+      },
+      {
+        "author" : "秋田陽平",
+        "box" : {
+          "height" : 21,
+          "width" : 240,
+          "x" : 1422,
+          "y" : 728
+        },
+        "excerpt" : "すいません、先ほど対応しました",
+        "partial" : false
+      },
+      {
+        "author" : "笹原尚人",
+        "box" : {
+          "height" : 21,
+          "width" : 267,
+          "x" : 1422,
+          "y" : 778
+        },
+        "excerpt" : "ありがとうございます！（編集済み）",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "513210E4-7502-4EAA-A2FE-2DBB116B05D5"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

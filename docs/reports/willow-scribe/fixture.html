@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Context acquisition test</title>
+<style>
+body{font:17px system-ui,sans-serif;background:#f3f5f7;color:#17212b;max-width:1000px;margin:30px auto;padding:20px}h1{font-size:24px}label,button,select{font:inherit}button,select{padding:9px;margin:5px}#source{background:white;border:1px solid #bfc9d2;border-radius:12px;min-height:270px;margin:22px 0;padding:18px}canvas{width:100%;height:auto;display:block}textarea{font:18px system-ui;width:calc(100% - 26px);min-height:150px;padding:12px;border:2px solid #667b8c;border-radius:10px}small{display:block;color:#52606c;line-height:1.5}.message{padding:24px;line-height:1.7}.muted{color:#657786}
+</style>
+<h1>Conversation context test</h1>
+<small>Synthetic data only. No network requests or Send action. Select a condition, generate a fresh case, then focus the reply field and manually trigger Scribe. Do not speak the source code aloud. Inspect the browser’s AX tree before interpreting DOM/canvas contrasts.</small>
+<p><label for="condition">Condition</label>
+<select id="condition"><option value="dom">Ordinary text</option><option value="canvas">Canvas-only text</option><option value="conflict">Conflicting visual and AX codes</option><option value="color">Visual relationship</option></select>
+<button id="fresh">New case</button></p>
+<p class="muted" id="case"></p>
+<div id="source"></div>
+<label for="reply">Your reply</label>
+<textarea id="reply" placeholder="Focus here, then use Scribe. Nothing is sent."></textarea>
+<p id="instruction"></p>
+<small>Record the generated output and visible source before generating the next case. Each new case clears this test field. Start a fresh Scribe session between conditions to reduce carryover. Do not use this fixture to assess Gmail- or Slack-specific adapters.</small>
+<script>
+const select=document.getElementById('condition'), source=document.getElementById('source'), reply=document.getElementById('reply');
+let count=0;
+function random(n){const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n}
+function code(){return 'K'+(100000+random(900000))}
+function canvas(){const c=document.createElement('canvas');c.width=1800;c.height=540;c.setAttribute('aria-hidden','true');source.append(c);const g=c.getContext('2d');g.scale(2,2);g.fillStyle='#fff';g.fillRect(0,0,900,270);return g}
+function line(g,text,x,y,size=23){g.fillStyle='#17212b';g.font=size+'px system-ui';g.fillText(text,x,y)}
+function reset(){count++;source.replaceChildren();source.removeAttribute('role');source.removeAttribute('aria-label');reply.value='';document.getElementById('case').textContent='Local case '+count+' · '+new Date().toISOString();
+ const kind=select.value, a=code();let b=code();while(b===a)b=code();
+ const parts=['Maya · current conversation','Can you confirm the meeting at 16:40 in the Cedar Room?','Please include reference '+a+' in your reply.'];
+ if(kind==='dom'){const d=document.createElement('div');d.className='message';for(const t of parts){const p=document.createElement('p');p.textContent=t;d.append(p)}source.append(d)}
+ else if(kind==='color'){const g=canvas(),leftGreen=random(2)===0;[a,b].forEach((v,i)=>{const x=30+i*445;g.fillStyle='#eef2f5';g.fillRect(x,25,405,200);g.beginPath();g.arc(x+35,60,13,0,2*Math.PI);g.fillStyle=(i===0?leftGreen:!leftGreen)?'#009b55':'#e24535';g.fill();line(g,'Reference '+v,x+25,125);line(g,'Confirm this request.',x+25,175,21)})}
+ else {const g=canvas();parts.forEach((t,i)=>line(g,t,25,55+i*70,i===0?21:23));if(kind==='conflict'){source.setAttribute('role','img');source.setAttribute('aria-label','Maya asks to confirm the meeting at 16:40 in the Cedar Room. Include reference '+b+' in the reply.')}}
+ document.getElementById('instruction').textContent=kind==='color'?'Say: “Draft a brief reply confirming the request with the green dot and include its reference code.”':'Say: “Draft a brief reply confirming the meeting, and include the reference code shown on the card.”';
+}
+document.getElementById('fresh').addEventListener('click',reset);select.addEventListener('change',reset);reset();
+</script>
+</html>

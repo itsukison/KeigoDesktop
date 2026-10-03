@@ -1,0 +1,82 @@
+{
+  "recommendation": "GPT-6 Luna low is the next development candidate, not accepted for production. Enforce source language and preserve required factual constraints, then evaluate held-out scenes before switching.",
+  "screening": {
+    "requests": 84,
+    "conditions": 4,
+    "repeatsPerScene": 3,
+    "syntheticScenes": 5,
+    "realScenes": 2,
+    "realSceneNames": [
+      "LinkedIn",
+      "Slack"
+    ],
+    "sameRequestImagePromptSchema": true,
+    "readyResults": 84,
+    "grading": "Automatic fact checks for synthetic scenes; human scene-grounded review for 24 real-scene outputs"
+  },
+  "findings": {
+    "gpt54-none": "5/6 real quality passes; one Slack draft treated a reported permissions response as proof the issue was resolved.",
+    "mini-none": "2/6 real passes; all three corrected-browser repeats selected the wrong conversation; Slack drafts lost timeline/latest-action information.",
+    "luna-none": "4/6 real passes; two LinkedIn drafts were English despite Japanese source-language instruction.",
+    "luna-low": "4/6 real passes; Japanese and conversation association correct in all six real outputs; two Slack drafts omitted read-only access."
+  },
+  "economics": {
+    "pricingSource": "https://developers.openai.com/api/docs/pricing",
+    "yenPerUSD": 150,
+    "fxStatus": "Repository planning assumption, not current exchange rate",
+    "formula": "((input tokens × standard input rate + total completion tokens × output rate) / 1000000) × 150 × 1000",
+    "basis": "Mean measured token usage on six real-scene repetitions per condition. Total completion includes reasoning; do not add it again.",
+    "monthlyPriceYen": 1480,
+    "annualPriceYen": 14400,
+    "annualMonthlyGrossYen": 1200,
+    "welcomeAnnualYen": 9600,
+    "welcomeMonthlyGrossYen": 800,
+    "paymentFeePlanningRate": 0.036,
+    "regularAnnualMonthlyAfterFeeYen": 1156.8,
+    "welcomeAnnualMonthlyAfterFeeYen": 771.2,
+    "costsExclude": [
+      "Infrastructure",
+      "Payment fees",
+      "Taxes",
+      "Retries",
+      "Unreported cache-write charges"
+    ],
+    "cacheAssumption": "No cached-input discount applied. Not an actual invoice. If every Luna input token is charged at the $0.125/M cache-write rate rather than $0.10/M, low increases from ¥85.26 to ¥96.075 per 1000 real calls.",
+    "volumeAssumption": "1000 model calls, not 1000 distinct users or necessarily actual monthly consumption"
+  },
+  "limitations": [
+    "Only two real scenes repeated three times; pass counts are not population accuracy estimates",
+    "Five synthetic scenes largely share one family; corrected browser contains footer answer-key confound",
+    "Sequential model order, no independent blinded judge",
+    "Saved-capture replay tests model behavior, not capture/staleness/abstention or full native interaction",
+    "Provider latency excludes capture and UI; replay wall includes launch/auth/network",
+    "No image-vs-text comparison, so this experiment cannot attribute output quality differences to image input"
+  ],
+  "nextEvaluation": [
+    "Explicit Japanese/source-language rule",
+    "Retain read-only and other required constraints in final draft",
+    "Held-out conversations across supported apps, with distractors and abstention cases"
+  ],
+  "restoration": {
+    "version": 13,
+    "verifyJWT": true,
+    "filesEqualToTestedBaseline": true,
+    "restoration": "Explicit GPT-5.4 2026-03-05, reasoning none. Original env-based fallback restore rejected by automatic review.",
+    "authenticatedReplayVerified": true,
+    "authenticatedReplayReturnedModel": "gpt-5.4-2026-03-05",
+    "unauthenticatedPOSTStatus": 401,
+    "endpoint": "desktop-visual-intent",
+    "productionEndpointChanged": false,
+    "localResearchHandlerChanged": false,
+    "verification": [
+      "Remote v13 files matched tested explicit baseline files",
+      "Authenticated replay returned GPT-5.4 dated snapshot",
+      "JWT remained enabled and unauthenticated POST rejected"
+    ],
+    "validation": [
+      "All four staged handlers typechecked",
+      "Existing 10 contract/auth tests passed",
+      "All 84 screening rows graded; 21 requests per condition"
+    ]
+  }
+}

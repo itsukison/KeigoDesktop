@@ -1,0 +1,34 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 3432,
+  "model" : "gpt-6-luna",
+  "modelMs" : 4486,
+  "outputTokens" : 395,
+  "promptVersion" : "visual-intent-a-4",
+  "reasoningEffort" : "low",
+  "result" : {
+    "captureId" : "670BDD1B-8028-4FC2-84B7-3BFA29216BCC",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 565,
+          "width" : 471,
+          "x" : 700,
+          "y" : 171
+        },
+        "label" : "Yurino Horiuchi conversation"
+      }
+    ],
+    "evidence" : [
+
+    ],
+    "missingContext" : [
+      "The visible portion of her message does not show an application deadline, so its exact date cannot be summarized without guessing."
+    ],
+    "status" : "insufficient_context",
+    "targetId" : "4FA630C2-CFF6-43DF-B41D-1ADD9812AE72"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

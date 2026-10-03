@@ -1,0 +1,9 @@
+{
+  "case": "render-swapped-left-crop",
+  "repeat": 2,
+  "expectedModel": "gpt-5.4-2026-03-05",
+  "returncode": 0,
+  "wallMs": 3679,
+  "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-left-crop/2/73BDEA85-42D4-496A-844E-4480DA16CF63-64DD2E5C-B1B0-45DD-8AAE-7142F97C3866-run1.json",
+  "status": "ready"
+}

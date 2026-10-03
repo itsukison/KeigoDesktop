@@ -173,12 +173,46 @@ kills `GTM.md` §3's volume thesis. Two options:
   `service_role` key enters the shell or repository. Public media URLs are stable at
   `https://<project-ref>.supabase.co/storage/v1/object/public/marketing-media/<path>`.
   Stage collision-safe filenames first and verify every URL returns HTTP 200 before
-  calling `posts_create`.
+  calling `posts_create`. The bucket accepts PNG, JPEG, WebP and MP4, with a
+  **50 MiB per-file limit**. The former 5 MiB limit rejected the avatar demo videos;
+  it was raised on 2026-10-02 without changing the allowed types or access policies.
 - **GitHub Pages**: already in use for the Sparkle appcast. Slide PNGs are public
   anyway, so this needs **no secret at all** and nothing adjacent to the user database.
   Still a valid fallback for an unattended job.
 
 ---
+
+### 3.1 AI avatar reaction + demo — replace audio before upload
+
+Every upload of this template must use **only a replacement audio track from
+`assets/audio/`**, per `GTM.md` §4.5. Remove the original audio completely; do not mix
+or duck it. Extract the audio from a selected library screen recording and fit it
+to the entire video. Prefer a track long enough to avoid a loop seam.
+
+The local script does the stream mapping, duration fit and 0.25-second end fade:
+
+```sh
+python3 Marketing/pipeline/replace_avatar_audio.py \
+  /absolute/path/to/source.mp4 \
+  'Marketing/assets/audio/ScreenRecording_10-02-2026 13-45-24_1.MP4' \
+  Marketing/pipeline/out/avatar-audio/<version>/demo.mp4
+```
+
+It copies the video stream, discards every original audio stream, and maps only the
+selected library file's audio. Verify one video stream and one replacement audio
+stream, unchanged video duration, audible replacement audio and no clipping.
+Keep the library files untouched. Upload the resulting MP4 to a fresh versioned
+`marketing-media` path with the CLI (`--content-type video/mp4`), then verify the
+public URL returns HTTP 200 before editing or creating a post.
+
+**Use scripts and MCP/API tools for this workflow.** Buffer's API consumes a public
+media URL; it has no binary upload endpoint ([media hosting contract](https://developers.buffer.com/guides/hosting-media.html)).
+For an existing post, read it with `get_post`, confirm `updatePost` is allowed, and
+replace `assets` with `[{video: {url: correctedURL, metadata: {title, thumbnailOffset}}}]`.
+Carry its current caption, scheduling type, mode, exact `dueAt`, tags and required
+platform settings forward. Re-read every edited post to verify those fields and
+the new media URL. Use the same export for both platforms; do not recreate posts
+or change their scheduled time when only the soundtrack is being fixed.
 
 ## 4. Timing
 
@@ -617,6 +651,33 @@ scheduled**: four on each English account and seven on each Japanese account. Th
 `hannah` drafts from posts 011/012 remain drafts and are not included in that total. Two
 older Zernio timeout records remain failed and were not retried because Zernio warns that
 they may already have published externally.
+
+### 2026-10-02 — AI avatar reaction + demo audio corrected (Buffer)
+
+Three existing videos were replaced on **all six scheduled posts**, on TikTok
+`keigobutton` and Instagram `hannah_keigobutton`. Original audio was completely
+removed and replaced with library audio; the video bitstreams and durations match
+the originals. Captions, IDs, automatic publishing, platform settings and schedules
+were preserved. Schedule dates below are **America/New_York (EDT)**.
+
+| Video | Duration | Library audio file | Scheduled (EDT) | TikTok post ID | Instagram post ID |
+|---|---|---|---|---|---|
+| `never-polite` | 13.433 s | `ScreenRecording_10-02-2026 13-44-28_1.mov` | Oct 2, 22:00 | `6abea7492f8a838d7920b17a` | `6abea7492f8a838d7920b179` |
+| `corporate-speak` | 20.033 s | `ScreenRecording_10-02-2026 13-45-24_1.MP4` | Oct 3, 22:00 | `6abea7769e104adbbe3d27f4` | `6abea7769e104adbbe3d27f3` |
+| `first-draft` | 18.567 s | `ScreenRecording_10-02-2026 13-45-24_1.MP4` | Oct 4, 22:00 | `6abea895e4942511c1bd7316` | `6abea895e4942511c1bd7315` |
+
+Local corrected exports are in `pipeline/out/avatar-audio-2026-10-02-v1/`, with
+`corporate-speak` finalized in `pipeline/out/avatar-audio-2026-10-02-v2/` after resetting
+the library recording's initial audio timestamp to zero.
+The queued public URLs are:
+
+- [never-polite.mp4](https://eercsucvxnszqletxued.supabase.co/storage/v1/object/public/marketing-media/avatar-audio/2026-10-02-v1/never-polite.mp4)
+- [corporate-speak.mp4](https://eercsucvxnszqletxued.supabase.co/storage/v1/object/public/marketing-media/avatar-audio/2026-10-02-v2/corporate-speak.mp4)
+- [first-draft.mp4](https://eercsucvxnszqletxued.supabase.co/storage/v1/object/public/marketing-media/avatar-audio/2026-10-02-v1/first-draft.mp4)
+
+All three chosen excerpts cover the video without looping, end with a 0.25-second
+fade, and have a single AAC audio stream. Their measured peaks are below 0 dBFS.
+The six Buffer posts were edited through MCP against these URLs.
 
 ## 6. Confirm before scheduling
 

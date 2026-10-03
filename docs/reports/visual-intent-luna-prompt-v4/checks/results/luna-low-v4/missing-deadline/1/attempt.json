@@ -1,0 +1,9 @@
+{
+  "case": "missing-deadline",
+  "repeat": 1,
+  "expectedModel": "gpt-6-luna",
+  "returncode": 0,
+  "wallMs": 5493,
+  "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/missing-deadline/1/670BDD1B-8028-4FC2-84B7-3BFA29216BCC-35AF6419-7461-4378-A7F8-17EB860E628E-run1.json",
+  "status": "insufficient_context"
+}

@@ -1,0 +1,9 @@
+{
+  "case": "browser-corrected-crop",
+  "repeat": 1,
+  "expectedModel": "gpt-5.4-2026-03-05",
+  "returncode": 0,
+  "wallMs": 3659,
+  "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-corrected-crop/1/7648E6CD-7C7F-4A73-8FD8-512982970C5B-71B5149B-C1CF-498A-9F6C-12EEFBFA248F-run1.json",
+  "status": "ready"
+}

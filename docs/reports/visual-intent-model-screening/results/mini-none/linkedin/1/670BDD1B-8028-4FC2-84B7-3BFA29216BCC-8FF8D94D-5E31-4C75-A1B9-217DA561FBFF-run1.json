@@ -1,0 +1,65 @@
+{
+  "geometryWarnings" : [
+    "Evidence 3 box overlaps the composer (100% of its area). Check source text and conversation association separately."
+  ],
+  "inputTokens" : 2848,
+  "model" : "gpt-5.4-mini-2026-03-17",
+  "modelMs" : 2160,
+  "outputTokens" : 328,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "670BDD1B-8028-4FC2-84B7-3BFA29216BCC",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 674,
+          "width" : 490,
+          "x" : 684,
+          "y" : 174
+        },
+        "label" : "LinkedIn message thread with Yurino Horiuchi"
+      }
+    ],
+    "draft" : "Hi Yurino, I’m interested and would like to apply. Where can I find the information to do so?",
+    "evidence" : [
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 57,
+          "width" : 355,
+          "x" : 715,
+          "y" : 296
+        },
+        "excerpt" : "【株式会社メルカリ】選考直結・就業型インターンシップ（Product Manager職）へのご案内",
+        "partial" : false
+      },
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 55,
+          "width" : 387,
+          "x" : 717,
+          "y" : 423
+        },
+        "excerpt" : "現在メルカリでは、2028年新卒入社の方を対象に、プロダクトマネージャー職（以下PM職）の就業型インターンシップを募集しております。",
+        "partial" : false
+      },
+      {
+        "box" : {
+          "height" : 97,
+          "width" : 386,
+          "x" : 714,
+          "y" : 749
+        },
+        "excerpt" : "tell her im interested and i want to apply where can i find the info",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "4FA630C2-CFF6-43DF-B41D-1ADD9812AE72"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

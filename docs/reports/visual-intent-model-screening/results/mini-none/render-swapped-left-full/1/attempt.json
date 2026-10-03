@@ -1,0 +1,9 @@
+{
+  "case": "render-swapped-left-full",
+  "repeat": 1,
+  "expectedModel": "gpt-5.4-mini-2026-03-17",
+  "returncode": 0,
+  "wallMs": 2940,
+  "responseFile": "docs/reports/visual-intent-model-screening/results/mini-none/render-swapped-left-full/1/F547CFEA-4B62-45EB-87A8-627DF83544CE-6962AA31-56DB-47C2-8CAE-0E56062864FB-run1.json",
+  "status": "ready"
+}

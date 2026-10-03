@@ -1,0 +1,9 @@
+{
+  "case": "render-original-left-full",
+  "repeat": 1,
+  "expectedModel": "gpt-5.4-2026-03-05",
+  "returncode": 0,
+  "wallMs": 4413,
+  "responseFile": "docs/reports/visual-intent-model-screening/results/gpt54-none/render-original-left-full/1/934B6CA6-8DAF-4018-BE60-8DCE10B4865A-CC4355C3-08AA-47C2-9390-BF3D88E34347-run1.json",
+  "status": "ready"
+}

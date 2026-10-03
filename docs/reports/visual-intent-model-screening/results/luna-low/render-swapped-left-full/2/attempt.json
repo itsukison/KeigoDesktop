@@ -1,0 +1,9 @@
+{
+  "case": "render-swapped-left-full",
+  "repeat": 2,
+  "expectedModel": "gpt-6-luna",
+  "returncode": 0,
+  "wallMs": 4543,
+  "responseFile": "docs/reports/visual-intent-model-screening/results/luna-low/render-swapped-left-full/2/F547CFEA-4B62-45EB-87A8-627DF83544CE-D8B5EF14-74D3-4805-980D-0D7D5D22F05F-run1.json",
+  "status": "ready"
+}

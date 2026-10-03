@@ -1,0 +1,9 @@
+{
+  "case": "linkedin",
+  "repeat": 3,
+  "expectedModel": "gpt-6-luna",
+  "returncode": 0,
+  "wallMs": 3118,
+  "responseFile": "docs/reports/visual-intent-model-screening/results/luna-none/linkedin/3/670BDD1B-8028-4FC2-84B7-3BFA29216BCC-E66DA40D-2C17-4BCA-8608-A2B5550C72AB-run1.json",
+  "status": "ready"
+}

@@ -1,0 +1,9 @@
+{
+  "case": "browser-raw",
+  "repeat": 1,
+  "expectedModel": "gpt-5.4-2026-03-05",
+  "returncode": 0,
+  "wallMs": 3820,
+  "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-raw/1/5A66A96B-EDAB-44A8-937D-381F80F59856-8C020B00-7BE4-4339-BA89-6B7ADCAFFF4F-run1.json",
+  "status": "ready"
+}

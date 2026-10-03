@@ -1,0 +1,7 @@
+{
+  "captureId" : "synthetic-left-1",
+  "message" : "Research result rejected: evidence_overlaps_composer.",
+  "requestMs" : 4325,
+  "status" : "request_failed",
+  "targetId" : "left"
+}

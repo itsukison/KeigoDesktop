@@ -1,0 +1,9 @@
+{
+  "case": "browser-corrected-full",
+  "repeat": 1,
+  "expectedModel": "gpt-5.4-2026-03-05",
+  "returncode": 0,
+  "wallMs": 4093,
+  "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-corrected-full/1/A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5-8D15CFDC-F775-4288-ACBD-5ED13655BE4F-run1.json",
+  "status": "ready"
+}

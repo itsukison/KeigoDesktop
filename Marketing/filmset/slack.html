@@ -147,6 +147,7 @@ body.guide #guide{display:flex}
          outline:calc(3 * var(--u)) dashed rgba(255,0,80,.75);
          box-shadow:0 0 0 100vmax rgba(0,0,0,.28)}
 </style>
+<link rel="stylesheet" href="overlay.css">
 </head>
 <body>
 
@@ -212,6 +213,7 @@ body.guide #guide{display:flex}
 <div id="guide"><i></i></div>
 <div id="hud"></div>
 
+<script src="overlay.js"></script>
 <script src="scenarios.js"></script>
 <script>
 /* ─── state ───────────────────────────────────────────────────────────────── */
@@ -243,7 +245,7 @@ function render(){
     const nm  = m.me ? me.name    : m.from;
     const ini = m.me ? me.initial : m.initial;
     const col = m.me ? me.color   : m.color;
-    return `<div class="msg">
+    return `<div class="msg" ${m.me ? '' : 'data-received'}>
       <div class="avatar" style="background:${col}">${esc(ini)}</div>
       <div><div><span class="nm">${esc(nm)}</span><span class="tm">${esc(m.time)}</span></div>
       <div class="tx">${esc(m.text)}</div></div></div>`;
@@ -251,6 +253,7 @@ function render(){
 
   setText('');
   drawHud();
+  document.dispatchEvent(new Event('filmset:scenario'));
 }
 
 function drawHud(){
@@ -286,7 +289,8 @@ function go(n){
  *     this field (AGENTS.md §5: a browser is read via AX, written via ⌘V).
  * e.code, not e.key: ⌥K reports "˚" on a Mac keyboard. */
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); return; }
+  if (e.isComposing || e.keyCode === 229) return;
+  if ((e.key === 'Enter' || e.key === 'Tab') && e.target === box){ e.preventDefault(); return; }
   if (!e.altKey || e.metaKey || e.ctrlKey) return;
 
   const cmd = {
@@ -306,9 +310,11 @@ document.addEventListener('keydown', e => {
   if (d){ e.preventDefault(); go(parseInt(d[1], 10) - 1); }
 }, true);
 
-/* Clicking the mockup outside the composer puts the caret back, without blocking
- * a click or a drag-select inside it. */
-document.addEventListener('mousedown', e => { if (!cp.contains(e.target)) { e.preventDefault(); box.focus(); } });
+/* Received text stays selectable for copy-to-Reply. Overlay controls keep their
+ * own focus; only empty window chrome returns the caret to Slack. */
+document.addEventListener('mousedown', e => {
+  if (!cp.contains(e.target) && !e.target.closest('#kb-overlay, .msgs, button')) { e.preventDefault(); box.focus(); }
+});
 box.addEventListener('focus', () => cp.classList.add('focus'));
 box.addEventListener('input', () => {
   document.getElementById('send').classList.toggle('off', !box.value);
@@ -327,9 +333,14 @@ if (H.includes('guide')) document.body.classList.add('guide');
 if (H.includes('hud'))   document.body.classList.add('hud');
 const fill = H.map(t => /^fill=([\d.]+)$/.exec(t)).find(Boolean);
 if (fill) document.documentElement.style.setProperty('--fill', fill[1]);
+const scenario = H.map(t => /^scenario=(\d+)$/.exec(t)).find(Boolean);
+if (scenario) go(Math.min(window.SCENARIOS.length, Math.max(1, Number(scenario[1]))) - 1);
 if (H.includes('genz'))  setText(S().genz);
 if (H.includes('corp'))  setText(S().corporate);
 box.focus();
+window.addEventListener('hashchange', () => location.reload());
+window.FilmsetOverlay.mount({ box, getScenario: S, setText, tokens: H,
+  enabled: document.documentElement.lang === 'ja' || H.includes('overlay') });
 </script>
 </body>
 </html>

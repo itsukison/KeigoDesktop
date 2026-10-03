@@ -1,0 +1,22 @@
+{
+  "version": 13,
+  "verifyJWT": true,
+  "filesEqualToTestedBaseline": true,
+  "restoration": "Explicit GPT-5.4 2026-03-05, reasoning none. Original env-based fallback restore rejected by automatic review.",
+  "authenticatedReplayVerified": true,
+  "authenticatedReplayReturnedModel": "gpt-5.4-2026-03-05",
+  "unauthenticatedPOSTStatus": 401,
+  "endpoint": "desktop-visual-intent",
+  "productionEndpointChanged": false,
+  "localResearchHandlerChanged": false,
+  "verification": [
+    "Remote v13 files matched tested explicit baseline files",
+    "Authenticated replay returned GPT-5.4 dated snapshot",
+    "JWT remained enabled and unauthenticated POST rejected"
+  ],
+  "validation": [
+    "All four staged handlers typechecked",
+    "Existing 10 contract/auth tests passed",
+    "All 84 screening rows graded; 21 requests per condition"
+  ]
+}

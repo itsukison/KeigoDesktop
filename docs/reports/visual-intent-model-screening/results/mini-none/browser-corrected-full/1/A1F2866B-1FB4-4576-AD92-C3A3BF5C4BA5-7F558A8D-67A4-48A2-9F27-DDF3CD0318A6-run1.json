@@ -1,0 +1,44 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 2850,
+  "model" : "gpt-5.4-mini-2026-03-17",
+  "modelMs" : 1523,
+  "outputTokens" : 194,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 623,
+          "width" : 815,
+          "x" : 874,
+          "y" : 177
+        },
+        "label" : "right thread"
+      }
+    ],
+    "draft" : "Sounds good — Monday at 09:45 works, and I’ll use reference INDIGO-917.",
+    "evidence" : [
+      {
+        "author" : "Ren",
+        "box" : {
+          "height" : 62,
+          "width" : 686,
+          "x" : 891,
+          "y" : 283
+        },
+        "excerpt" : "For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "9389FF7E-9EE8-4C6E-BB04-29B8237A59F3"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

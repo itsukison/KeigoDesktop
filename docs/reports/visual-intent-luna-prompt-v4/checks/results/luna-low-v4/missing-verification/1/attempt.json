@@ -1,0 +1,9 @@
+{
+  "case": "missing-verification",
+  "repeat": 1,
+  "expectedModel": "gpt-6-luna",
+  "returncode": 0,
+  "wallMs": 6843,
+  "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/missing-verification/1/2A2C4BFA-AA0C-4DD5-8018-6BA8497CCFAB-E009F8AA-866E-487E-B909-4580E659805A-run1.json",
+  "status": "insufficient_context"
+}

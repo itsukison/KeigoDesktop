@@ -1,0 +1,55 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 3452,
+  "model" : "gpt-6-luna",
+  "modelMs" : 7166,
+  "outputTokens" : 608,
+  "promptVersion" : "visual-intent-a-3",
+  "reasoningEffort" : "low",
+  "result" : {
+    "captureId" : "2A2C4BFA-AA0C-4DD5-8018-6BA8497CCFAB",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 874,
+          "width" : 558,
+          "x" : 1362,
+          "y" : 90
+        },
+        "label" : "Thread in 036_システム開発部"
+      }
+    ],
+    "evidence" : [
+      {
+        "author" : "笹原尚人",
+        "box" : {
+          "height" : 42,
+          "width" : 360,
+          "x" : 1422,
+          "y" : 418
+        },
+        "excerpt" : "Botが rational-clock-468109-n7 を読むところで403になっています。",
+        "partial" : false
+      },
+      {
+        "author" : "秋田陽平",
+        "box" : {
+          "height" : 20,
+          "width" : 258,
+          "x" : 1422,
+          "y" : 728
+        },
+        "excerpt" : "すいません、先ほど対応しました",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+      "The visible thread shows a permission issue and a reply saying it was handled, but no exact time when the bot successfully ran after the permission change."
+    ],
+    "status" : "insufficient_context",
+    "targetId" : "513210E4-7502-4EAA-A2FE-2DBB116B05D5"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

@@ -102,6 +102,15 @@ public struct DesktopRewriteService: Sendable {
         return outcome
     }
 
+    public func visualIntent(_ request: VisualIntentRequest) async throws -> VisualIntentResponse {
+        try request.validate()
+        let data = try await post(to: config.supabaseURL.appendingPathComponent("functions/v1/desktop-visual-intent"),
+                                  body: try JSONEncoder().encode(request), timeout: 45)
+        let response = try JSONDecoder().decode(VisualIntentResponse.self, from: data)
+        try response.result.validate(for: request)
+        return response
+    }
+
     // MARK: - Feedback
 
     /// §6: `result.png`'s 👍/👎 and the accepted-candidate signal. Implemented from

@@ -1,0 +1,56 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 3436,
+  "model" : "gpt-6-luna",
+  "modelMs" : 5441,
+  "outputTokens" : 445,
+  "promptVersion" : "visual-intent-a-4",
+  "reasoningEffort" : "low",
+  "result" : {
+    "captureId" : "670BDD1B-8028-4FC2-84B7-3BFA29216BCC",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 565,
+          "width" : 471,
+          "x" : 700,
+          "y" : 171
+        },
+        "label" : "Selected conversation with Yurino Horiuchi"
+      }
+    ],
+    "draft" : "ご案内ありがとうございます。ぜひ応募したいです。応募方法や詳しい情報はどちらで確認できますでしょうか？",
+    "evidence" : [
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 27,
+          "width" : 354,
+          "x" : 757,
+          "y" : 482
+        },
+        "excerpt" : "ご経験を拝見し、ぜひご参加いただけないかと思いご連絡いたしました！",
+        "partial" : false
+      },
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 20,
+          "width" : 343,
+          "x" : 771,
+          "y" : 611
+        },
+        "excerpt" : "募集カンパニー：Mercari（メルカリ） \/ Merpay（メルペイ）",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "4FA630C2-CFF6-43DF-B41D-1ADD9812AE72"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

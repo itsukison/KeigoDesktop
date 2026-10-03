@@ -1,0 +1,9 @@
+{
+  "case": "render-original-left-crop",
+  "repeat": 3,
+  "expectedModel": "gpt-4.1-mini-2025-04-14",
+  "returncode": 0,
+  "wallMs": 3345,
+  "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-left-crop/3/A0B241F2-5039-4BB4-8CE4-3F3F8290530D-57CE1DA9-18B7-4A07-BC59-FD1C7E11F6F3-run1.json",
+  "status": "ready"
+}

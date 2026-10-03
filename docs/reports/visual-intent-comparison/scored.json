@@ -1,0 +1,3397 @@
+[
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "browser-corrected-crop",
+    "family": "browser",
+    "variant": "corrected-crop",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2652,
+    "wallMs": 3659,
+    "draft": "Agreed — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 22,
+          "width": 41,
+          "x": 31,
+          "y": 96
+        },
+        "excerpt": "Mina",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 26,
+          "width": 684,
+          "x": 32,
+          "y": 122
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 80,
+          "width": 790,
+          "x": 18,
+          "y": 77
+        },
+        "label": "Channel Delivery conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-corrected-crop/1/7648E6CD-7C7F-4A73-8FD8-512982970C5B-71B5149B-C1CF-498A-9F6C-12EEFBFA248F-run1.json",
+    "inputTokens": 1312,
+    "outputTokens": 225
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "browser-corrected-crop",
+    "family": "browser",
+    "variant": "corrected-crop",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2687,
+    "wallMs": 3642,
+    "draft": "Agreed — I’ll finish my part for the Cedar shipment by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 20,
+          "width": 40,
+          "x": 32,
+          "y": 96
+        },
+        "excerpt": "Mina",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 24,
+          "width": 710,
+          "x": 32,
+          "y": 123
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 82,
+          "width": 790,
+          "x": 18,
+          "y": 77
+        },
+        "label": "channel conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-corrected-crop/2/7648E6CD-7C7F-4A73-8FD8-512982970C5B-62E88E2C-BF66-4E71-9429-379C50CE2374-run1.json",
+    "inputTokens": 1313,
+    "outputTokens": 228
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "browser-corrected-crop",
+    "family": "browser",
+    "variant": "corrected-crop",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 3167,
+    "wallMs": 4136,
+    "draft": "Agreed — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 28,
+          "width": 196,
+          "x": 19,
+          "y": 33
+        },
+        "excerpt": "Channel · Delivery",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 19,
+          "width": 40,
+          "x": 31,
+          "y": 96
+        },
+        "excerpt": "Mina",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 27,
+          "width": 577,
+          "x": 32,
+          "y": 121
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 81,
+          "width": 790,
+          "x": 18,
+          "y": 77
+        },
+        "label": "channel conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-corrected-crop/3/7648E6CD-7C7F-4A73-8FD8-512982970C5B-2949BACB-64F7-4330-AA30-D363FCFBFAAC-run1.json",
+    "inputTokens": 1312,
+    "outputTokens": 256
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "browser-corrected-full",
+    "family": "browser",
+    "variant": "corrected-full",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 3107,
+    "wallMs": 4093,
+    "draft": "Agreed — I'll have my part done by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 22,
+          "width": 45,
+          "x": 50,
+          "y": 268
+        },
+        "excerpt": "Mina",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 31,
+          "width": 734,
+          "x": 50,
+          "y": 294
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 521,
+          "width": 827,
+          "x": 17,
+          "y": 177
+        },
+        "label": "left conversation pane"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-corrected-full/1/A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5-8D15CFDC-F775-4288-ACBD-5ED13655BE4F-run1.json",
+    "inputTokens": 2850,
+    "outputTokens": 226
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "browser-corrected-full",
+    "family": "browser",
+    "variant": "corrected-full",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2996,
+    "wallMs": 3531,
+    "draft": "Agreed — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 28,
+          "width": 48,
+          "x": 50,
+          "y": 265
+        },
+        "excerpt": "Mina",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 37,
+          "width": 733,
+          "x": 49,
+          "y": 292
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 520,
+          "width": 827,
+          "x": 17,
+          "y": 178
+        },
+        "label": "left conversation pane"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-corrected-full/2/A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5-3DC97D2F-89F6-44F4-88E4-E7CFCA8B78C5-run1.json",
+    "inputTokens": 2851,
+    "outputTokens": 226
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "browser-corrected-full",
+    "family": "browser",
+    "variant": "corrected-full",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 3121,
+    "wallMs": 3740,
+    "draft": "Agreed — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 27,
+          "width": 45,
+          "x": 51,
+          "y": 269
+        },
+        "excerpt": "Mina",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 31,
+          "width": 750,
+          "x": 50,
+          "y": 299
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 638,
+          "width": 827,
+          "x": 17,
+          "y": 178
+        },
+        "label": "Channel · Delivery conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-corrected-full/3/A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5-DA4B306A-5523-4BD0-9F9B-D16E6F1776FB-run1.json",
+    "inputTokens": 2851,
+    "outputTokens": 227
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "browser-raw",
+    "family": "browser",
+    "variant": "raw",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2831,
+    "wallMs": 3820,
+    "draft": "Agreed — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 27,
+          "width": 43,
+          "x": 49,
+          "y": 270
+        },
+        "excerpt": "Mina",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 37,
+          "width": 700,
+          "x": 51,
+          "y": 293
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 476,
+          "width": 827,
+          "x": 17,
+          "y": 178
+        },
+        "label": "Channel · Delivery"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-raw/1/5A66A96B-EDAB-44A8-937D-381F80F59856-8C020B00-7BE4-4339-BA89-6B7ADCAFFF4F-run1.json",
+    "inputTokens": 2847,
+    "outputTokens": 223
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "browser-raw",
+    "family": "browser",
+    "variant": "raw",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2722,
+    "wallMs": 3956,
+    "draft": "Agreed — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 28,
+          "width": 48,
+          "x": 50,
+          "y": 268
+        },
+        "excerpt": "Mina",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 34,
+          "width": 730,
+          "x": 50,
+          "y": 294
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 635,
+          "width": 826,
+          "x": 17,
+          "y": 178
+        },
+        "label": "Channel · Delivery"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-raw/2/5A66A96B-EDAB-44A8-937D-381F80F59856-6F8F123B-900F-477F-9D42-6F7CBE45F008-run1.json",
+    "inputTokens": 2848,
+    "outputTokens": 223
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "browser-raw",
+    "family": "browser",
+    "variant": "raw",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 3044,
+    "wallMs": 3665,
+    "draft": "Agreed — I’ll have my part done by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 24,
+          "width": 41,
+          "x": 51,
+          "y": 267
+        },
+        "excerpt": "Mina",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 30,
+          "width": 705,
+          "x": 50,
+          "y": 294
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 485,
+          "width": 827,
+          "x": 17,
+          "y": 178
+        },
+        "label": "Channel · Delivery"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/browser-raw/3/5A66A96B-EDAB-44A8-937D-381F80F59856-CA9CE455-8633-43FB-9655-260CF51B97B4-run1.json",
+    "inputTokens": 2847,
+    "outputTokens": 224
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2487,
+    "wallMs": 3041,
+    "draft": "Agreed — I’ll finish my part for the Cedar shipment by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 78,
+          "width": 489,
+          "x": 28,
+          "y": 143
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 535,
+          "width": 541,
+          "x": 22,
+          "y": 21
+        },
+        "label": "channel conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-left-crop/1/A0B241F2-5039-4BB4-8CE4-3F3F8290530D-8E80ED5C-E396-48B0-B6FC-28308079D094-run1.json",
+    "inputTokens": 1262,
+    "outputTokens": 201
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 3008,
+    "wallMs": 3506,
+    "draft": "Agreed — I’ll finish my part for the Cedar shipment by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 29,
+          "width": 198,
+          "x": 29,
+          "y": 26
+        },
+        "excerpt": "Channel · Delivery",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 87,
+          "width": 522,
+          "x": 28,
+          "y": 143
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      },
+      {
+        "box": {
+          "height": 26,
+          "width": 168,
+          "x": 29,
+          "y": 503
+        },
+        "excerpt": "Reply to channel",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 532,
+          "width": 537,
+          "x": 24,
+          "y": 19
+        },
+        "label": "channel conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-left-crop/2/A0B241F2-5039-4BB4-8CE4-3F3F8290530D-78E6290A-58F8-4BF4-9484-0E1FCA7DA820-run1.json",
+    "inputTokens": 1262,
+    "outputTokens": 265
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2594,
+    "wallMs": 3512,
+    "draft": "Agree — I’ll finish my part for the Cedar shipment by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 28,
+          "width": 206,
+          "x": 29,
+          "y": 25
+        },
+        "excerpt": "Channel · Delivery",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 83,
+          "width": 486,
+          "x": 28,
+          "y": 143
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 508,
+          "width": 528,
+          "x": 29,
+          "y": 25
+        },
+        "label": "Channel Delivery conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-left-crop/3/A0B241F2-5039-4BB4-8CE4-3F3F8290530D-5E6131C3-5BC9-45FB-9E57-E48EED0B010F-run1.json",
+    "inputTokens": 1262,
+    "outputTokens": 233
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2461,
+    "wallMs": 3084,
+    "draft": "Sounds good — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 49,
+          "width": 492,
+          "x": 30,
+          "y": 143
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 520,
+          "width": 550,
+          "x": 20,
+          "y": 20
+        },
+        "label": "left conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-left-full/1/934B6CA6-8DAF-4018-BE60-8DCE10B4865A-41C474C8-65A0-4D95-A886-6145485C614A-run1.json",
+    "inputTokens": 1831,
+    "outputTokens": 195
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2786,
+    "wallMs": 3304,
+    "draft": "Agreed — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 37,
+          "width": 199,
+          "x": 29,
+          "y": 27
+        },
+        "excerpt": "Channel · Delivery",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 84,
+          "width": 508,
+          "x": 30,
+          "y": 143
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 520,
+          "width": 520,
+          "x": 30,
+          "y": 27
+        },
+        "label": "left channel conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-left-full/2/934B6CA6-8DAF-4018-BE60-8DCE10B4865A-BCDFECB3-3FBE-4A86-8EBA-58F1041E615C-run1.json",
+    "inputTokens": 1831,
+    "outputTokens": 228
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2688,
+    "wallMs": 3631,
+    "draft": "Agreed — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 34,
+          "width": 255,
+          "x": 28,
+          "y": 19
+        },
+        "excerpt": "Channel · Delivery",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 52,
+          "width": 519,
+          "x": 28,
+          "y": 142
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 540,
+          "width": 580,
+          "x": 18,
+          "y": 18
+        },
+        "label": "Channel · Delivery conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-left-full/3/934B6CA6-8DAF-4018-BE60-8DCE10B4865A-2543BE38-2238-416E-ADD5-7F2E3B33D0AA-run1.json",
+    "inputTokens": 1831,
+    "outputTokens": 229
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2599,
+    "wallMs": 3111,
+    "draft": "Yes, I can finish my part by Monday at 09:45. Reference noted: INDIGO-917.",
+    "evidence": [
+      {
+        "author": "Ren",
+        "box": {
+          "height": 81,
+          "width": 463,
+          "x": 50,
+          "y": 112
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 200,
+          "width": 493,
+          "x": 50,
+          "y": 24
+        },
+        "label": "thread messages"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-right-crop/1/01BEED0E-4E6D-4366-B413-1903C6E2A078-ACF033E0-F51D-45BF-8EE9-82D5EF549170-run1.json",
+    "inputTokens": 1258,
+    "outputTokens": 189
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2823,
+    "wallMs": 3468,
+    "draft": "Sounds good — I’ll finish my part by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence": [
+      {
+        "box": {
+          "height": 30,
+          "width": 225,
+          "x": 49,
+          "y": 25
+        },
+        "excerpt": "Thread · Workshop",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 75,
+          "width": 468,
+          "x": 49,
+          "y": 145
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 309,
+          "width": 499,
+          "x": 46,
+          "y": 23
+        },
+        "label": "Workshop thread message area"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-right-crop/2/01BEED0E-4E6D-4366-B413-1903C6E2A078-D0507D2E-DDA5-4F02-B3D4-00A1C0BF9BBB-run1.json",
+    "inputTokens": 1258,
+    "outputTokens": 223
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2652,
+    "wallMs": 3645,
+    "draft": "Agreed — I’ll have my part finished by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence": [
+      {
+        "author": "Ren",
+        "box": {
+          "height": 74,
+          "width": 469,
+          "x": 49,
+          "y": 144
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 225,
+          "width": 510,
+          "x": 45,
+          "y": 20
+        },
+        "label": "Workshop thread message"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-right-crop/3/01BEED0E-4E6D-4366-B413-1903C6E2A078-F28BFB70-FC7E-4C6C-B91F-9B10B84F4875-run1.json",
+    "inputTokens": 1258,
+    "outputTokens": 191
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 3054,
+    "wallMs": 3948,
+    "draft": "Sounds good — I’ll finish my part by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence": [
+      {
+        "box": {
+          "height": 37,
+          "width": 249,
+          "x": 650,
+          "y": 26
+        },
+        "excerpt": "Thread · Workshop",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 79,
+          "width": 470,
+          "x": 650,
+          "y": 142
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 190,
+          "width": 486,
+          "x": 650,
+          "y": 26
+        },
+        "label": "Thread · Workshop conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-right-full/1/8E6F3B1E-70C4-47BE-BAF1-9D4607ECCBC9-46324309-6DC2-44E6-B130-1E54C4138D9C-run1.json",
+    "inputTokens": 1832,
+    "outputTokens": 226
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 3677,
+    "wallMs": 4223,
+    "draft": "Agreed — I’ll finish my part by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence": [
+      {
+        "box": {
+          "height": 38,
+          "width": 233,
+          "x": 650,
+          "y": 21
+        },
+        "excerpt": "Thread · Workshop",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 78,
+          "width": 490,
+          "x": 649,
+          "y": 143
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 515,
+          "width": 556,
+          "x": 622,
+          "y": 20
+        },
+        "label": "Thread · Workshop"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-right-full/2/8E6F3B1E-70C4-47BE-BAF1-9D4607ECCBC9-F2A3F0A4-72CA-46FC-8E00-481F385A3115-run1.json",
+    "inputTokens": 1833,
+    "outputTokens": 225
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-original-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2815,
+    "wallMs": 3382,
+    "draft": "Agree — I’ll finish my part by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence": [
+      {
+        "author": "Ren",
+        "box": {
+          "height": 82,
+          "width": 488,
+          "x": 649,
+          "y": 143
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 219,
+          "width": 543,
+          "x": 620,
+          "y": 23
+        },
+        "label": "Thread conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-right-full/3/8E6F3B1E-70C4-47BE-BAF1-9D4607ECCBC9-5178D21B-9B4A-4ACA-A750-8BC9D69D5594-run1.json",
+    "inputTokens": 1832,
+    "outputTokens": 191
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 3531,
+    "wallMs": 4459,
+    "draft": "Agreed — I’ll finish my part by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence": [
+      {
+        "box": {
+          "height": 32,
+          "width": 213,
+          "x": 49,
+          "y": 25
+        },
+        "excerpt": "Thread · Workshop",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 82,
+          "width": 493,
+          "x": 50,
+          "y": 144
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 204,
+          "width": 497,
+          "x": 50,
+          "y": 24
+        },
+        "label": "Thread · Workshop conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-left-crop/1/73BDEA85-42D4-496A-844E-4480DA16CF63-CDA170CD-A961-458D-95BB-D5B6E27C48E8-run1.json",
+    "inputTokens": 1255,
+    "outputTokens": 220
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2608,
+    "wallMs": 3679,
+    "draft": "Yes, I can finish my part by Monday at 09:45. I'll use reference INDIGO-917.",
+    "evidence": [
+      {
+        "author": "Ren",
+        "box": {
+          "height": 98,
+          "width": 492,
+          "x": 50,
+          "y": 110
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 98,
+          "width": 492,
+          "x": 50,
+          "y": 110
+        },
+        "label": "thread conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-left-crop/2/73BDEA85-42D4-496A-844E-4480DA16CF63-64DD2E5C-B1B0-45DD-8AAE-7142F97C3866-run1.json",
+    "inputTokens": 1255,
+    "outputTokens": 186
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 4770,
+    "wallMs": 5835,
+    "draft": "Agreed — I’ll finish my part by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence": [
+      {
+        "author": "Ren",
+        "box": {
+          "height": 79,
+          "width": 468,
+          "x": 50,
+          "y": 113
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 245,
+          "width": 511,
+          "x": 45,
+          "y": 24
+        },
+        "label": "thread messages"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-left-crop/3/73BDEA85-42D4-496A-844E-4480DA16CF63-87765FA0-0316-4E84-BD67-B368EA63D772-run1.json",
+    "inputTokens": 1255,
+    "outputTokens": 186
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2644,
+    "wallMs": 3621,
+    "draft": "Yes, I can finish my part by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence": [
+      {
+        "box": {
+          "height": 30,
+          "width": 222,
+          "x": 50,
+          "y": 25
+        },
+        "excerpt": "Thread · Workshop",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 49,
+          "width": 492,
+          "x": 50,
+          "y": 143
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 520,
+          "width": 548,
+          "x": 32,
+          "y": 22
+        },
+        "label": "Thread · Workshop conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-left-full/1/F547CFEA-4B62-45EB-87A8-627DF83544CE-BB50C43A-3D66-469A-B2E8-A86E049B7114-run1.json",
+    "inputTokens": 1827,
+    "outputTokens": 220
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2705,
+    "wallMs": 3226,
+    "draft": "Agreed — I’ll finish my part by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence": [
+      {
+        "box": {
+          "height": 29,
+          "width": 214,
+          "x": 49,
+          "y": 25
+        },
+        "excerpt": "Thread · Workshop",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 50,
+          "width": 508,
+          "x": 48,
+          "y": 143
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 227,
+          "width": 559,
+          "x": 34,
+          "y": 20
+        },
+        "label": "Thread · Workshop conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-left-full/2/F547CFEA-4B62-45EB-87A8-627DF83544CE-0C897408-B86E-4E00-8CB2-6669221935BB-run1.json",
+    "inputTokens": 1827,
+    "outputTokens": 221
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2651,
+    "wallMs": 3208,
+    "draft": "Yes, I can finish my part by Monday at 09:45. I’ll use reference INDIGO-917.",
+    "evidence": [
+      {
+        "box": {
+          "height": 31,
+          "width": 261,
+          "x": 50,
+          "y": 26
+        },
+        "excerpt": "Thread · Workshop",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 49,
+          "width": 488,
+          "x": 50,
+          "y": 143
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 525,
+          "width": 550,
+          "x": 35,
+          "y": 21
+        },
+        "label": "Thread · Workshop"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-left-full/3/F547CFEA-4B62-45EB-87A8-627DF83544CE-254F82AC-D404-498B-945E-450A87826F99-run1.json",
+    "inputTokens": 1827,
+    "outputTokens": 221
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2787,
+    "wallMs": 3687,
+    "draft": "Agreed — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 31,
+          "width": 183,
+          "x": 30,
+          "y": 24
+        },
+        "excerpt": "Channel · Delivery",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 81,
+          "width": 503,
+          "x": 30,
+          "y": 146
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 198,
+          "width": 499,
+          "x": 30,
+          "y": 24
+        },
+        "label": "channel conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-right-crop/1/2650E1C7-97BE-46FE-A5D9-DD7DDB74A4BF-055D0769-01EC-45D3-9C27-9331FAACB4F1-run1.json",
+    "inputTokens": 1260,
+    "outputTokens": 227
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2486,
+    "wallMs": 2979,
+    "draft": "Agreed — I’ll finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 77,
+          "width": 517,
+          "x": 29,
+          "y": 143
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 226,
+          "width": 523,
+          "x": 30,
+          "y": 24
+        },
+        "label": "channel conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-right-crop/2/2650E1C7-97BE-46FE-A5D9-DD7DDB74A4BF-FD3C1CDA-B5EF-4775-AF53-07D30415557B-run1.json",
+    "inputTokens": 1260,
+    "outputTokens": 195
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2758,
+    "wallMs": 3286,
+    "draft": "Yes — I can finish my part by Thursday at 14:20. I’ll use reference CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 31,
+          "width": 184,
+          "x": 29,
+          "y": 22
+        },
+        "excerpt": "Channel · Delivery",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 49,
+          "width": 495,
+          "x": 29,
+          "y": 145
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 214,
+          "width": 515,
+          "x": 30,
+          "y": 22
+        },
+        "label": "channel conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-right-crop/3/2650E1C7-97BE-46FE-A5D9-DD7DDB74A4BF-E88A20C3-DECB-427C-9283-78172EB7F312-run1.json",
+    "inputTokens": 1260,
+    "outputTokens": 228
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2835,
+    "wallMs": 3938,
+    "draft": "Yes — I can finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 35,
+          "width": 255,
+          "x": 628,
+          "y": 21
+        },
+        "excerpt": "Channel · Delivery",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 49,
+          "width": 478,
+          "x": 630,
+          "y": 143
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 203,
+          "width": 517,
+          "x": 628,
+          "y": 21
+        },
+        "label": "Channel · Delivery conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-right-full/1/9D87DBB7-E15B-446E-8977-E38D28201DFC-859A9917-C52D-47A0-B508-1810C7CFEFDA-run1.json",
+    "inputTokens": 1829,
+    "outputTokens": 225
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2578,
+    "wallMs": 3570,
+    "draft": "Yes — I can finish my part by Thursday at 14:20. I’ve noted the reference CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 31,
+          "width": 256,
+          "x": 629,
+          "y": 28
+        },
+        "excerpt": "Channel · Delivery",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 47,
+          "width": 480,
+          "x": 628,
+          "y": 144
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 194,
+          "width": 507,
+          "x": 629,
+          "y": 28
+        },
+        "label": "Channel · Delivery conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-right-full/2/9D87DBB7-E15B-446E-8977-E38D28201DFC-7C1310F7-BD25-4FA2-9ACB-1259691BB9AA-run1.json",
+    "inputTokens": 1828,
+    "outputTokens": 228
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "case": "render-swapped-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2684,
+    "wallMs": 3634,
+    "draft": "Yes, I can finish my part by Thursday at 14:20. Reference: CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 31,
+          "width": 272,
+          "x": 628,
+          "y": 28
+        },
+        "excerpt": "Channel · Delivery",
+        "partial": false
+      },
+      {
+        "author": "Mina",
+        "box": {
+          "height": 77,
+          "width": 469,
+          "x": 629,
+          "y": 144
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 221,
+          "width": 505,
+          "x": 628,
+          "y": 28
+        },
+        "label": "Channel · Delivery conversation"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-swapped-right-full/3/9D87DBB7-E15B-446E-8977-E38D28201DFC-80EBA329-F912-47CF-9FDE-DE1072AE9F8C-run1.json",
+    "inputTokens": 1828,
+    "outputTokens": 225
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "browser-corrected-crop",
+    "family": "browser",
+    "variant": "corrected-crop",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 1755,
+    "wallMs": 2307,
+    "draft": "I agree to finish my part for the Cedar shipment by Thursday at 14:20. I will make sure to follow the reference CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 84,
+          "width": 785,
+          "x": 26,
+          "y": 30
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 84,
+          "width": 785,
+          "x": 26,
+          "y": 30
+        },
+        "label": "message"
+      },
+      {
+        "box": {
+          "height": 96,
+          "width": 787,
+          "x": 19,
+          "y": 523
+        },
+        "label": "composerBox"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/browser-corrected-crop/1/7648E6CD-7C7F-4A73-8FD8-512982970C5B-48EC9B9A-06AB-49AF-ADCC-A478E0F606FA-run1.json",
+    "inputTokens": 1532,
+    "outputTokens": 215
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "browser-corrected-crop",
+    "family": "browser",
+    "variant": "corrected-crop",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 1746,
+    "wallMs": 2763,
+    "draft": "Sure, I will complete my part by Thursday at 14:20 for the Cedar shipment. I'll make sure to reference CEDAR-482 as requested.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 49,
+          "width": 786,
+          "x": 20,
+          "y": 25
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 183,
+          "width": 786,
+          "x": 20,
+          "y": 25
+        },
+        "label": "message"
+      },
+      {
+        "box": {
+          "height": 96,
+          "width": 787,
+          "x": 19,
+          "y": 523
+        },
+        "label": "composer"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/browser-corrected-crop/2/7648E6CD-7C7F-4A73-8FD8-512982970C5B-CD1F1619-B2BC-4860-A743-2244924DBF10-run1.json",
+    "inputTokens": 1532,
+    "outputTokens": 214
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "browser-corrected-crop",
+    "family": "browser",
+    "variant": "corrected-crop",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 1739,
+    "wallMs": 2659,
+    "draft": "I agree to finish my part for the Cedar shipment by Thursday at 14:20. The reference is CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 62,
+          "width": 776,
+          "x": 24,
+          "y": 31
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 62,
+          "width": 776,
+          "x": 24,
+          "y": 31
+        },
+        "label": "message"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/browser-corrected-crop/3/7648E6CD-7C7F-4A73-8FD8-512982970C5B-ED8F7C6F-4A96-41A8-A34D-DEAA9F869AE9-run1.json",
+    "inputTokens": 1532,
+    "outputTokens": 186
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "browser-corrected-full",
+    "family": "browser",
+    "variant": "corrected-full",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": false,
+    "crossPaneContent": true,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": 2553,
+    "wallMs": 3260,
+    "draft": "Yes, I will complete my part by Thursday at 14:20 as requested. The reference number is CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 49,
+          "width": 404,
+          "x": 40,
+          "y": 115
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 51,
+          "width": 399,
+          "x": 955,
+          "y": 107
+        },
+        "excerpt": "For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 521,
+          "width": 908,
+          "x": 15,
+          "y": 95
+        },
+        "label": "left panel"
+      },
+      {
+        "box": {
+          "height": 519,
+          "width": 935,
+          "x": 928,
+          "y": 90
+        },
+        "label": "right panel"
+      },
+      {
+        "box": {
+          "height": 100,
+          "width": 908,
+          "x": 15,
+          "y": 698
+        },
+        "label": "reply input area"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/browser-corrected-full/1/A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5-17A26293-2751-448A-B9CA-E7D02BB3EFA1-run1.json",
+    "inputTokens": 3608,
+    "outputTokens": 291
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "browser-corrected-full",
+    "family": "browser",
+    "variant": "corrected-full",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": false,
+    "crossPaneContent": true,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": 2969,
+    "wallMs": 3448,
+    "draft": "For the Cedar shipment, I agree to finish my part by Thursday at 14:20. The reference is CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 27,
+          "width": 667,
+          "x": 21,
+          "y": 136
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 27,
+          "width": 669,
+          "x": 757,
+          "y": 136
+        },
+        "excerpt": "For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 49,
+          "width": 718,
+          "x": 15,
+          "y": 136
+        },
+        "label": "Channel · Delivery"
+      },
+      {
+        "box": {
+          "height": 131,
+          "width": 682,
+          "x": 758,
+          "y": 136
+        },
+        "label": "Thread · Workshop"
+      },
+      {
+        "box": {
+          "height": 96,
+          "width": 787,
+          "x": 37,
+          "y": 700
+        },
+        "label": "Reply to channel"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/browser-corrected-full/2/A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5-E6F716CF-65D7-4B71-81D8-C3ED024AF5E0-run1.json",
+    "inputTokens": 3608,
+    "outputTokens": 294
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "browser-corrected-full",
+    "family": "browser",
+    "variant": "corrected-full",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": false,
+    "crossPaneContent": true,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": 2475,
+    "wallMs": 3456,
+    "draft": "For the Indigo workshop, I agree that I can finish my part by Monday at 09:45. The reference is INDIGO-917.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 56,
+          "width": 555,
+          "x": 38,
+          "y": 130
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 56,
+          "width": 555,
+          "x": 605,
+          "y": 130
+        },
+        "excerpt": "For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 280,
+          "width": 580,
+          "x": 20,
+          "y": 120
+        },
+        "label": "Channel · Delivery"
+      },
+      {
+        "box": {
+          "height": 280,
+          "width": 580,
+          "x": 590,
+          "y": 120
+        },
+        "label": "Thread · Workshop"
+      },
+      {
+        "box": {
+          "height": 96,
+          "width": 787,
+          "x": 37,
+          "y": 700
+        },
+        "label": "ComposerBox"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/browser-corrected-full/3/A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5-8224397E-7B56-4F65-84CD-7BC84A593DFE-run1.json",
+    "inputTokens": 3608,
+    "outputTokens": 294
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "browser-raw",
+    "family": "browser",
+    "variant": "raw",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": false,
+    "crossPaneContent": true,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": 2495,
+    "wallMs": 3464,
+    "draft": "I agree. The deadline is Thursday at 14:20 and the reference is CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 47,
+          "width": 422,
+          "x": 34,
+          "y": 117
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      },
+      {
+        "author": "Ren",
+        "box": {
+          "height": 63,
+          "width": 438,
+          "x": 956,
+          "y": 118
+        },
+        "excerpt": "For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 141,
+          "width": 422,
+          "x": 34,
+          "y": 117
+        },
+        "label": "Channel Delivery"
+      },
+      {
+        "box": {
+          "height": 151,
+          "width": 438,
+          "x": 956,
+          "y": 118
+        },
+        "label": "Thread Workshop"
+      },
+      {
+        "box": {
+          "height": 110,
+          "width": 880,
+          "x": 40,
+          "y": 660
+        },
+        "label": "Reply to channel input box"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/browser-raw/1/5A66A96B-EDAB-44A8-937D-381F80F59856-32457041-221B-4882-B3C5-A1E6AAE952DD-run1.json",
+    "inputTokens": 3606,
+    "outputTokens": 285
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "browser-raw",
+    "family": "browser",
+    "variant": "raw",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": 2922,
+    "wallMs": 3505,
+    "draft": "Sure, I can finish my part by Thursday at 14:20 for the Cedar shipment. The reference is CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 63,
+          "width": 452,
+          "x": 40,
+          "y": 167
+        },
+        "excerpt": "Mina\nFor the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 159,
+          "width": 453,
+          "x": 40,
+          "y": 167
+        },
+        "label": "Channel · Delivery"
+      },
+      {
+        "box": {
+          "height": 159,
+          "width": 456,
+          "x": 952,
+          "y": 167
+        },
+        "label": "Thread · Workshop"
+      },
+      {
+        "box": {
+          "height": 111,
+          "width": 452,
+          "x": 40,
+          "y": 664
+        },
+        "label": "Reply to channel"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/browser-raw/2/5A66A96B-EDAB-44A8-937D-381F80F59856-C3A47EAC-199F-4F56-9D4A-542E36BD4A6A-run1.json",
+    "inputTokens": 3605,
+    "outputTokens": 240
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "browser-raw",
+    "family": "browser",
+    "variant": "raw",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": 1969,
+    "wallMs": 3148,
+    "draft": "I agree. We will finish our part by Thursday at 14:20. The reference is CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 55,
+          "width": 363,
+          "x": 25,
+          "y": 161
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 143,
+          "width": 893,
+          "x": 25,
+          "y": 89
+        },
+        "label": "Channel  Delivery"
+      },
+      {
+        "box": {
+          "height": 239,
+          "width": 893,
+          "x": 940,
+          "y": 89
+        },
+        "label": "Thread  Workshop"
+      },
+      {
+        "box": {
+          "height": 111,
+          "width": 888,
+          "x": 41,
+          "y": 664
+        },
+        "label": "Composer"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/browser-raw/3/5A66A96B-EDAB-44A8-937D-381F80F59856-350A2042-7A17-4035-B3E8-98F714DB3D3B-run1.json",
+    "inputTokens": 3605,
+    "outputTokens": 240
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 1988,
+    "wallMs": 2944,
+    "draft": "Understood, I will finish my part for the Cedar shipment by Thursday at 14:20. The reference CEDAR-482 is noted.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 140,
+          "width": 580,
+          "x": 10,
+          "y": 20
+        },
+        "excerpt": "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 140,
+          "width": 580,
+          "x": 10,
+          "y": 20
+        },
+        "label": "message"
+      },
+      {
+        "box": {
+          "height": 155,
+          "width": 520,
+          "x": 30,
+          "y": 575
+        },
+        "label": "composer"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-left-crop/1/A0B241F2-5039-4BB4-8CE4-3F3F8290530D-5B051845-D9C0-4DE2-94E8-A0B53D9D4CFB-run1.json",
+    "inputTokens": 1463,
+    "outputTokens": 214
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 2447,
+    "wallMs": 3419,
+    "draft": "Yes, I can finish my part of the Cedar shipment by Thursday at 14:20. Noted the reference CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 103,
+          "width": 578,
+          "x": 11,
+          "y": 29
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 103,
+          "width": 578,
+          "x": 11,
+          "y": 29
+        },
+        "label": "message"
+      },
+      {
+        "box": {
+          "height": 138,
+          "width": 556,
+          "x": 12,
+          "y": 574
+        },
+        "label": "reply"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-left-crop/2/A0B241F2-5039-4BB4-8CE4-3F3F8290530D-D373F7F8-FCED-47ED-A479-161FF2838B1F-run1.json",
+    "inputTokens": 1463,
+    "outputTokens": 215
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 2334,
+    "wallMs": 3345,
+    "draft": "I agree to finish my part for the Cedar shipment by Thursday at 14:20. The reference number CEDAR-482 is noted.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 82,
+          "width": 600,
+          "x": 0,
+          "y": 0
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 200,
+          "width": 600,
+          "x": 0,
+          "y": 0
+        },
+        "label": "message"
+      },
+      {
+        "box": {
+          "height": 155,
+          "width": 520,
+          "x": 30,
+          "y": 575
+        },
+        "label": "composer"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-left-crop/3/A0B241F2-5039-4BB4-8CE4-3F3F8290530D-57CE1DA9-18B7-4A07-BC59-FD1C7E11F6F3-run1.json",
+    "inputTokens": 1463,
+    "outputTokens": 216
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 2425,
+    "wallMs": 3588,
+    "draft": "Yes, I can finish my part by Thursday at 14:20. I'll make sure to keep the reference CEDAR-482 in mind.",
+    "evidence": [
+      {
+        "box": {
+          "height": 37,
+          "width": 566,
+          "x": 11,
+          "y": 23
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 270,
+          "width": 585,
+          "x": 8,
+          "y": 13
+        },
+        "label": "Delivery Channel"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-left-full/1/934B6CA6-8DAF-4018-BE60-8DCE10B4865A-B2C6DB22-1B73-4FA6-B96D-4F9215774950-run1.json",
+    "inputTokens": 2232,
+    "outputTokens": 192
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": 2216,
+    "wallMs": 3226,
+    "draft": "Yes, I will finish my part for the Cedar shipment by Thursday at 14:20. The reference is CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 40,
+          "width": 520,
+          "x": 30,
+          "y": 35
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 155,
+          "width": 520,
+          "x": 30,
+          "y": 575
+        },
+        "label": "Reply to channel"
+      },
+      {
+        "box": {
+          "height": 155,
+          "width": 520,
+          "x": 650,
+          "y": 575
+        },
+        "label": "Reply to thread"
+      },
+      {
+        "box": {
+          "height": 80,
+          "width": 520,
+          "x": 30,
+          "y": 35
+        },
+        "label": "Channel text"
+      },
+      {
+        "box": {
+          "height": 80,
+          "width": 520,
+          "x": 650,
+          "y": 35
+        },
+        "label": "Thread text"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-left-full/2/934B6CA6-8DAF-4018-BE60-8DCE10B4865A-DCB24D59-2694-4ADD-9E7E-1203368BC990-run1.json",
+    "inputTokens": 2233,
+    "outputTokens": 264
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 3,
+    "status": "request_failed",
+    "factAndScopePass": false,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": null,
+    "wallMs": 3208,
+    "draft": "",
+    "evidence": [],
+    "conversationRegion": [],
+    "error": "Research result rejected: evidence_overlaps_composer.",
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-left-full/3/934B6CA6-8DAF-4018-BE60-8DCE10B4865A-D08C05CC-8887-41A9-877E-E0BB88237E24-run1.json",
+    "inputTokens": null,
+    "outputTokens": null
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2460,
+    "wallMs": 3045,
+    "draft": "Yes, I can finish my part for the Indigo workshop by Monday at 09:45. I will make sure to follow the reference INDIGO-917.",
+    "evidence": [
+      {
+        "author": "Ren",
+        "box": {
+          "height": 77,
+          "width": 528,
+          "x": 41,
+          "y": 66
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 77,
+          "width": 528,
+          "x": 41,
+          "y": 66
+        },
+        "label": "message"
+      },
+      {
+        "box": {
+          "height": 155,
+          "width": 520,
+          "x": 50,
+          "y": 575
+        },
+        "label": "draft"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-right-crop/1/01BEED0E-4E6D-4366-B413-1903C6E2A078-4DE5D749-CAB9-4774-9AC1-73C57B8B2936-run1.json",
+    "inputTokens": 1459,
+    "outputTokens": 212
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 1658,
+    "wallMs": 2536,
+    "draft": "Yes, I can finish my part by Monday at 09:45 for the Indigo workshop. I will make sure to follow the reference INDIGO-917.",
+    "evidence": [
+      {
+        "box": {
+          "height": 147,
+          "width": 580,
+          "x": 7,
+          "y": 4
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 147,
+          "width": 590,
+          "x": 4,
+          "y": 4
+        },
+        "label": "message"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-right-crop/2/01BEED0E-4E6D-4366-B413-1903C6E2A078-3E74CBC9-6764-4274-861C-7BF55E983D5E-run1.json",
+    "inputTokens": 1459,
+    "outputTokens": 189
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 2026,
+    "wallMs": 2970,
+    "draft": "Yes, I can finish my part for the Indigo workshop by Monday at 09:45. I'll use the reference INDIGO-917 as instructed.",
+    "evidence": [
+      {
+        "author": "Ren",
+        "box": {
+          "height": 93,
+          "width": 481,
+          "x": 54,
+          "y": 91
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 93,
+          "width": 481,
+          "x": 54,
+          "y": 91
+        },
+        "label": "message"
+      },
+      {
+        "box": {
+          "height": 155,
+          "width": 520,
+          "x": 50,
+          "y": 575
+        },
+        "label": "reply box"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-right-crop/3/01BEED0E-4E6D-4366-B413-1903C6E2A078-6CAB69A3-967E-46DA-8604-18EC700F8F5B-run1.json",
+    "inputTokens": 1459,
+    "outputTokens": 211
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": false,
+    "crossPaneContent": true,
+    "intentAsEvidence": true,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": 2289,
+    "wallMs": 2820,
+    "draft": "Yes, I will finish my part by Thursday at 14:20. The reference is CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 75,
+          "width": 600,
+          "x": 0,
+          "y": 0
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      },
+      {
+        "box": {
+          "height": 155,
+          "width": 400,
+          "x": 0,
+          "y": 575
+        },
+        "excerpt": "Agree, and mention their deadline and reference.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 500,
+          "width": 600,
+          "x": 0,
+          "y": 0
+        },
+        "label": "Channel Delivery"
+      },
+      {
+        "box": {
+          "height": 155,
+          "width": 600,
+          "x": 0,
+          "y": 575
+        },
+        "label": "Reply to channel"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-right-full/1/8E6F3B1E-70C4-47BE-BAF1-9D4607ECCBC9-4FE8D6AB-835E-4F40-8EAA-26C721542070-run1.json",
+    "inputTokens": 2233,
+    "outputTokens": 249
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 2,
+    "status": "request_failed",
+    "factAndScopePass": false,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": null,
+    "wallMs": 3208,
+    "draft": "",
+    "evidence": [],
+    "conversationRegion": [],
+    "error": "Research result rejected: evidence_overlaps_composer.",
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-right-full/2/8E6F3B1E-70C4-47BE-BAF1-9D4607ECCBC9-CAC409F2-47A0-4C15-8800-C81580456913-run1.json",
+    "inputTokens": null,
+    "outputTokens": null
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-original-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 3,
+    "status": "request_failed",
+    "factAndScopePass": false,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": null,
+    "wallMs": 3738,
+    "draft": "",
+    "evidence": [],
+    "conversationRegion": [],
+    "error": "Research result rejected: evidence_overlaps_composer.",
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-original-right-full/3/8E6F3B1E-70C4-47BE-BAF1-9D4607ECCBC9-AC87458C-15A5-49AA-B65F-AD80F5F883B1-run1.json",
+    "inputTokens": null,
+    "outputTokens": null
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 1619,
+    "wallMs": 2613,
+    "draft": "Yes, I will complete my part for the Indigo workshop by Monday at 09:45. I'll make sure to follow the reference INDIGO-917.",
+    "evidence": [
+      {
+        "author": "Ren",
+        "box": {
+          "height": 60,
+          "width": 570,
+          "x": 10,
+          "y": 30
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 128,
+          "width": 583,
+          "x": 8,
+          "y": 22
+        },
+        "label": "message"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-left-crop/1/73BDEA85-42D4-496A-844E-4480DA16CF63-D271B552-92A8-457A-9234-112E604A213A-run1.json",
+    "inputTokens": 1456,
+    "outputTokens": 185
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 1743,
+    "wallMs": 2815,
+    "draft": "I agree to complete my part for the Indigo workshop by Monday at 09:45. I will ensure everything is ready following the reference INDIGO-917.",
+    "evidence": [
+      {
+        "box": {
+          "height": 100,
+          "width": 520,
+          "x": 40,
+          "y": 20
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 100,
+          "width": 520,
+          "x": 40,
+          "y": 20
+        },
+        "label": "message"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-left-crop/2/73BDEA85-42D4-496A-844E-4480DA16CF63-B92BB916-162D-4164-B351-9B94C11F1A55-run1.json",
+    "inputTokens": 1456,
+    "outputTokens": 186
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-left-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 1776,
+    "wallMs": 2788,
+    "draft": "Sure, I can complete my part for the Indigo workshop by Monday at 09:45. I'll use the reference INDIGO-917 to guide my work. Thanks for letting me know!",
+    "evidence": [
+      {
+        "author": "Ren",
+        "box": {
+          "height": 66,
+          "width": 538,
+          "x": 26,
+          "y": 26
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 66,
+          "width": 538,
+          "x": 26,
+          "y": 26
+        },
+        "label": "message"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-left-crop/3/73BDEA85-42D4-496A-844E-4480DA16CF63-244C035B-2833-4CDD-B055-B5BA890161E1-run1.json",
+    "inputTokens": 1456,
+    "outputTokens": 192
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 1821,
+    "wallMs": 2332,
+    "draft": "Yes, I can finish my part for the Indigo workshop by Monday at 09:45. I'll keep the reference INDIGO-917 in mind.",
+    "evidence": [
+      {
+        "box": {
+          "height": 60,
+          "width": 570,
+          "x": 15,
+          "y": 12
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 60,
+          "width": 570,
+          "x": 15,
+          "y": 12
+        },
+        "label": "Thread · Workshop"
+      },
+      {
+        "box": {
+          "height": 155,
+          "width": 520,
+          "x": 50,
+          "y": 575
+        },
+        "label": "Reply to thread"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-left-full/1/F547CFEA-4B62-45EB-87A8-627DF83544CE-AAE07841-85A8-4D91-AA70-F3D141F194F6-run1.json",
+    "inputTokens": 2228,
+    "outputTokens": 212
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 2,
+    "status": "request_failed",
+    "factAndScopePass": false,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": null,
+    "wallMs": 2939,
+    "draft": "",
+    "evidence": [],
+    "conversationRegion": [],
+    "error": "Research result rejected: evidence_overlaps_composer.",
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-left-full/2/F547CFEA-4B62-45EB-87A8-627DF83544CE-FB7CC03E-5A83-4039-9154-F072140B7057-run1.json",
+    "inputTokens": null,
+    "outputTokens": null
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-left-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 3,
+    "status": "request_failed",
+    "factAndScopePass": false,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": null,
+    "wallMs": 3119,
+    "draft": "",
+    "evidence": [],
+    "conversationRegion": [],
+    "error": "Research result rejected: evidence_overlaps_composer.",
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-left-full/3/F547CFEA-4B62-45EB-87A8-627DF83544CE-E299E97B-D964-4E87-BBEA-D8949499E69E-run1.json",
+    "inputTokens": null,
+    "outputTokens": null
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 1538,
+    "wallMs": 2432,
+    "draft": "I agree to finish my part for the Cedar shipment by Thursday at 14:20. The reference is CEDAR-482.",
+    "evidence": [
+      {
+        "author": "Mina",
+        "box": {
+          "height": 60,
+          "width": 600,
+          "x": 0,
+          "y": 0
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 195,
+          "width": 600,
+          "x": 0,
+          "y": 0
+        },
+        "label": "message"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-right-crop/1/2650E1C7-97BE-46FE-A5D9-DD7DDB74A4BF-866BBE22-4AA7-4F1D-8459-B816B192861D-run1.json",
+    "inputTokens": 1461,
+    "outputTokens": 189
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": true,
+    "regionsStayInPane": true,
+    "modelMs": 3433,
+    "wallMs": 4000,
+    "draft": "Yes, I can finish my part by Thursday at 14:20. I will make sure everything is ready for the Cedar shipment with reference CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 79,
+          "width": 211,
+          "x": 17,
+          "y": 74
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 79,
+          "width": 211,
+          "x": 17,
+          "y": 74
+        },
+        "label": "message"
+      },
+      {
+        "box": {
+          "height": 155,
+          "width": 520,
+          "x": 30,
+          "y": 575
+        },
+        "label": "composer"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-right-crop/2/2650E1C7-97BE-46FE-A5D9-DD7DDB74A4BF-E754F0A3-7EA5-4A02-99E7-A5E27B5CECA0-run1.json",
+    "inputTokens": 1461,
+    "outputTokens": 218
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-right-crop",
+    "family": "render",
+    "variant": "crop",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 2094,
+    "wallMs": 3676,
+    "draft": "Yes, I will complete my part for the Cedar shipment by Thursday at 14:20. Noted the reference CEDAR-482. Thank you.",
+    "evidence": [
+      {
+        "box": {
+          "height": 111,
+          "width": 553,
+          "x": 23,
+          "y": 26
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 111,
+          "width": 553,
+          "x": 23,
+          "y": 26
+        },
+        "label": "message"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-right-crop/3/2650E1C7-97BE-46FE-A5D9-DD7DDB74A4BF-AACA8C4F-46B6-4DCE-B9AD-C3B6ED35F95C-run1.json",
+    "inputTokens": 1461,
+    "outputTokens": 193
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 1,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": true,
+    "modelMs": 2264,
+    "wallMs": 3185,
+    "draft": "Understood, I will finish my part by Thursday at 14:20 for the Cedar shipment. The reference is CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 36,
+          "width": 361,
+          "x": 601,
+          "y": 25
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 88,
+          "width": 361,
+          "x": 601,
+          "y": 25
+        },
+        "label": "channel text"
+      },
+      {
+        "box": {
+          "height": 155,
+          "width": 520,
+          "x": 630,
+          "y": 575
+        },
+        "label": "composer box"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-right-full/1/9D87DBB7-E15B-446E-8977-E38D28201DFC-6A424622-7290-44D6-A1C0-4E9BFC6D4B85-run1.json",
+    "inputTokens": 2229,
+    "outputTokens": 212
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 2,
+    "status": "ready",
+    "factAndScopePass": false,
+    "crossPaneContent": true,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": 2765,
+    "wallMs": 3718,
+    "draft": "Agree, I will finish my part for the Cedar shipment by Thursday at 14:20. The reference is CEDAR-482.",
+    "evidence": [
+      {
+        "box": {
+          "height": 42,
+          "width": 552,
+          "x": 23,
+          "y": 22
+        },
+        "excerpt": "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial": false
+      },
+      {
+        "box": {
+          "height": 42,
+          "width": 560,
+          "x": 599,
+          "y": 20
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 84,
+          "width": 552,
+          "x": 23,
+          "y": 20
+        },
+        "label": "Thread · Workshop"
+      },
+      {
+        "box": {
+          "height": 84,
+          "width": 560,
+          "x": 599,
+          "y": 18
+        },
+        "label": "Channel · Delivery"
+      },
+      {
+        "box": {
+          "height": 154,
+          "width": 566,
+          "x": 23,
+          "y": 482
+        },
+        "label": "Reply to thread"
+      },
+      {
+        "box": {
+          "height": 147,
+          "width": 571,
+          "x": 618,
+          "y": 486
+        },
+        "label": "Reply to channel"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-right-full/2/9D87DBB7-E15B-446E-8977-E38D28201DFC-C99BBC84-EDCB-4B57-9690-CA767C8A038A-run1.json",
+    "inputTokens": 2229,
+    "outputTokens": 319
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "case": "render-swapped-right-full",
+    "family": "render",
+    "variant": "full",
+    "repeat": 3,
+    "status": "ready",
+    "factAndScopePass": true,
+    "crossPaneContent": false,
+    "intentAsEvidence": false,
+    "factEvidenceBoxesIntersectSource": false,
+    "regionsStayInPane": false,
+    "modelMs": 1938,
+    "wallMs": 2859,
+    "draft": "Sure, I can finish my part by Thursday at 14:20. I'll refer to the CEDAR-482 for the details.",
+    "evidence": [
+      {
+        "box": {
+          "height": 56,
+          "width": 600,
+          "x": 600,
+          "y": 0
+        },
+        "excerpt": "Mina: For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial": false
+      }
+    ],
+    "conversationRegion": [
+      {
+        "box": {
+          "height": 200,
+          "width": 600,
+          "x": 0,
+          "y": 0
+        },
+        "label": "Thread · Workshop"
+      },
+      {
+        "box": {
+          "height": 100,
+          "width": 520,
+          "x": 630,
+          "y": 350
+        },
+        "label": "Reply to channel"
+      }
+    ],
+    "error": null,
+    "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/mini/render-swapped-right-full/3/9D87DBB7-E15B-446E-8977-E38D28201DFC-EE70CC63-68C9-42DE-A595-2866898B55A5-run1.json",
+    "inputTokens": 2229,
+    "outputTokens": 213
+  }
+]

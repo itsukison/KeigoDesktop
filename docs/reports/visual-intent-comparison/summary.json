@@ -1,0 +1,122 @@
+[
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "family": "browser",
+    "variant": "corrected-crop",
+    "n": 3,
+    "factAndScopePass": 3,
+    "crossPaneContent": 0,
+    "rejected": 0,
+    "factEvidenceBoxesIntersectSource": 3,
+    "regionsStayInPane": 3,
+    "medianModelMs": 2687
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "family": "browser",
+    "variant": "corrected-full",
+    "n": 3,
+    "factAndScopePass": 3,
+    "crossPaneContent": 0,
+    "rejected": 0,
+    "factEvidenceBoxesIntersectSource": 3,
+    "regionsStayInPane": 3,
+    "medianModelMs": 3107
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "family": "browser",
+    "variant": "raw",
+    "n": 3,
+    "factAndScopePass": 3,
+    "crossPaneContent": 0,
+    "rejected": 0,
+    "factEvidenceBoxesIntersectSource": 3,
+    "regionsStayInPane": 3,
+    "medianModelMs": 2831
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "family": "render",
+    "variant": "crop",
+    "n": 12,
+    "factAndScopePass": 12,
+    "crossPaneContent": 0,
+    "rejected": 0,
+    "factEvidenceBoxesIntersectSource": 12,
+    "regionsStayInPane": 12,
+    "medianModelMs": 2705.0
+  },
+  {
+    "model": "gpt-5.4-2026-03-05",
+    "family": "render",
+    "variant": "full",
+    "n": 12,
+    "factAndScopePass": 12,
+    "crossPaneContent": 0,
+    "rejected": 0,
+    "factEvidenceBoxesIntersectSource": 12,
+    "regionsStayInPane": 12,
+    "medianModelMs": 2696.5
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "family": "browser",
+    "variant": "corrected-crop",
+    "n": 3,
+    "factAndScopePass": 3,
+    "crossPaneContent": 0,
+    "rejected": 0,
+    "factEvidenceBoxesIntersectSource": 0,
+    "regionsStayInPane": 3,
+    "medianModelMs": 1746
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "family": "browser",
+    "variant": "corrected-full",
+    "n": 3,
+    "factAndScopePass": 0,
+    "crossPaneContent": 3,
+    "rejected": 0,
+    "factEvidenceBoxesIntersectSource": 0,
+    "regionsStayInPane": 0,
+    "medianModelMs": 2553
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "family": "browser",
+    "variant": "raw",
+    "n": 3,
+    "factAndScopePass": 2,
+    "crossPaneContent": 1,
+    "rejected": 0,
+    "factEvidenceBoxesIntersectSource": 0,
+    "regionsStayInPane": 0,
+    "medianModelMs": 2495
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "family": "render",
+    "variant": "crop",
+    "n": 12,
+    "factAndScopePass": 12,
+    "crossPaneContent": 0,
+    "rejected": 0,
+    "factEvidenceBoxesIntersectSource": 5,
+    "regionsStayInPane": 12,
+    "medianModelMs": 2007.0
+  },
+  {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "family": "render",
+    "variant": "full",
+    "n": 12,
+    "factAndScopePass": 5,
+    "crossPaneContent": 2,
+    "rejected": 5,
+    "factEvidenceBoxesIntersectSource": 0,
+    "regionsStayInPane": 3,
+    "medianModelMs": 2264
+  }
+]

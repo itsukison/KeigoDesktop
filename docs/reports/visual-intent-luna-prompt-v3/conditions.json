@@ -1,0 +1,9 @@
+[
+  {
+    "label": "luna-low-v3",
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "inputUSDPerMillion": 0.1,
+    "outputUSDPerMillion": 0.5
+  }
+]

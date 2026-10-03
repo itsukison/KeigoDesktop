@@ -1293,6 +1293,11 @@ Tracked so they don't creep in:
   and `prompt/` has a working screenshot→analyze pipeline
   (`context-service.js`). Both are deferred: they add a permission, a vision
   call on the critical path, and a much larger privacy surface.
+  The separate opt-in Debug `--visual-intent-research` prototype is the sanctioned
+  exception for evaluating focused-composer + marked-window multimodal capture.
+  It uses a tester-restricted `desktop-visual-intent` endpoint, preview/export/replay
+  only, and must not enable automatic Reply or write into host fields. See
+  `docs/visual-intent-research.md`; OCR and app adapters remain outside that prototype.
 - Global keyboard shortcut. Hover-only by decision. If it goes in later, it
   changes nothing structural — the capture ordering in §4 already works for it.
 - Windows. Willow ships one; ours would be a separate codebase against UI

@@ -1,50 +1,65 @@
-/* Format E — 日本語. See ../FORMAT-TESTS.md §4 (T2).
- *
- * The English joke is Gen Z slang → corporate. The Japanese joke is not a translation
- * of it (GTM.md §9 forbids that) — it is **タメ口 → 敬語**, which is the same emotional
- * shape and a much sharper social taboo: sending a 部長 a message with no 敬語 at all is
- * the thing every 社会人1年目 is genuinely afraid of doing.
- *
- * So the funny half is not the slang. It is that the message is addressed to a director
- * and reads like a LINE to a friend — and the 敬語 rewrite is absurdly, comically polite.
- *
- * `corporate` is a FALLBACK only. On camera the real 敬語ボタン produces it; if latency
- * ever forces the fallback, paste back what the product actually returned.
- */
+/* Authored Japanese filming scripts; deterministic demo copy, not model responses.
+ * genz/corporate retain compatibility with the original #genz/#corp framing keys. */
 window.ME = { name: '佐藤 ゆい', initial: '佐', color: '#3D7C6B' };
-
-window.SCENARIOS = [
-  {
-    id: 'ja-001',
-    app: 'slack',
-    situation: '上司の横文字が理解できない',
-    pov: 'pov: 入社1年目、上司に送信する直前',
-    // POV variants worth testing: 「pov: 敬語という概念を失った新卒」
-    //   「pov: 社会人1年目、上司にタメ口で送りかけた」「pov: 22歳、上司からのSlackが全部横文字」
-
-    workspace: 'メリディアン',
-    dm: '田村 美咲',
-    dmTitle: '田村 美咲',
-    dmSubtitle: 'マーケティング部 部長',
-
-    thread: [
-      { from: '田村 美咲', initial: '田', color: '#B4562F', time: '昨日 11:02',
-        text: 'お疲れさまです。キャンペーンの数値、共有シートにまとめておいてもらえますか？' },
-      { me: true, time: '昨日 11:04', text: '承知しました！' },
-      { me: true, time: '昨日 12:47', text: 'まとめました。前四半期との比較用タブも追加しています' },
-      { from: '田村 美咲', initial: '田', color: '#B4562F', time: '昨日 13:15',
-        text: '助かります、ありがとうございます。' },
-      { from: '田村 美咲', initial: '田', color: '#B4562F', time: '昨日 16:12',
-        text: '議事録も早くて助かりました。' },
-      { me: true, time: '昨日 16:15', text: 'とんでもないです🙇‍♀️ 何かあればお申し付けください' },
-      { me: true, time: '9:41', text: 'おはようございます！Q3の資料、いま確認しています👀' },
-      {
-        from: '田村 美咲', initial: '田', color: '#B4562F', time: '10:24',
-        text: 'おはようございます。スコープをフィックスする前に、一度ステークホルダーと目線合わせをして、Q3のナラティブをリバイスした上でドラフトを共有しておいてもらえますか。できれば本日中に方向性だけでもいただけると助かります。'
-      }
-    ],
-
-    genz: 'え、まって ガチで何言ってるか分からんのだけどw とりあえず日本語で頼むw',
-    corporate: 'お疲れさまです。ご共有いただきありがとうございます。認識に齟齬があるといけませんので、いくつか確認させていただけますでしょうか。お手すきの際に5分ほどお時間をいただけますと幸いです。何卒よろしくお願いいたします。'
-  }
+const JA_CAST = [
+  { name: '田村 美咲', initial: '田', color: '#B4562F', title: 'マーケティング部 部長' },
+  { name: '中村 大輝', initial: '中', color: '#4A6FA5', title: '営業部 部長' },
+  { name: '森 彩香', initial: '森', color: '#9B5979', title: '企画部 部長' },
 ];
+const JA_SCRIPTS = [
+  ['社会人1年目、いきなりラスボス', '明日の役員会、説明お願いできる？',
+    'え、ラスボス早すぎ😭 まだ慣れてないから練習付き合って',
+    'まだ不慣れなため、事前の練習にお付き合いいただけますでしょうか。'],
+  ['上司にだけ正直すぎる新卒', '先週お願いした資料、進んでる？',
+    'あ、完全に忘れてたｗ 金曜まで待って😭',
+    '申し訳ありません、失念しておりました。金曜日までお待ちいただけますでしょうか。'],
+  ['3週間、意味も分からずうなずいてた', '今回もKPIベースで進めよう。',
+    'KPIってなに😭 3週間うなずいてた',
+    '今さらの確認で恐縮ですが、KPIの意味を教えていただけますか。これまで理解しないまま返事をしておりました。'],
+  ['「最終版」なのはファイル名だけ', '「提案書_最終版」、もう送って大丈夫？',
+    'ごめん、最終版って名前つけただけでまだ終わってない😂 明日送るね',
+    '申し訳ありません、ファイル名は最終版となっていますが、まだ完成しておりません。明日お送りします。'],
+  ['勢いで「できます」って言った新卒', 'じゃあ、この案件のリーダーお願いしていい？',
+    '任せて！って言ったけど、何からやればいいか全然わかってない😭',
+    '引き受けたものの、進め方がまだ分かっておりません。まず何から着手すべきか教えていただけますか？'],
+  ['部長を完全に友達だと思ってる', '構成変えてみたんだけど、どうかな？',
+    '部長、天才か？これそのまま出そ',
+    '素晴らしい構成だと思います。このまま提出してはいかがでしょうか。'],
+  ['17:59に「今日中」って言う上司', 'これ今日中にお願い。若いうちは残業して覚えるものだから。',
+    '経験値より終電😭 今日は無理、月曜やる',
+    '本日中の対応は難しいため、月曜日に対応いたします。'],
+  ['有休を成長イベントに変えてくる上司', '明日休みだよね？こういう時に出てくる人が成長するんだよ。',
+    '成長より睡眠。明日は休む',
+    '明日は予定どおりお休みをいただきます。'],
+  ['上司の指示、矛盾してて詰んだ', '自分で考えて動いて。でも勝手な判断はしないでね。',
+    'どっち😂 判断基準ほしい',
+    '自分で判断してよい範囲と、事前に確認が必要な範囲を教えていただけますか？'],
+  ['会社のSlackをマッチングアプリだと思ってる上司', '彼氏いるの？今度は二人で飲もうよ😊',
+    '二人は無理。仕事の話だけで',
+    '二人でのお誘いは遠慮します。業務に関するお話でお願いします。'],
+  ['業務連絡より服装チェックが多い上司', '今日の服よかったね😊 明日もああいうの着てきてよ。',
+    '服の話やめて',
+    '服装についてのコメントは控えていただけると助かります。'],
+  ['なぜか休日の写真を欲しがる上司', '休みの日って何してるの？写真送ってよ。俺にだけ😉',
+    '私生活は非公開で🙃',
+    'プライベートな写真の共有は控えさせていただきます。'],
+];
+window.SCENARIOS = JA_SCRIPTS.map(([pov, trigger, input, output], i) => {
+  const boss = i >= 9 ? JA_CAST[1] : JA_CAST[i % JA_CAST.length];
+  const message = (text, time) => ({ from: boss.name, initial: boss.initial, color: boss.color, time, text });
+  return {
+    id: `ja-${String(i + 1).padStart(3, '0')}`, app: 'slack',
+    mode: i < 6 ? 'keigo' : 'reply', situation: pov, pov, trigger,
+    workspace: 'メリディアン', dm: boss.name, dmTitle: boss.name, dmSubtitle: boss.title,
+    genz: input, guidance: i < 6 ? '' : input, corporate: output,
+    thread: [
+      message('お疲れさまです。共有フォルダの資料、確認をお願いします。', '昨日 11:02'),
+      { me: true, time: '昨日 11:04', text: '承知しました！' },
+      { me: true, time: '昨日 13:12', text: '確認しました。コメントも入れています。' },
+      message('ありがとうございます。確認します。', '昨日 13:25'),
+      message('打ち合わせのメモも共有しておいてください。', '昨日 16:12'),
+      { me: true, time: '昨日 16:15', text: '共有しました！' },
+      message(trigger, i === 6 ? '17:59' : '10:24'),
+    ],
+  };
+});

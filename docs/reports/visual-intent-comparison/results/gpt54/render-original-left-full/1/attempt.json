@@ -1,0 +1,9 @@
+{
+  "case": "render-original-left-full",
+  "repeat": 1,
+  "expectedModel": "gpt-5.4-2026-03-05",
+  "returncode": 0,
+  "wallMs": 3084,
+  "responseFile": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/results/gpt54/render-original-left-full/1/934B6CA6-8DAF-4018-BE60-8DCE10B4865A-41C474C8-65A0-4D95-A886-6145485C614A-run1.json",
+  "status": "ready"
+}

@@ -1,0 +1,78 @@
+{
+  "configurationFrozen": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "prompt": "visual-intent-a-4",
+    "validation": "visual-intent-validation-2",
+    "image": "Original full-window JPEG, quality 0.9, detail high",
+    "maxCompletionTokens": 2400
+  },
+  "outcome": "Ready for fresh research captures; does not meet product advancement gates.",
+  "methodology": "V3: 21 saved-scene repetitions plus three diagnostics. After one restriction omission, one generalized revision V4: six real-scene repetitions, five single-run target controls and three single-run diagnostics. Same previously inspected images. This is prompt calibration, not held-out acceptance.",
+  "promptDesign": [
+    "Separate operation/user facts from untrusted visible source data",
+    "Bind the composer before relevance selection",
+    "Explicit language request wins; guidance language alone does not translate",
+    "Require restrictions in final draft as well as evidence",
+    "Preserve chronology, reported-vs-verified distinctions, stance and commitment strength",
+    "Abstain only for required missing source facts or ambiguous targets",
+    "Keep schema, capture and auth boundaries unchanged"
+  ],
+  "observed": {
+    "realChecksPassed": 4,
+    "realChecksTotal": 6,
+    "readOnlyConstraintRetained": 3,
+    "slackRepeats": 3,
+    "syntheticTargetFactControlsPassed": 5,
+    "syntheticTargetFactControlsTotal": 5,
+    "diagnosticsPassed": 3,
+    "diagnosticsTotal": 3
+  },
+  "remainingFailures": [
+    "Two Slack drafts still describe an earlier external-publication configuration blocker as current despite a later 追加しました response. Chronology failure.",
+    "One LinkedIn output has awkward ぜひ興味があり phrasing.",
+    "Some evidence excerpts have minor transcription changes or broad partial/geometry claims; they are not original AX text."
+  ],
+  "economics": {
+    "basis": "Mean input and total completion usage of six real-scene repetitions; standard uncached equivalent, not invoice",
+    "yenPerUSD": 150,
+    "meanInputTokens": 3473,
+    "meanOutputTokens": 663.8333333333334,
+    "yenPer1000Calls": 101.8825,
+    "lunaAllInputAtCacheWriteRateSensitivityYenPer1000": 114.90625,
+    "excluded": [
+      "Infrastructure",
+      "Retries",
+      "Taxes",
+      "Actual cache discounts/write billing"
+    ],
+    "medianProviderMs": 6401.5,
+    "medianReplayWallMs": 7172.5,
+    "latencyCaveat": "Saved capture replay excludes native capture; wall includes app launch/auth/network; six observations cannot establish a stable percentile."
+  },
+  "verification": {
+    "serverTests": 10,
+    "swiftVisualTests": 11,
+    "denoTypeCheck": "passed",
+    "debugBuild": "passed",
+    "deployment": {
+      "version": 15,
+      "verifyJWT": true,
+      "filesEqual": true,
+      "authenticatedReplays": 14,
+      "actualModel": "gpt-6-luna",
+      "reasoningEffort": "low",
+      "promptVersion": "visual-intent-a-4",
+      "unauthenticatedPOSTStatus": 401,
+      "endpoint": "desktop-visual-intent",
+      "productionEndpointChanged": false,
+      "sourceOfAuthorization": "User requested Luna prompt redesign and real-case A capture testing."
+    }
+  },
+  "nextTrial": "Use A capture on fresh conversation families with send-to-model on. Verify marked composer, language, material constraints, timeline, stance, unsupported facts and sendability. Export every attempt before a fresh capture/replay; record acquisition failures separately when no request is exportable. Freeze V4 during trial. Research preview only.",
+  "references": [
+    "https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices",
+    "https://developers.openai.com/api/docs/pricing",
+    "https://supabase.com/docs/guides/functions/auth-headers"
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "source": "/Users/itsuki/Desktop/key/laptop/Marketing/assets/Japanese demo/7.mov",
+  "audio": "/Users/itsuki/Desktop/key/laptop/Marketing/assets/audio/JP1.mov",
+  "hook": [
+    "部長への返信",
+    "これ使ったら簡単すぎて草"
+  ],
+  "segments": [
+    {
+      "name": "setup",
+      "from": 0,
+      "to": 0.03333333333333333,
+      "speed": 1,
+      "hold": 1.4666667
+    },
+    {
+      "name": "typing",
+      "from": 0,
+      "to": 12.2,
+      "speed": 2,
+      "hold": 0
+    },
+    {
+      "name": "read_input",
+      "from": 12.2,
+      "to": 13.4,
+      "speed": 1,
+      "hold": 0
+    },
+    {
+      "name": "button_and_generation",
+      "from": 13.4,
+      "to": 14.7,
+      "speed": 1.3333333333333333,
+      "hold": 0
+    },
+    {
+      "name": "result_card",
+      "from": 14.7,
+      "to": 16.8,
+      "speed": 1,
+      "hold": 1.2
+    },
+    {
+      "name": "inserted_reply",
+      "from": 16.8,
+      "to": 18.4,
+      "speed": 1,
+      "hold": 2
+    }
+  ],
+  "duration": 16.675000033333333,
+  "original_audio_removed": true,
+  "output": "/Users/itsuki/Desktop/key/laptop/Marketing/out/japanese-demo/07-preview-v3.mp4"
+}

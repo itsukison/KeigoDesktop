@@ -1,0 +1,30 @@
+[
+  {
+    "label": "gpt54-none",
+    "model": "gpt-5.4-2026-03-05",
+    "reasoning": "none",
+    "inputUSDPerMillion": 2.5,
+    "outputUSDPerMillion": 15
+  },
+  {
+    "label": "mini-none",
+    "model": "gpt-5.4-mini-2026-03-17",
+    "reasoning": "none",
+    "inputUSDPerMillion": 0.75,
+    "outputUSDPerMillion": 4.5
+  },
+  {
+    "label": "luna-none",
+    "model": "gpt-6-luna",
+    "reasoning": "none",
+    "inputUSDPerMillion": 0.1,
+    "outputUSDPerMillion": 0.5
+  },
+  {
+    "label": "luna-low",
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "inputUSDPerMillion": 0.1,
+    "outputUSDPerMillion": 0.5
+  }
+]

@@ -1,0 +1,66 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 3517,
+  "model" : "gpt-6-luna",
+  "modelMs" : 5837,
+  "outputTokens" : 658,
+  "promptVersion" : "visual-intent-a-4",
+  "reasoningEffort" : "low",
+  "result" : {
+    "captureId" : "2A2C4BFA-AA0C-4DD5-8018-6BA8497CCFAB",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 718,
+          "width" : 556,
+          "x" : 1362,
+          "y" : 90
+        },
+        "label" : "Thread messages in the marked composer’s conversation"
+      }
+    ],
+    "evidence" : [
+      {
+        "author" : "笹原尚人",
+        "box" : {
+          "height" : 24,
+          "width" : 380,
+          "x" : 1422,
+          "y" : 434
+        },
+        "excerpt" : "Botが rational-clock-468109-n7 を読むところで403になっています。",
+        "partial" : false
+      },
+      {
+        "author" : "秋田陽平",
+        "box" : {
+          "height" : 24,
+          "width" : 250,
+          "x" : 1422,
+          "y" : 727
+        },
+        "excerpt" : "すいません、先ほど対応しました",
+        "partial" : false
+      },
+      {
+        "author" : "笹原尚人",
+        "box" : {
+          "height" : 24,
+          "width" : 170,
+          "x" : 1422,
+          "y" : 775
+        },
+        "excerpt" : "ありがとうございます！",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+      "表示されているスレッドには権限エラーと対応した旨の報告はありますが、Botが権限変更後に正常稼働した正確な時刻はありません。"
+    ],
+    "status" : "insufficient_context",
+    "targetId" : "513210E4-7502-4EAA-A2FE-2DBB116B05D5"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

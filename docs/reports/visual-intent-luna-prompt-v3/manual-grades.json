@@ -1,0 +1,56 @@
+{
+  "luna-low-v3/linkedin/1": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": true,
+    "requiredFactCoverage": true,
+    "note": "Japanese reply matches application intent and the correct incoming message; no invented eligibility or commitments.",
+    "pass": true
+  },
+  "luna-low-v3/linkedin/2": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": true,
+    "requiredFactCoverage": true,
+    "note": "Japanese reply matches application intent and the correct incoming message; no invented eligibility or commitments. The phrasing ぜひ興味があり is awkward and merits a style edit.",
+    "pass": true
+  },
+  "luna-low-v3/linkedin/3": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": true,
+    "requiredFactCoverage": true,
+    "note": "Japanese reply matches application intent and the correct incoming message; no invented eligibility or commitments. The phrasing ぜひ興味があり is awkward and merits a style edit.",
+    "pass": true
+  },
+  "luna-low-v3/slack/1": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": true,
+    "requiredFactCoverage": false,
+    "note": "Correct thread and reported-action vs verification distinction, but again drops the explicit read-only constraint from evidence and draft. dataViewer alone does not satisfy the predefined coverage rule.",
+    "pass": false
+  },
+  "luna-low-v3/slack/2": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": true,
+    "requiredFactCoverage": true,
+    "note": "Correct thread, Japanese summary, read-only constraint, prior 403 and latest reported action; no invented verification or promise.",
+    "pass": true
+  },
+  "luna-low-v3/slack/3": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": true,
+    "requiredFactCoverage": true,
+    "note": "Correct thread, Japanese summary, read-only constraint, prior 403 and latest reported action; no invented verification or promise. Minor transcription deviations in the opening excerpt and overly broad partial flag; localization/transcription need separate review.",
+    "pass": true
+  }
+}

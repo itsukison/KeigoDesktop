@@ -1,0 +1,55 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 2848,
+  "model" : "gpt-5.4-mini-2026-03-17",
+  "modelMs" : 2090,
+  "outputTokens" : 271,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "670BDD1B-8028-4FC2-84B7-3BFA29216BCC",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 668,
+          "width" : 486,
+          "x" : 705,
+          "y" : 77
+        },
+        "label" : "conversation thread"
+      }
+    ],
+    "draft" : "興味があります。応募したいのですが、どこで詳細を確認できますか？",
+    "evidence" : [
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 74,
+          "width" : 423,
+          "x" : 730,
+          "y" : 400
+        },
+        "excerpt" : "現在メルカリでは、2028年新卒入社の方を対象に、プロダクトマネージャー職（以下PM職）の就業型インターンシップを募集しております。ご経験を拝見し、ぜひご参加いただけないかと思いご連絡いたしました！",
+        "partial" : true
+      },
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 29,
+          "width" : 88,
+          "x" : 727,
+          "y" : 538
+        },
+        "excerpt" : "【応募要項】",
+        "partial" : true
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "4FA630C2-CFF6-43DF-B41D-1ADD9812AE72"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

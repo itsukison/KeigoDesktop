@@ -1,0 +1,13 @@
+{
+  "version": 15,
+  "verifyJWT": true,
+  "filesEqual": true,
+  "authenticatedReplays": 14,
+  "actualModel": "gpt-6-luna",
+  "reasoningEffort": "low",
+  "promptVersion": "visual-intent-a-4",
+  "unauthenticatedPOSTStatus": 401,
+  "endpoint": "desktop-visual-intent",
+  "productionEndpointChanged": false,
+  "sourceOfAuthorization": "User requested Luna prompt redesign and real-case A capture testing."
+}

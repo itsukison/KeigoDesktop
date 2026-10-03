@@ -1,0 +1,379 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "Launch health: the first five days",
+    "description": "KeigoButton Desktop launch behavior from August 21–25, 2026, including the current partial day.",
+    "generatedAt": "2026-08-25T21:57:16+09:00",
+    "cards": [
+      {
+        "id": "launches",
+        "dataset": "headline",
+        "sourceId": "posthog_cohort",
+        "description": "Distinct people with a first-launch event from August 21 through the current partial day.",
+        "metrics": [
+          { "label": "First launches", "field": "launches", "format": "number" },
+          { "label": "Today", "field": "launches_today", "format": "number" }
+        ]
+      },
+      {
+        "id": "d1_retention",
+        "dataset": "headline",
+        "sourceId": "posthog_retention",
+        "description": "Users who opened the app on the calendar day after first launch, among cohorts old enough to qualify.",
+        "metrics": [
+          { "label": "D1 return", "field": "d1_rate", "format": "percent" },
+          { "label": "Eligible users", "field": "d1_eligible", "format": "number" }
+        ]
+      },
+      {
+        "id": "real_activation",
+        "dataset": "headline",
+        "sourceId": "posthog_cohort",
+        "description": "Launch users who completed at least one rewrite outside the onboarding practice field.",
+        "metrics": [
+          { "label": "Real activation", "field": "real_activation_rate", "format": "percent" },
+          { "label": "Activated users", "field": "real_users", "format": "number" }
+        ]
+      },
+      {
+        "id": "failure_exposure",
+        "dataset": "headline",
+        "sourceId": "posthog_failures",
+        "description": "Launch users who encountered at least one handled rewrite failure.",
+        "metrics": [
+          { "label": "Users hitting failure", "field": "failure_user_rate", "format": "percent" },
+          { "label": "Affected users", "field": "failure_users", "format": "number" }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "cohort_activation_chart",
+        "title": "Launch and activation by install day",
+        "subtitle": "Daily install cohorts; August 25 is still in progress",
+        "type": "bar",
+        "intent": "comparison",
+        "dataset": "cohort_daily",
+        "sourceId": "posthog_cohort",
+        "encodings": {
+          "x": { "field": "install_day", "type": "ordinal", "label": "Install day" },
+          "y": { "fields": ["users", "onboarded", "real_users"], "type": "quantitative", "label": "Users" },
+          "tooltip": [
+            { "field": "d1_returners", "type": "quantitative", "label": "D1 returners" },
+            { "field": "users_with_failure", "type": "quantitative", "label": "Users with failure" }
+          ]
+        },
+        "valueFormat": "number",
+        "layout": "full"
+      },
+      {
+        "id": "latency_chart",
+        "title": "Real rewrite latency by day",
+        "subtitle": "Completed rewrites outside onboarding; milliseconds",
+        "type": "bar",
+        "intent": "comparison",
+        "dataset": "latency_daily",
+        "sourceId": "posthog_latency",
+        "encodings": {
+          "x": { "field": "day", "type": "ordinal", "label": "Day" },
+          "y": { "fields": ["median_ms", "p95_ms"], "type": "quantitative", "label": "Milliseconds", "unit": "ms" },
+          "tooltip": [
+            { "field": "completed_rewrites", "type": "quantitative", "label": "Completed rewrites" },
+            { "field": "users", "type": "quantitative", "label": "Users" }
+          ]
+        },
+        "valueFormat": "number",
+        "unit": "ms",
+        "layout": "full"
+      }
+    ],
+    "tables": [
+      {
+        "id": "failure_table",
+        "title": "Handled failures by actionable category",
+        "subtitle": "Launch cohort, August 21–25",
+        "dataset": "failure_categories",
+        "sourceId": "posthog_failures",
+        "density": "spacious",
+        "defaultSort": { "field": "failures", "direction": "desc" },
+        "columns": [
+          { "field": "category", "label": "Category", "type": "text" },
+          { "field": "failures", "label": "Failure events", "format": "number" },
+          { "field": "users", "label": "Affected users", "format": "number" }
+        ]
+      },
+      {
+        "id": "attempt_table",
+        "title": "Current-telemetry attempt outcomes",
+        "subtitle": "Exact attempt IDs from August 24–25; everyday use separated from practice",
+        "dataset": "attempt_outcomes",
+        "sourceId": "posthog_attempts",
+        "density": "spacious",
+        "defaultSort": { "field": "started", "direction": "desc" },
+        "columns": [
+          { "field": "context", "label": "Context", "type": "text" },
+          { "field": "started", "label": "Started", "format": "number" },
+          { "field": "completed", "label": "Completed", "format": "number" },
+          { "field": "failed", "label": "Failed", "format": "number" },
+          { "field": "accepted", "label": "Accepted", "format": "number" },
+          { "field": "failure_rate", "label": "Failure rate", "format": "percent" },
+          { "field": "acceptance_rate", "label": "Acceptance rate", "format": "percent" }
+        ]
+      },
+      {
+        "id": "version_table",
+        "title": "Latest version among today’s active users",
+        "subtitle": "Seven active users as of the report snapshot",
+        "dataset": "active_versions",
+        "sourceId": "posthog_today",
+        "density": "spacious",
+        "defaultSort": { "field": "users", "direction": "desc" },
+        "columns": [
+          { "field": "version", "label": "Version", "type": "text" },
+          { "field": "users", "label": "Users", "format": "number" }
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "posthog_cohort",
+        "label": "PostHog project 549465 — launch cohort",
+        "href": "https://us.posthog.com/project/549465/dashboard/1974822",
+        "query": {
+          "engine": "HogQL",
+          "language": "sql",
+          "executed_at": "2026-08-25T21:57:16+09:00",
+          "description": "Daily first-launch cohorts with onboarding, real rewrite activation, insertion, handled failure, and later-day return outcomes.",
+          "tables_used": ["events"],
+          "filters": [
+            "Project 549465 (KeigoButton Desktop)",
+            "Asia/Tokyo project timezone",
+            "First launch on or after 2026-08-21",
+            "surface = macos where available",
+            "Real rewrites exclude host_app_bundle_id = com.core7.keigobutton.mac"
+          ],
+          "metric_definitions": [
+            "First launch = unique person_id with Application Installed.",
+            "Real activation = at least one desktop_rewrite_completed outside the app's onboarding practice field.",
+            "Later-day return = Application Opened on at least two distinct calendar dates."
+          ],
+          "sql": "WITH user_launch AS (SELECT person_id, toDate(minIf(timestamp, event = 'Application Installed')) AS install_date, uniqExactIf(toDate(timestamp), event = 'Application Opened' AND properties.surface = 'macos') AS open_days, countIf(event = 'desktop_onboarding_completed' AND properties.surface = 'macos') > 0 AS onboarded, countIf(event = 'desktop_rewrite_completed' AND properties.surface = 'macos' AND properties.host_app_bundle_id != 'com.core7.keigobutton.mac') > 0 AS real_user, countIf(event = 'desktop_rewrite_inserted' AND properties.surface = 'macos' AND properties.host_app_bundle_id != 'com.core7.keigobutton.mac') > 0 AS inserter, countIf(event = 'desktop_rewrite_failed' AND properties.surface = 'macos') > 0 AS had_failure FROM events WHERE timestamp >= toDateTime('2026-08-21 00:00:00') AND event IN ('Application Installed','Application Opened','desktop_onboarding_completed','desktop_rewrite_completed','desktop_rewrite_inserted','desktop_rewrite_failed') GROUP BY person_id) SELECT install_date, count() AS users, countIf(onboarded) AS onboarded, countIf(real_user) AS real_users, countIf(inserter) AS inserters, countIf(had_failure) AS users_with_failure, countIf(open_days >= 2) AS later_day_returners FROM user_launch WHERE install_date >= toDate('2026-08-21') GROUP BY install_date ORDER BY install_date"
+        }
+      },
+      {
+        "id": "posthog_retention",
+        "label": "PostHog project 549465 — D1 retention",
+        "href": "https://us.posthog.com/project/549465/dashboard/1974822",
+        "query": {
+          "engine": "HogQL",
+          "language": "sql",
+          "executed_at": "2026-08-25T21:57:16+09:00",
+          "description": "Exact next-calendar-day Application Opened behavior for install cohorts old enough to qualify.",
+          "tables_used": ["events"],
+          "filters": ["Install dates 2026-08-21 through 2026-08-24", "surface = macos on Application Opened"],
+          "metric_definitions": ["D1 retention = user opened the app on install_date + 1 calendar day; 10 eligible users."],
+          "sql": "WITH user_launch AS (SELECT person_id, toDate(minIf(timestamp, event = 'Application Installed')) AS install_date, groupUniqArrayIf(toDate(timestamp), event = 'Application Opened' AND properties.surface = 'macos') AS open_dates FROM events WHERE timestamp >= toDateTime('2026-08-21 00:00:00') AND event IN ('Application Installed','Application Opened') GROUP BY person_id) SELECT install_date, count() AS users, countIf(has(open_dates, addDays(install_date, 1))) AS d1_returners, round(100.0 * d1_returners / users, 1) AS d1_pct FROM user_launch WHERE install_date BETWEEN toDate('2026-08-21') AND yesterday() GROUP BY install_date ORDER BY install_date"
+        }
+      },
+      {
+        "id": "posthog_failures",
+        "label": "PostHog project 549465 — handled failures",
+        "href": "https://us.posthog.com/project/549465/dashboard/1974822",
+        "query": {
+          "engine": "HogQL",
+          "language": "sql",
+          "executed_at": "2026-08-25T21:57:16+09:00",
+          "description": "Localized handled-failure messages consolidated into no-readable-target and Accessibility-permission categories.",
+          "tables_used": ["events"],
+          "filters": ["Launch cohort first seen on or after 2026-08-21", "event = desktop_rewrite_failed", "surface = macos"],
+          "metric_definitions": ["Failure exposure = unique launch users with one or more desktop_rewrite_failed events."],
+          "sql": "SELECT if(positionCaseInsensitive(properties.message, 'accessibility') > 0 OR position(properties.message, 'アクセシビリティ') > 0, 'Accessibility permission', 'No readable text target') AS category, count() AS failures, uniqExact(person_id) AS users FROM events WHERE timestamp >= toDateTime('2026-08-21 00:00:00') AND event = 'desktop_rewrite_failed' AND properties.surface = 'macos' AND person_id IN (SELECT person_id FROM events WHERE timestamp >= toDateTime('2026-08-21 00:00:00') AND event = 'Application Installed') GROUP BY category ORDER BY failures DESC"
+        }
+      },
+      {
+        "id": "posthog_attempts",
+        "label": "PostHog project 549465 — current attempt outcomes",
+        "href": "https://us.posthog.com/project/549465/dashboard/1974822",
+        "query": {
+          "engine": "HogQL",
+          "language": "sql",
+          "executed_at": "2026-08-25T21:57:16+09:00",
+          "description": "Exact rewrite outcomes correlated by attempt_id after the current attempt lifecycle telemetry shipped.",
+          "tables_used": ["events"],
+          "filters": ["2026-08-24 onward", "Launch users", "surface = macos", "Non-empty attempt_id"],
+          "metric_definitions": [
+            "Failure rate = started attempts with a failed terminal event divided by started attempts.",
+            "Acceptance rate = completed attempts with insert or copy divided by completed attempts."
+          ],
+          "sql": "WITH attempts AS (SELECT properties.attempt_id AS attempt_id, countIf(event = 'desktop_rewrite_started') AS started, countIf(event = 'desktop_rewrite_completed') AS completed, countIf(event = 'desktop_rewrite_failed') AS failed, countIf(event = 'desktop_rewrite_inserted') AS inserted, countIf(event = 'desktop_rewrite_copied') AS copied, countIf(properties.is_tutorial = true) > 0 AS tutorial FROM events WHERE timestamp >= toDateTime('2026-08-24 00:00:00') AND event IN ('desktop_rewrite_started','desktop_rewrite_completed','desktop_rewrite_failed','desktop_rewrite_inserted','desktop_rewrite_copied') AND properties.surface = 'macos' AND isNotNull(properties.attempt_id) AND properties.attempt_id != '' GROUP BY attempt_id) SELECT if(tutorial, 'practice', 'everyday') AS context, countIf(started > 0) AS started_attempts, countIf(completed > 0) AS completed_attempts, countIf(failed > 0) AS failed_attempts, countIf(inserted > 0 OR copied > 0) AS accepted_attempts FROM attempts GROUP BY context"
+        }
+      },
+      {
+        "id": "posthog_latency",
+        "label": "PostHog project 549465 — real rewrite latency",
+        "href": "https://us.posthog.com/project/549465/dashboard/1974822",
+        "query": {
+          "engine": "HogQL",
+          "language": "sql",
+          "executed_at": "2026-08-25T21:57:16+09:00",
+          "description": "Daily median and p95 end-to-end latency for completed launch-user rewrites outside onboarding practice.",
+          "tables_used": ["events"],
+          "filters": ["2026-08-21 onward", "Launch users", "surface = macos", "Practice host app excluded"],
+          "metric_definitions": ["Latency is the desktop_rewrite_completed latency_ms property."],
+          "sql": "SELECT toDate(timestamp) AS date, count() AS completed_rewrites, uniqExact(person_id) AS users, round(median(toFloat(properties.latency_ms)), 0) AS median_ms, round(quantile(0.95)(toFloat(properties.latency_ms)), 0) AS p95_ms FROM events WHERE timestamp >= toDateTime('2026-08-21 00:00:00') AND event = 'desktop_rewrite_completed' AND properties.surface = 'macos' AND properties.host_app_bundle_id != 'com.core7.keigobutton.mac' AND person_id IN (SELECT person_id FROM events WHERE timestamp >= toDateTime('2026-08-21 00:00:00') AND event = 'Application Installed') GROUP BY date ORDER BY date"
+        }
+      },
+      {
+        "id": "posthog_today",
+        "label": "PostHog project 549465 — today’s active users",
+        "href": "https://us.posthog.com/project/549465/dashboard/1974822",
+        "query": {
+          "engine": "HogQL",
+          "language": "sql",
+          "executed_at": "2026-08-25T21:57:16+09:00",
+          "description": "Today’s Application Opened users classified by install date and latest app version.",
+          "tables_used": ["events"],
+          "filters": ["Current partial day", "event = Application Opened", "surface = macos"],
+          "metric_definitions": ["Returning today = active today with first install before today."],
+          "sql": "WITH latest_version AS (SELECT person_id, argMax(properties['$app_version'], timestamp) AS version FROM events WHERE timestamp >= toStartOfDay(now()) AND event = 'Application Opened' AND properties.surface = 'macos' GROUP BY person_id) SELECT version, count() AS users FROM latest_version GROUP BY version ORDER BY users DESC, version DESC"
+        }
+      },
+      {
+        "id": "github_releases",
+        "label": "GitHub release assets",
+        "href": "https://github.com/itsukison/KeigoDesktop/releases",
+        "query": {
+          "engine": "GitHub Releases API",
+          "language": "http",
+          "executed_at": "2026-08-25T21:57:16+09:00",
+          "description": "Release publication times and cumulative asset download counters for v0.1.6 through v0.1.10.",
+          "filters": ["Tags v0.1.6 through v0.1.10", "Assets named KeigoButton.dmg and versioned update ZIPs"]
+        }
+      },
+      {
+        "id": "measurement_contract",
+        "label": "Desktop analytics measurement contract",
+        "href": "https://github.com/itsukison/KeigoDesktop/blob/main/docs/analytics.md"
+      }
+    ],
+    "blocks": [
+      { "id": "title", "type": "markdown", "body": "# Launch health: the first five days" },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "body": "## Executive Summary\n\n- **Yes—there is an early return signal.** Six of the 10 users old enough for D1 measurement returned the next calendar day. Today, 4 of 7 active users were returning rather than new. The sample is encouraging, but still far too small for a stable retention benchmark.\n- **The bigger issue is activation breadth.** Thirteen people first-launched since August 21, 10 completed onboarding, but only 6 performed a real rewrite outside practice. Today’s 3 new users produced 12 practice rewrites and zero everyday rewrites so far.\n- **Handled failures are too common, but they are localized.** Eight of 13 launch users hit a failure. Twenty-four of 28 failure events were a missing readable text target; the other four were Accessibility permission. Current attempt telemetry shows zero generation-stage failures and PostHog shows no captured exceptions.\n- **Do not scale acquisition yet.** Fix or guide the capture/permission transition, then watch the next 20–30 installs. Real usage is promising but concentrated: 44 real rewrites came from 6 users, and one user supplied 52% of them."
+      },
+      { "id": "headline_metrics", "type": "metric-strip", "cardIds": ["launches", "d1_retention", "real_activation", "failure_exposure"] },
+      {
+        "id": "return_finding",
+        "type": "markdown",
+        "body": "## People are returning, but the signal is still tiny\n\n**The repeat-use answer is directionally yes.** Exact D1 return is 60% across 10 eligible users: 2 of 3 from August 21, 1 of 1 from August 22, 2 of 4 from August 23, and 1 of 2 from August 24. Seven of those 10 opened on at least one later calendar day.\n\nToday is an especially useful cross-check: 3 users were new and 4 were returning. Three previously installed users completed 9 everyday rewrites today, while the 2 new users who reached practice completed 12 practice rewrites but no everyday work yet. That is genuine returning behavior—not merely onboarding traffic."
+      },
+      { "id": "cohort_chart_block", "type": "chart", "chartId": "cohort_activation_chart" },
+      {
+        "id": "activation_finding",
+        "type": "markdown",
+        "body": "## Value is visible after activation, but adoption is narrow\n\n**Six launch users completed real work and all six inserted at least one result.** Together they produced 44 real rewrites and 26 insertions. The median activated user completed 4 rewrites, but only 2 users reached five or more and the heaviest user contributed 23 rewrites—52% of all real usage.\n\nThat concentration means the product has a small proof-of-value group, not yet broad product-market evidence. The next decision should be whether more new users can reach their first real rewrite, not whether the existing power user can be made even heavier."
+      },
+      {
+        "id": "failure_finding",
+        "type": "markdown",
+        "body": "## The problem is finding the text, not generating the rewrite\n\n**Every classified current-version failure is at capture.** From August 24 onward, everyday use recorded 29 started attempts: 22 completed and 7 failed, for a 24% failure rate. Fifteen of the 22 completed attempts ended in insert or copy, a 68% acceptance rate. Practice recorded 4 starts, 4 completions, and no failures.\n\nAcross the full launch cohort, 24 of 28 handled failures said no readable text target; 4 asked for Accessibility permission. Eight users encountered the no-target category, so this is broad enough to affect activation—not a single-user anomaly."
+      },
+      { "id": "failure_table_block", "type": "table", "tableId": "failure_table" },
+      { "id": "attempt_table_block", "type": "table", "tableId": "attempt_table" },
+      {
+        "id": "performance_finding",
+        "type": "markdown",
+        "body": "## Reliability is stable, but recent latency needs watching\n\n**No crashes or captured exceptions appeared in PostHog, and no generation-stage failures were observed.** End-to-end speed is the softer risk: median real-rewrite latency rose from about 1.9–2.2 seconds on August 21–23 to 3.3 seconds on August 24 and 3.8 seconds today. The p95 reached 8.4 seconds on August 24 and 6.3 seconds today.\n\nThe slowdown is concentrated rather than universal: one Teams user contributed 7 recent rewrites with a 5.2-second median. Treat this as a watch item, not a launch blocker, until more users and host apps accumulate."
+      },
+      { "id": "latency_chart_block", "type": "chart", "chartId": "latency_chart" },
+      {
+        "id": "version_finding",
+        "type": "markdown",
+        "body": "## Most active users have not reached today’s build yet\n\n**Only 2 of today’s 7 active users were last seen on 0.1.10.** Four were on 0.1.9 and one remained on 0.1.7. Because 0.1.10 shipped only hours before this snapshot, this is not yet an update failure—but it means today’s behavior mostly reflects 0.1.9, not the newest fixes."
+      },
+      { "id": "version_table_block", "type": "table", "tableId": "version_table" },
+      {
+        "id": "recommendations",
+        "type": "markdown",
+        "body": "## What to do next\n\n1. **Prioritize first-real-rewrite activation.** Add or refine guidance where a saved button cannot find readable text, and make the Accessibility state unmistakable before the user reaches the bar.\n2. **Watch current-build capture failures daily.** The useful threshold is affected users, not raw failure events: repeated presses by one confused user should not look like many separate product failures.\n3. **Hold acquisition volume roughly steady for another 20–30 first launches.** The D1 signal is good enough to continue, but the 46% real-activation rate and 62% failure exposure are not good enough to scale confidently.\n4. **Monitor median and p95 by host app.** Escalate only if the recent 3–4 second median spreads beyond Teams or stays elevated as the sample grows.\n5. **Let 0.1.10 propagate before judging its fixes.** Re-read version adoption and the no-target affected-user count tomorrow."
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "body": "## Further questions\n\n- Which exact frontmost apps are producing no-target failures on 0.1.10? The property only became available recently, so older failures are mostly `unknown`.\n- Do users who complete one real rewrite retain materially better than onboarding-only users? Today the groups are too small for a reliable comparison.\n- How many DMG downloads are repeat attempts versus genuine install abandonment? GitHub reports 32 DMG downloads across v0.1.6–v0.1.10, versus 13 first launches, but asset counters cannot identify people or deduplicate retries.\n- Does the 68% everyday acceptance rate remain stable once more attempts come from users other than the current heavy user?"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats and assumptions\n\n- The window starts August 21, the beginning of the current public-launch cohort; August 25 is partial. All daily boundaries use the project’s Asia/Tokyo timezone.\n- D1 retention has only 10 eligible users. A single person moves the rate by 10 percentage points overall and much more within a daily cohort.\n- `Application Installed` is a first-launch proxy, not a literal download. GitHub download counters include repeat downloads and cannot be joined to PostHog users.\n- The explicit Accessibility-granted event shipped during the window. Latest-event state is more reliable than the ordered dashboard funnel for this period: 8 users were last seen granted, 2 not granted, and 3 had older unknown telemetry.\n- Attempt-level started/failed/accepted rates are limited to August 24 onward, when non-empty `attempt_id` telemetry was present. Earlier failure messages remain useful for affected-user counts but not an exact attempt denominator.\n- The brief iOS analytics-token incident involved `ai_rewrite` events. This report uses desktop-prefixed events and macOS SDK lifecycle events, so those injected mobile events are excluded structurally."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-25T21:57:16+09:00",
+    "status": "ready",
+    "datasets": {
+      "headline": [
+        {
+          "launches": 13,
+          "launches_today": 3,
+          "d1_rate": 0.6,
+          "d1_eligible": 10,
+          "real_activation_rate": 0.461538,
+          "real_users": 6,
+          "failure_user_rate": 0.615385,
+          "failure_users": 8
+        }
+      ],
+      "cohort_daily": [
+        { "install_day": "Aug 21", "users": 3, "onboarded": 3, "real_users": 2, "inserters": 2, "users_with_failure": 3, "later_day_returners": 3, "d1_returners": 2 },
+        { "install_day": "Aug 22", "users": 1, "onboarded": 1, "real_users": 0, "inserters": 0, "users_with_failure": 1, "later_day_returners": 1, "d1_returners": 1 },
+        { "install_day": "Aug 23", "users": 4, "onboarded": 2, "real_users": 2, "inserters": 2, "users_with_failure": 1, "later_day_returners": 2, "d1_returners": 2 },
+        { "install_day": "Aug 24", "users": 2, "onboarded": 2, "real_users": 2, "inserters": 2, "users_with_failure": 2, "later_day_returners": 1, "d1_returners": 1 },
+        { "install_day": "Aug 25", "users": 3, "onboarded": 2, "real_users": 0, "inserters": 0, "users_with_failure": 1, "later_day_returners": 0, "d1_returners": null }
+      ],
+      "failure_categories": [
+        { "category": "No readable text target", "failures": 24, "users": 8 },
+        { "category": "Accessibility permission", "failures": 4, "users": 1 }
+      ],
+      "attempt_outcomes": [
+        { "context": "Everyday", "started": 29, "completed": 22, "failed": 7, "accepted": 15, "failure_rate": 0.241, "acceptance_rate": 0.682 },
+        { "context": "Practice", "started": 4, "completed": 4, "failed": 0, "accepted": 3, "failure_rate": 0.0, "acceptance_rate": 0.75 }
+      ],
+      "latency_daily": [
+        { "day": "Aug 21", "completed_rewrites": 4, "users": 2, "median_ms": 2180, "p95_ms": 4906 },
+        { "day": "Aug 22", "completed_rewrites": 10, "users": 2, "median_ms": 2186, "p95_ms": 3975 },
+        { "day": "Aug 23", "completed_rewrites": 13, "users": 3, "median_ms": 1850, "p95_ms": 4293 },
+        { "day": "Aug 24", "completed_rewrites": 8, "users": 3, "median_ms": 3324, "p95_ms": 8444 },
+        { "day": "Aug 25", "completed_rewrites": 9, "users": 3, "median_ms": 3801, "p95_ms": 6324 }
+      ],
+      "active_versions": [
+        { "version": "0.1.9", "users": 4 },
+        { "version": "0.1.10", "users": 2 },
+        { "version": "0.1.7", "users": 1 }
+      ],
+      "acquisition_sources": [
+        { "source": "TikTok", "users": 5 },
+        { "source": "Friend", "users": 1 },
+        { "source": "Instagram", "users": 1 },
+        { "source": "X", "users": 1 }
+      ],
+      "download_counters": [
+        { "version": "0.1.6", "dmg_downloads": 2, "zip_downloads": 1 },
+        { "version": "0.1.7", "dmg_downloads": 2, "zip_downloads": 5 },
+        { "version": "0.1.8", "dmg_downloads": 6, "zip_downloads": 2 },
+        { "version": "0.1.9", "dmg_downloads": 6, "zip_downloads": 2 },
+        { "version": "0.1.10", "dmg_downloads": 16, "zip_downloads": 3 }
+      ]
+    }
+  },
+  "sources": [
+    { "id": "posthog_dashboard", "label": "Desktop (macOS) Overview", "href": "https://us.posthog.com/project/549465/dashboard/1974822" },
+    { "id": "github_releases", "label": "KeigoDesktop releases", "href": "https://github.com/itsukison/KeigoDesktop/releases" }
+  ]
+}

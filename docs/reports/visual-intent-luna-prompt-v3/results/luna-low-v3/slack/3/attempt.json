@@ -1,0 +1,9 @@
+{
+  "case": "slack",
+  "repeat": 3,
+  "expectedModel": "gpt-6-luna",
+  "returncode": 0,
+  "wallMs": 9999,
+  "responseFile": "docs/reports/visual-intent-luna-prompt-v3/results/luna-low-v3/slack/3/2A2C4BFA-AA0C-4DD5-8018-6BA8497CCFAB-F7D77ACE-8482-48D2-B457-ED6E36B48355-run1.json",
+  "status": "ready"
+}

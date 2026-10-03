@@ -23,6 +23,9 @@ project_id = "eercsucvxnszqletxued"
 [functions.desktop-rewrite]
 verify_jwt = true
 
+[functions.desktop-visual-intent]
+verify_jwt = true
+
 [functions.desktop-checkout]
 verify_jwt = true
 

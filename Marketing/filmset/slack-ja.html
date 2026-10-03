@@ -24,7 +24,7 @@
      Everything below is a multiple of --u, so changing --fill rescales the whole
      mockup — chrome, icons and type together — with no ratio change.
      Override on the fly with a hash token: slack.html#fill=.7 */
-  --fill: .80;
+  --fill: 1;
   --lift: 0px;
   --desk: #2B2D33;
   /* flush with the bottom edge, so only the top corners are rounded.
@@ -40,9 +40,9 @@ body{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic Medium",
      display:flex;align-items:flex-end;justify-content:center}
 svg{flex:none;display:block}
 
-.win{width:calc(1468 * var(--u));height:calc(1080 * var(--u));
+.win{width:100vw;height:calc(1080 * var(--u));
      margin-bottom:var(--lift);display:flex;flex-direction:column;background:#fff;
-     border-radius:var(--radius);overflow:hidden;
+     border-radius:0;overflow:hidden;
      box-shadow:0 calc(30 * var(--u)) calc(90 * var(--u)) rgba(0,0,0,.45),
                 0 calc(4 * var(--u)) calc(14 * var(--u)) rgba(0,0,0,.30)}
 .body{flex:1;display:flex;min-height:0}
@@ -152,6 +152,7 @@ body.guide #guide{display:flex}
          outline:calc(3 * var(--u)) dashed rgba(255,0,80,.75);
          box-shadow:0 0 0 100vmax rgba(0,0,0,.28)}
 </style>
+<link rel="stylesheet" href="overlay.css">
 </head>
 <body>
 
@@ -175,8 +176,8 @@ body.guide #guide{display:flex}
     <div class="ch"><svg style="width:calc(26 * var(--u));height:calc(26 * var(--u));color:rgba(255,255,255,.6)" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9h16M4 15h16M10 3L8 21m8-18l-2 18"/></svg> q3-企画</div>
     <div class="sec">ダイレクトメッセージ</div>
     <div class="dm on"><span class="dot g"></span><span id="dm1">田村 美咲</span></div>
-    <div class="dm"><span class="dot g"></span> 中村 大輝</div>
-    <div class="dm"><span class="dot"></span> 森 彩香</div>
+    <div class="dm"><span class="dot g"></span><span id="dm2">中村 大輝</span></div>
+    <div class="dm"><span class="dot"></span><span id="dm3">森 彩香</span></div>
   </div>
 
   <div class="main">
@@ -217,6 +218,7 @@ body.guide #guide{display:flex}
 <div id="guide"><i></i></div>
 <div id="hud"></div>
 
+<script src="overlay.js"></script>
 <script src="scenarios-ja.js"></script>
 <script>
 /* ─── state ───────────────────────────────────────────────────────────────── */
@@ -235,6 +237,9 @@ function render(){
   document.getElementById('ws').textContent     = s.workspace;
   document.getElementById('srch').textContent   = s.workspace + 'を検索';
   document.getElementById('dm1').textContent    = s.dm;
+  const others = ['田村 美咲', '中村 大輝', '森 彩香'].filter(name => name !== s.dm);
+  document.getElementById('dm2').textContent = others[0];
+  document.getElementById('dm3').textContent = others[1];
   document.getElementById('hdname').textContent = s.dmTitle || s.dm;
   document.getElementById('hdsub').textContent  = s.dmSubtitle || '';
   box.placeholder = s.dm + 'さんにメッセージを送信する';
@@ -248,7 +253,7 @@ function render(){
     const nm  = m.me ? me.name    : m.from;
     const ini = m.me ? me.initial : m.initial;
     const col = m.me ? me.color   : m.color;
-    return `<div class="msg">
+    return `<div class="msg" ${m.me ? '' : 'data-received'}>
       <div class="avatar" style="background:${col}">${esc(ini)}</div>
       <div><div><span class="nm">${esc(nm)}</span><span class="tm">${esc(m.time)}</span></div>
       <div class="tx">${esc(m.text)}</div></div></div>`;
@@ -256,6 +261,7 @@ function render(){
 
   setText('');
   drawHud();
+  document.dispatchEvent(new Event('filmset:scenario'));
 }
 
 function drawHud(){
@@ -291,7 +297,8 @@ function go(n){
  *     this field (AGENTS.md §5: a browser is read via AX, written via ⌘V).
  * e.code, not e.key: ⌥K reports "˚" on a Mac keyboard. */
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); return; }
+  if (e.isComposing || e.keyCode === 229) return;
+  if ((e.key === 'Enter' || e.key === 'Tab') && e.target === box){ e.preventDefault(); return; }
   if (!e.altKey || e.metaKey || e.ctrlKey) return;
 
   const cmd = {
@@ -311,9 +318,11 @@ document.addEventListener('keydown', e => {
   if (d){ e.preventDefault(); go(parseInt(d[1], 10) - 1); }
 }, true);
 
-/* Clicking the mockup outside the composer puts the caret back, without blocking
- * a click or a drag-select inside it. */
-document.addEventListener('mousedown', e => { if (!cp.contains(e.target)) { e.preventDefault(); box.focus(); } });
+/* Received text stays selectable for copy-to-Reply. Overlay controls keep their
+ * own focus; only empty window chrome returns the caret to Slack. */
+document.addEventListener('mousedown', e => {
+  if (!cp.contains(e.target) && !e.target.closest('#kb-overlay, .msgs, button')) { e.preventDefault(); box.focus(); }
+});
 box.addEventListener('focus', () => cp.classList.add('focus'));
 box.addEventListener('input', () => {
   document.getElementById('send').classList.toggle('off', !box.value);
@@ -332,9 +341,14 @@ if (H.includes('guide')) document.body.classList.add('guide');
 if (H.includes('hud'))   document.body.classList.add('hud');
 const fill = H.map(t => /^fill=([\d.]+)$/.exec(t)).find(Boolean);
 if (fill) document.documentElement.style.setProperty('--fill', fill[1]);
+const scenario = H.map(t => /^scenario=(\d+)$/.exec(t)).find(Boolean);
+if (scenario) go(Math.min(window.SCENARIOS.length, Math.max(1, Number(scenario[1]))) - 1);
 if (H.includes('genz'))  setText(S().genz);
 if (H.includes('corp'))  setText(S().corporate);
 box.focus();
+window.addEventListener('hashchange', () => location.reload());
+window.FilmsetOverlay.mount({ box, getScenario: S, setText, tokens: H,
+  enabled: document.documentElement.lang === 'ja' || H.includes('overlay') });
 </script>
 </body>
 </html>

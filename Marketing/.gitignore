@@ -1,3 +1,14 @@
 .DS_Store
 pipeline/out/
 reference/
+
+# Keep reviewed video exports and their edit metadata; regenerate render scratch.
+/out/*
+!/out/japanese-demo/
+!/out/avatar-audio/
+/out/japanese-demo/*
+!/out/japanese-demo/*.mp4
+!/out/japanese-demo/*-poster*.jpg
+!/out/japanese-demo/*-edit.json
+/out/avatar-audio/*
+!/out/avatar-audio/*.mp4

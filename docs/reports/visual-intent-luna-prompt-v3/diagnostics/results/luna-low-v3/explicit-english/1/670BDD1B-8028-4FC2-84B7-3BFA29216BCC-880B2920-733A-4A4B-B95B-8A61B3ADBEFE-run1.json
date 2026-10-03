@@ -1,0 +1,45 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 3378,
+  "model" : "gpt-6-luna",
+  "modelMs" : 5829,
+  "outputTokens" : 495,
+  "promptVersion" : "visual-intent-a-3",
+  "reasoningEffort" : "low",
+  "result" : {
+    "captureId" : "670BDD1B-8028-4FC2-84B7-3BFA29216BCC",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 566,
+          "width" : 470,
+          "x" : 700,
+          "y" : 171
+        },
+        "label" : "Yurino Horiuchi conversation"
+      }
+    ],
+    "draft" : "Hi Yurino, I'm interested in the Product Manager internship and would like to apply. Could you let me know where I can find the application information?",
+    "evidence" : [
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 51,
+          "width" : 344,
+          "x" : 757,
+          "y" : 435
+        },
+        "excerpt" : "現在メルカリでは、2028年新卒入社の方を対象に、プロダクトマネージャー職（以下PM職）の就業型インターンシップを募集しております。",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "4FA630C2-CFF6-43DF-B41D-1ADD9812AE72"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

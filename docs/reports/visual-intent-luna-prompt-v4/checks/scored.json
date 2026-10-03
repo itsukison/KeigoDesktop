@@ -1,0 +1,74 @@
+[
+  {
+    "case": "render-original-left-full",
+    "status": "ready",
+    "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/render-original-left-full/1/934B6CA6-8DAF-4018-BE60-8DCE10B4865A-F0ACEF82-EBDE-4AAB-A3AA-D4D699479EAD-run1.json",
+    "modelMs": 3282,
+    "inputTokens": 2419,
+    "outputTokens": 316,
+    "pass": true
+  },
+  {
+    "case": "render-swapped-right-full",
+    "status": "ready",
+    "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/render-swapped-right-full/1/9D87DBB7-E15B-446E-8977-E38D28201DFC-4A2C1CB5-08A8-45E0-8851-564D2053C418-run1.json",
+    "modelMs": 3201,
+    "inputTokens": 2416,
+    "outputTokens": 278,
+    "pass": true
+  },
+  {
+    "case": "render-original-right-full",
+    "status": "ready",
+    "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/render-original-right-full/1/8E6F3B1E-70C4-47BE-BAF1-9D4607ECCBC9-60494246-6BF7-4F90-A01C-104FDA421D3D-run1.json",
+    "modelMs": 3052,
+    "inputTokens": 2420,
+    "outputTokens": 300,
+    "pass": true
+  },
+  {
+    "case": "render-swapped-left-full",
+    "status": "ready",
+    "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/render-swapped-left-full/1/F547CFEA-4B62-45EB-87A8-627DF83544CE-0E97B591-F2E4-4F12-B7E0-1E8F344C252E-run1.json",
+    "modelMs": 3455,
+    "inputTokens": 2415,
+    "outputTokens": 320,
+    "pass": true
+  },
+  {
+    "case": "browser-corrected-full",
+    "status": "ready",
+    "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/browser-corrected-full/1/A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5-C255F4D9-D7DC-4AAD-8867-98E79564D0E8-run1.json",
+    "modelMs": 3632,
+    "inputTokens": 3439,
+    "outputTokens": 359,
+    "pass": true
+  },
+  {
+    "case": "explicit-english",
+    "status": "ready",
+    "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/explicit-english/1/670BDD1B-8028-4FC2-84B7-3BFA29216BCC-3524E9C2-4042-4E8B-A1D9-BF857B98B0D4-run1.json",
+    "modelMs": 4515,
+    "inputTokens": 3443,
+    "outputTokens": 467,
+    "pass": true
+  },
+  {
+    "case": "missing-deadline",
+    "status": "insufficient_context",
+    "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/missing-deadline/1/670BDD1B-8028-4FC2-84B7-3BFA29216BCC-35AF6419-7461-4378-A7F8-17EB860E628E-run1.json",
+    "modelMs": 4486,
+    "inputTokens": 3432,
+    "outputTokens": 395,
+    "pass": true
+  },
+  {
+    "case": "missing-verification",
+    "status": "insufficient_context",
+    "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/missing-verification/1/2A2C4BFA-AA0C-4DD5-8018-6BA8497CCFAB-E009F8AA-866E-487E-B909-4580E659805A-run1.json",
+    "modelMs": 5837,
+    "inputTokens": 3517,
+    "outputTokens": 658,
+    "pass": true
+  }
+]

@@ -1,0 +1,121 @@
+[
+  {
+    "case": "render-original-left-full",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 30,
+      "y": 575
+    },
+    "expected": "Cedar",
+    "family": "render",
+    "height": 800,
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/render-original-left-full/request.json",
+    "variant": "full",
+    "width": 1200,
+    "requestSHA256": "b078743e031ef3a8d61184328526751fcaae60500cb20e949f1b7172848260a2",
+    "imageSHA256": "2f67f96336346c787992b49a9eaaec496371d568cea130ece43b5b4c01704ae2",
+    "expectedStatus": "ready"
+  },
+  {
+    "case": "render-swapped-right-full",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 630,
+      "y": 575
+    },
+    "expected": "Cedar",
+    "family": "render",
+    "height": 800,
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/render-swapped-right-full/request.json",
+    "variant": "full",
+    "width": 1200,
+    "requestSHA256": "b67e53aff2bd21e41ec37cd262fcaba63229f110284aab56818f80070925784f",
+    "imageSHA256": "f2e1d706f9ce24540859971e1d537d3848af549bd41822332b766ae6edabb52c",
+    "expectedStatus": "ready"
+  },
+  {
+    "case": "render-original-right-full",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 650,
+      "y": 575
+    },
+    "expected": "Indigo",
+    "family": "render",
+    "height": 800,
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/render-original-right-full/request.json",
+    "variant": "full",
+    "width": 1200,
+    "requestSHA256": "865718392dc6ad695f049f4f686e9804bef5ddbc800e6970d47e4712f26ef49e",
+    "imageSHA256": "f218ca3043fcd132f92febbe1749bc4e499d71590a25f818d1df616bf1368c12",
+    "expectedStatus": "ready"
+  },
+  {
+    "case": "render-swapped-left-full",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 50,
+      "y": 575
+    },
+    "expected": "Indigo",
+    "family": "render",
+    "height": 800,
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/render-swapped-left-full/request.json",
+    "variant": "full",
+    "width": 1200,
+    "requestSHA256": "7199ad75f45fc5634534dbbe98f475ceee3f600fc8c3a3e1dc0fead457418eb2",
+    "imageSHA256": "43eb2932f2899699c807594b49cc3a3a695e28014667d35a3a5cdc64c7c8370d",
+    "expectedStatus": "ready"
+  },
+  {
+    "case": "browser-corrected-full",
+    "composerBox": {
+      "height": 96,
+      "width": 787,
+      "x": 37,
+      "y": 700
+    },
+    "expected": "Cedar",
+    "family": "browser",
+    "height": 958,
+    "provenance": "Exported original.png with manually aligned composer marker; same intent and app metadata.",
+    "request": "/Users/itsuki/Desktop/key/laptop/docs/reports/visual-intent-comparison/browser-corrected-full/request.json",
+    "variant": "corrected-full",
+    "width": 1920,
+    "requestSHA256": "db9264e26ebba6c3e87b96183dfab0bc5249e897f1c3fd91d653482193ed2f9f",
+    "imageSHA256": "f149e9b2f4fbf17e07a83ebd8f827233cce829492c825362ed1300f7b564dd84",
+    "expectedStatus": "ready"
+  },
+  {
+    "case": "explicit-english",
+    "request": "/tmp/keigo-luna-v3-diagnostics/explicit-english.json",
+    "sourceRequest": "/Users/itsuki/Desktop/key/laptop/visual-intent-670BDD1B-8028-4FC2-84B7-3BFA29216BCC-DE0780FA/request.json",
+    "overrideIntent": "Reply in English: tell her I am interested and want to apply, and ask where to find the application information.",
+    "expectedStatus": "ready",
+    "provenance": "Saved-image calibration diagnostic; intent overridden deliberately, image bytes and target unchanged."
+  },
+  {
+    "case": "missing-deadline",
+    "request": "/tmp/keigo-luna-v3-diagnostics/missing-deadline.json",
+    "sourceRequest": "/Users/itsuki/Desktop/key/laptop/visual-intent-670BDD1B-8028-4FC2-84B7-3BFA29216BCC-DE0780FA/request.json",
+    "overrideIntent": "Summarize the exact application deadline stated in her message.",
+    "expectedStatus": "insufficient_context",
+    "provenance": "Saved-image calibration diagnostic; intent overridden deliberately, image bytes and target unchanged."
+  },
+  {
+    "case": "missing-verification",
+    "request": "/tmp/keigo-luna-v3-diagnostics/missing-verification.json",
+    "sourceRequest": "/Users/itsuki/Desktop/key/laptop/visual-intent-2A2C4BFA-AA0C-4DD5-8018-6BA8497CCFAB-43F5ED16/request.json",
+    "overrideIntent": "Tell the team the exact time the bot successfully ran after the permission change, using the visible messages.",
+    "expectedStatus": "insufficient_context",
+    "provenance": "Saved-image calibration diagnostic; intent overridden deliberately, image bytes and target unchanged."
+  }
+]

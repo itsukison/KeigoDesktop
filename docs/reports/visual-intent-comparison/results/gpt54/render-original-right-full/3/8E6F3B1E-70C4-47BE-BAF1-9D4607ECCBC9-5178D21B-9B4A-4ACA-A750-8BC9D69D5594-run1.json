@@ -1,0 +1,40 @@
+{
+  "inputTokens" : 1832,
+  "model" : "gpt-5.4-2026-03-05",
+  "modelMs" : 2815,
+  "outputTokens" : 191,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "8E6F3B1E-70C4-47BE-BAF1-9D4607ECCBC9",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 219,
+          "width" : 543,
+          "x" : 620,
+          "y" : 23
+        },
+        "label" : "Thread conversation"
+      }
+    ],
+    "draft" : "Agree — I’ll finish my part by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence" : [
+      {
+        "author" : "Ren",
+        "box" : {
+          "height" : 82,
+          "width" : 488,
+          "x" : 649,
+          "y" : 143
+        },
+        "excerpt" : "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "7837F57B-3CC5-4EF2-8E16-6DC7609EAE54"
+  }
+}

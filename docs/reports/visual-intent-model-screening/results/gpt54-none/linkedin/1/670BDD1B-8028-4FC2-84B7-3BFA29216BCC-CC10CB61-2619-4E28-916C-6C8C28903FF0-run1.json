@@ -1,0 +1,66 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 2848,
+  "model" : "gpt-5.4-2026-03-05",
+  "modelMs" : 4672,
+  "outputTokens" : 313,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "670BDD1B-8028-4FC2-84B7-3BFA29216BCC",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 565,
+          "width" : 470,
+          "x" : 701,
+          "y" : 171
+        },
+        "label" : "selected conversation with Yurino Horiuchi"
+      }
+    ],
+    "draft" : "Yurinoさん、ご連絡ありがとうございます。こちらのインターンシップに興味があり、応募したいと考えています。応募方法や詳細はどこで確認できますか？",
+    "evidence" : [
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 22,
+          "width" : 117,
+          "x" : 726,
+          "y" : 270
+        },
+        "excerpt" : "Yurino Horiuchi",
+        "partial" : false
+      },
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 39,
+          "width" : 278,
+          "x" : 761,
+          "y" : 300
+        },
+        "excerpt" : "【株式会社メルカリ】選考直結・就業型インターンシップ（Product Manager職）へのご案内】",
+        "partial" : false
+      },
+      {
+        "author" : "Yurino Horiuchi",
+        "box" : {
+          "height" : 26,
+          "width" : 224,
+          "x" : 757,
+          "y" : 492
+        },
+        "excerpt" : "ご経験を拝見し、ぜひご参加いただけないかと思いご連絡いたしました！",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "4FA630C2-CFF6-43DF-B41D-1ADD9812AE72"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

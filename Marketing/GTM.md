@@ -316,10 +316,21 @@ exactly its job — instantly legible, emotionally charged, and the product is t
 that closes the gap. §9 still holds: the two tracks share a skeleton, never a script, and
 per `FORMAT-TESTS.md` §1.5 their samples are counted separately.
 
-**Shoot the reaction clips with a real person, once.** Not image-to-video: the joke
+**For filmed E-2, shoot the reaction clips with a real person, once.** Not image-to-video: the joke
 depends on the viewer believing someone nearly sent that message, and an AI face on an
 account selling an AI writing tool spends credibility at exactly the point the format
 needs it. If no person is available, frame hands and the monitor instead.
+
+**AI avatar reaction + demo template — audio rule.** This separately used template
+must have all original audio removed before upload, including generated speech,
+room sound, sound effects and any existing music. Replace it with the audio track
+from one file in `Marketing/assets/audio/` (the library contains screen recordings;
+use their audio only). Fit the replacement to the full video length: trim a longer
+track or loop a shorter one, with a brief fade at the end. Preserve the visuals,
+cuts, on-screen text and timing. Upload the same corrected export for its TikTok
+and Instagram pair. This rule applies to every future upload and to queued media
+replacements; the six pending posts were corrected on 2026-10-02, recorded in
+`PUBLISHING.md` §5.
 
 The production spec — POV bank, the four-ingredient line recipe, the corporate phrase
 bank, the clip inventory, and the E-1/E-2 paired test design — lives in
@@ -334,6 +345,8 @@ bank, the clip inventory, and the E-1/E-2 paired test design — lives in
   not two.
 - **Every post ends on the same CTA and the same link.** Attribution is worthless
   otherwise.
+- **AI avatar reaction + demo uploads use library audio only.** Apply §4.5's audio
+  rule before handing the MP4 to the scheduler; never upload the original soundtrack.
 - **Post the Japanese and English accounts separately.** Different formats, different
   audiences; a mixed account trains the algorithm on nobody.
 - 4 accounts per language once a format holds, 5 posts/day each. Not before.

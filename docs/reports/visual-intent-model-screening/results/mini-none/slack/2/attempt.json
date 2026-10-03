@@ -1,0 +1,9 @@
+{
+  "case": "slack",
+  "repeat": 2,
+  "expectedModel": "gpt-5.4-mini-2026-03-17",
+  "returncode": 0,
+  "wallMs": 3331,
+  "responseFile": "docs/reports/visual-intent-model-screening/results/mini-none/slack/2/2A2C4BFA-AA0C-4DD5-8018-6BA8497CCFAB-A48865FC-011B-4642-851D-789E528AFA07-run1.json",
+  "status": "ready"
+}

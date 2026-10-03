@@ -1,0 +1,83 @@
+{
+  "purpose": "Manual review of four user-exported fresh Luna V4 captures",
+  "procedure": "Inspect marked PNG against immutable request, evidence excerpts/boxes, region boxes and final draft. No provider reruns and no prompt/deployment changes in this review.",
+  "sceneCounting": "Two Gmail attempts belong to one BCG email family; these are three conversation families, not four independent families. Once used to inform a prompt revision, treat them as calibration.",
+  "findings": "The strongest observed Gmail failure is explicit format/length noncompliance and weak context use. Region boxes select the correct email; one evidence excerpt alone cannot prove which other pixels the model read.",
+  "likelyPromptGap": "The current prompt specifies broad genre matching and preserves constraints mainly for summaries, but does not explicitly require a contextual full-email frame or supported elaboration for a detailed reply. This is a hypothesis, not causal proof.",
+  "nextEvaluation": "Compare a generally revised reply/context and format policy against V4 on identical saved inputs, then evaluate independent fresh long-message families. Preserve target separation, language, factual constraints, chronology and commitment checks. Do not require a fixed evidence count or mention every source fact in every short reply.",
+  "reviews": [
+    {
+      "scene": "linkedin-energy",
+      "export": "visual-intent-CC070E22-DDF0-4EE0-8820-F70898C5E179-55DE605B",
+      "intent": "reply and match her energy",
+      "verdict": "provisional_pass",
+      "observations": [
+        "Marker encloses intended composer; source excerpt matches the visible incoming message.",
+        "Japanese draft broadly follows the requested friendly energy."
+      ],
+      "failures": [],
+      "model": "gpt-6-luna",
+      "reasoningEffort": "low",
+      "promptVersion": "visual-intent-a-4",
+      "modelMs": 4160
+    },
+    {
+      "scene": "gmail-apply",
+      "export": "visual-intent-D692E4B3-5094-4602-8796-A240D1F0F8ED-FB8908F8",
+      "intent": "tell them okay ill apply",
+      "verdict": "weak_contextual_quality",
+      "observations": [
+        "Marker encloses intended Gmail reply body.",
+        "Claimed conversation region covers the correct BCG email.",
+        "Evidence quotes one application instruction; draft is only an acknowledgement and application commitment.",
+        "The user did not explicitly request length or a full email frame in this attempt; a short draft alone is not proof of wrong conversation association."
+      ],
+      "failures": [
+        "Generic response fails to name the visible Winter Internship.",
+        "Does not demonstrate meaningful use of the broader visible email."
+      ],
+      "model": "gpt-6-luna",
+      "reasoningEffort": "low",
+      "promptVersion": "visual-intent-a-4",
+      "modelMs": 5613
+    },
+    {
+      "scene": "gmail-long-email",
+      "export": "visual-intent-1F73728E-D26B-417C-912C-919E221C9BBA-FDCFC75A",
+      "intent": "tell them okay ill apply in email format with long email",
+      "verdict": "fail",
+      "observations": [
+        "Marker encloses intended Gmail reply body.",
+        "Claimed conversation region broadly covers the visible email.",
+        "Intent explicitly requests email format and a long email.",
+        "Draft contains three short lines, no salutation, and no developed contextual body.",
+        "Only evidence is the closing invitation to apply.",
+        "Top of the message is offscreen and Gmail shows Message clipped; evaluation must not require offscreen details."
+      ],
+      "failures": [
+        "Explicit format/length instruction not fulfilled.",
+        "Generic acknowledgement does not use the visible program content to develop the requested email."
+      ],
+      "model": "gpt-6-luna",
+      "reasoningEffort": "low",
+      "promptVersion": "visual-intent-a-4",
+      "modelMs": 7107
+    },
+    {
+      "scene": "slack-summary",
+      "export": "visual-intent-75A26A8B-1105-41D7-8362-7EAF9177DFF2-3C1DEFDB",
+      "intent": "summarize the situation",
+      "verdict": "provisional_pass",
+      "observations": [
+        "Marker encloses intended right-thread composer.",
+        "Draft retains report subject, month, aggregation failure and visible connection error.",
+        "No successful execution claim or new follow-up commitment added."
+      ],
+      "failures": [],
+      "model": "gpt-6-luna",
+      "reasoningEffort": "low",
+      "promptVersion": "visual-intent-a-4",
+      "modelMs": 6975
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "case": "explicit-english",
+  "repeat": 1,
+  "expectedModel": "gpt-6-luna",
+  "returncode": 0,
+  "wallMs": 5225,
+  "responseFile": "docs/reports/visual-intent-luna-prompt-v4/checks/results/luna-low-v4/explicit-english/1/670BDD1B-8028-4FC2-84B7-3BFA29216BCC-3524E9C2-4042-4E8B-A1D9-BF857B98B0D4-run1.json",
+  "status": "ready"
+}

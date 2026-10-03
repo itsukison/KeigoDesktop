@@ -1,0 +1,26 @@
+[
+  {
+    "case": "explicit-english",
+    "request": "/tmp/keigo-luna-v3-diagnostics/explicit-english.json",
+    "sourceRequest": "/Users/itsuki/Desktop/key/laptop/visual-intent-670BDD1B-8028-4FC2-84B7-3BFA29216BCC-DE0780FA/request.json",
+    "overrideIntent": "Reply in English: tell her I am interested and want to apply, and ask where to find the application information.",
+    "expectedStatus": "ready",
+    "provenance": "Saved-image calibration diagnostic; intent overridden deliberately, image bytes and target unchanged."
+  },
+  {
+    "case": "missing-deadline",
+    "request": "/tmp/keigo-luna-v3-diagnostics/missing-deadline.json",
+    "sourceRequest": "/Users/itsuki/Desktop/key/laptop/visual-intent-670BDD1B-8028-4FC2-84B7-3BFA29216BCC-DE0780FA/request.json",
+    "overrideIntent": "Summarize the exact application deadline stated in her message.",
+    "expectedStatus": "insufficient_context",
+    "provenance": "Saved-image calibration diagnostic; intent overridden deliberately, image bytes and target unchanged."
+  },
+  {
+    "case": "missing-verification",
+    "request": "/tmp/keigo-luna-v3-diagnostics/missing-verification.json",
+    "sourceRequest": "/Users/itsuki/Desktop/key/laptop/visual-intent-2A2C4BFA-AA0C-4DD5-8018-6BA8497CCFAB-43F5ED16/request.json",
+    "overrideIntent": "Tell the team the exact time the bot successfully ran after the permission change, using the visible messages.",
+    "expectedStatus": "insufficient_context",
+    "provenance": "Saved-image calibration diagnostic; intent overridden deliberately, image bytes and target unchanged."
+  }
+]

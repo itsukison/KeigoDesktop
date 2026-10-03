@@ -1,0 +1,230 @@
+[
+  {
+    "case": "render-original-left-full",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 30,
+      "y": 575
+    },
+    "expected": "Cedar",
+    "family": "render",
+    "height": 800,
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/tmp/keigo-visual-comparison/render-original-left-full/request.json",
+    "variant": "full",
+    "width": 1200,
+    "requestSHA256": "b078743e031ef3a8d61184328526751fcaae60500cb20e949f1b7172848260a2",
+    "imageSHA256": "2f67f96336346c787992b49a9eaaec496371d568cea130ece43b5b4c01704ae2"
+  },
+  {
+    "case": "render-original-left-crop",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 30,
+      "y": 575
+    },
+    "expected": "Cedar",
+    "family": "render",
+    "height": 800,
+    "oracleCrop": {
+      "height": 800,
+      "width": 600,
+      "x": 0,
+      "y": 0
+    },
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/tmp/keigo-visual-comparison/render-original-left-crop/request.json",
+    "variant": "crop",
+    "width": 600,
+    "requestSHA256": "a5cce7978c7532c4f573677c213083d7a08b29cf22f1b1cd44ea04caee4913c9",
+    "imageSHA256": "9fd792c3d9416dc060db5c06ceb7a1937e37447eb079cc91d3bc1565ca4144f1"
+  },
+  {
+    "case": "render-swapped-right-full",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 630,
+      "y": 575
+    },
+    "expected": "Cedar",
+    "family": "render",
+    "height": 800,
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/tmp/keigo-visual-comparison/render-swapped-right-full/request.json",
+    "variant": "full",
+    "width": 1200,
+    "requestSHA256": "b67e53aff2bd21e41ec37cd262fcaba63229f110284aab56818f80070925784f",
+    "imageSHA256": "f2e1d706f9ce24540859971e1d537d3848af549bd41822332b766ae6edabb52c"
+  },
+  {
+    "case": "render-swapped-right-crop",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 30,
+      "y": 575
+    },
+    "expected": "Cedar",
+    "family": "render",
+    "height": 800,
+    "oracleCrop": {
+      "height": 800,
+      "width": 600,
+      "x": 600,
+      "y": 0
+    },
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/tmp/keigo-visual-comparison/render-swapped-right-crop/request.json",
+    "variant": "crop",
+    "width": 600,
+    "requestSHA256": "705b0fd1dc06316e8399bcd1f1e0f5854813715dbf49f21f4481ef272022348b",
+    "imageSHA256": "0bd6e02d641236621f4d2b78e51230f763f2f971a27d72a5dfdc464ab2932f13"
+  },
+  {
+    "case": "render-original-right-full",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 650,
+      "y": 575
+    },
+    "expected": "Indigo",
+    "family": "render",
+    "height": 800,
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/tmp/keigo-visual-comparison/render-original-right-full/request.json",
+    "variant": "full",
+    "width": 1200,
+    "requestSHA256": "865718392dc6ad695f049f4f686e9804bef5ddbc800e6970d47e4712f26ef49e",
+    "imageSHA256": "f218ca3043fcd132f92febbe1749bc4e499d71590a25f818d1df616bf1368c12"
+  },
+  {
+    "case": "render-original-right-crop",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 50,
+      "y": 575
+    },
+    "expected": "Indigo",
+    "family": "render",
+    "height": 800,
+    "oracleCrop": {
+      "height": 800,
+      "width": 600,
+      "x": 600,
+      "y": 0
+    },
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/tmp/keigo-visual-comparison/render-original-right-crop/request.json",
+    "variant": "crop",
+    "width": 600,
+    "requestSHA256": "d63a496758cc839e893c64dd01d422eb8afd54079387857f6ad1b46481c80507",
+    "imageSHA256": "9198e00289e40b1f87a2e5a7ef00067192adfb35da2bf492001210d199bf2bcc"
+  },
+  {
+    "case": "render-swapped-left-full",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 50,
+      "y": 575
+    },
+    "expected": "Indigo",
+    "family": "render",
+    "height": 800,
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/tmp/keigo-visual-comparison/render-swapped-left-full/request.json",
+    "variant": "full",
+    "width": 1200,
+    "requestSHA256": "7199ad75f45fc5634534dbbe98f475ceee3f600fc8c3a3e1dc0fead457418eb2",
+    "imageSHA256": "43eb2932f2899699c807594b49cc3a3a695e28014667d35a3a5cdc64c7c8370d"
+  },
+  {
+    "case": "render-swapped-left-crop",
+    "composerBox": {
+      "height": 155,
+      "width": 520,
+      "x": 50,
+      "y": 575
+    },
+    "expected": "Indigo",
+    "family": "render",
+    "height": 800,
+    "oracleCrop": {
+      "height": 800,
+      "width": 600,
+      "x": 0,
+      "y": 0
+    },
+    "provenance": "Existing synthetic JPEG; entire 600-pixel columns swapped when indicated. No new native capture.",
+    "request": "/tmp/keigo-visual-comparison/render-swapped-left-crop/request.json",
+    "variant": "crop",
+    "width": 600,
+    "requestSHA256": "6a5e17457250236ecbfc9813cbb02ff79df4187337fcfa4ed9297f7eb662ade8",
+    "imageSHA256": "22ec99fd8f31bb19f7e496a8efd126f1b874f5f9461964b26dee443ccc2babc8"
+  },
+  {
+    "case": "browser-raw",
+    "composerBox": {
+      "height": 111,
+      "width": 888,
+      "x": 41,
+      "y": 664
+    },
+    "expected": "Cedar",
+    "family": "browser",
+    "height": 958,
+    "provenance": "Exact exported request including misaligned marker and metadata.",
+    "request": "/tmp/keigo-visual-comparison/browser-raw/request.json",
+    "variant": "raw",
+    "width": 1920,
+    "requestSHA256": "cc07ca028dbabc12e879fe4cdcec1c5d97fe299921911ef084c231ffb9ecff6e",
+    "imageSHA256": "d8eb15ee57aba1a8dbb45969c2342110b18a8dc8022b57da9ab53352503d0144"
+  },
+  {
+    "case": "browser-corrected-full",
+    "composerBox": {
+      "height": 96,
+      "width": 787,
+      "x": 37,
+      "y": 700
+    },
+    "expected": "Cedar",
+    "family": "browser",
+    "height": 958,
+    "provenance": "Exported original.png with manually aligned composer marker; same intent and app metadata.",
+    "request": "/tmp/keigo-visual-comparison/browser-corrected-full/request.json",
+    "variant": "corrected-full",
+    "width": 1920,
+    "requestSHA256": "db9264e26ebba6c3e87b96183dfab0bc5249e897f1c3fd91d653482193ed2f9f",
+    "imageSHA256": "f149e9b2f4fbf17e07a83ebd8f827233cce829492c825362ed1300f7b564dd84"
+  },
+  {
+    "case": "browser-corrected-crop",
+    "composerBox": {
+      "height": 96,
+      "width": 787,
+      "x": 19,
+      "y": 523
+    },
+    "expected": "Cedar",
+    "family": "browser",
+    "height": 638,
+    "oracleCrop": {
+      "height": 638,
+      "width": 826,
+      "x": 18,
+      "y": 177
+    },
+    "provenance": "Human-selected left conversation pane from corrected PNG; excludes browser chrome, other pane and answer-key footer.",
+    "request": "/tmp/keigo-visual-comparison/browser-corrected-crop/request.json",
+    "variant": "corrected-crop",
+    "width": 826,
+    "requestSHA256": "5559d0deb7be6d4a9f90549d831bbb935b6d835547cb36743c4064e9d4b147c0",
+    "imageSHA256": "d5620ddabcf14ecc8eb6fe9116bd18ce1672d16e51815e62b1c67937fde3c82a"
+  }
+]

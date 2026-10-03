@@ -1,0 +1,69 @@
+{
+  "inputTokens" : 3608,
+  "model" : "gpt-4.1-mini-2025-04-14",
+  "modelMs" : 2475,
+  "outputTokens" : 294,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "A1F2866B-1FB4-4576-AD92-C3A3BF5C4BA5",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 280,
+          "width" : 580,
+          "x" : 20,
+          "y" : 120
+        },
+        "label" : "Channel · Delivery"
+      },
+      {
+        "box" : {
+          "height" : 280,
+          "width" : 580,
+          "x" : 590,
+          "y" : 120
+        },
+        "label" : "Thread · Workshop"
+      },
+      {
+        "box" : {
+          "height" : 96,
+          "width" : 787,
+          "x" : 37,
+          "y" : 700
+        },
+        "label" : "ComposerBox"
+      }
+    ],
+    "draft" : "For the Indigo workshop, I agree that I can finish my part by Monday at 09:45. The reference is INDIGO-917.",
+    "evidence" : [
+      {
+        "author" : "Mina",
+        "box" : {
+          "height" : 56,
+          "width" : 555,
+          "x" : 38,
+          "y" : 130
+        },
+        "excerpt" : "For the Cedar shipment, can you finish your part by Thursday at 14:20? The reference is CEDAR-482.",
+        "partial" : false
+      },
+      {
+        "author" : "Ren",
+        "box" : {
+          "height" : 56,
+          "width" : 555,
+          "x" : 605,
+          "y" : 130
+        },
+        "excerpt" : "For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "9389FF7E-9EE8-4C6E-BB04-29B8237A59F3"
+  }
+}

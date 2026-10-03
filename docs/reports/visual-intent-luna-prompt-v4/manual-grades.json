@@ -1,0 +1,62 @@
+{
+  "luna-low-v4/linkedin/1": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": true,
+    "requiredFactCoverage": true,
+    "chronology": true,
+    "note": "Correct active conversation, Japanese application intent and information request; no invented eligibility or commitment. ぜひ興味があり is awkward; style editing remains useful.",
+    "pass": true
+  },
+  "luna-low-v4/linkedin/2": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": true,
+    "requiredFactCoverage": true,
+    "chronology": true,
+    "note": "Correct active conversation, Japanese application intent and information request; no invented eligibility or commitment.",
+    "pass": true
+  },
+  "luna-low-v4/linkedin/3": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": true,
+    "requiredFactCoverage": true,
+    "chronology": true,
+    "note": "Correct active conversation, Japanese application intent and information request; no invented eligibility or commitment.",
+    "pass": true
+  },
+  "luna-low-v4/slack/1": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": false,
+    "requiredFactCoverage": true,
+    "chronology": false,
+    "note": "Read-only access and no writes are retained, along with prior 403 and reported response. No successful runtime verification or new promise is asserted. Fails chronology: repeats the earlier external-publication configuration as currently remaining despite the later 追加しました response. Should retain it as an earlier report rather than assert a current blocker.",
+    "pass": false
+  },
+  "luna-low-v4/slack/2": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": false,
+    "requiredFactCoverage": true,
+    "chronology": false,
+    "note": "Read-only access and no writes are retained, along with prior 403 and reported response. No successful runtime verification or new promise is asserted. Fails chronology: repeats the earlier external-publication configuration as currently remaining despite the later 追加しました response. Should retain it as an earlier report rather than assert a current blocker.",
+    "pass": false
+  },
+  "luna-low-v4/slack/3": {
+    "association": true,
+    "language": true,
+    "intent": true,
+    "grounding": true,
+    "requiredFactCoverage": true,
+    "chronology": true,
+    "note": "Read-only access and no writes are retained, along with prior 403 and reported response. No successful runtime verification or new promise is asserted. Opening excerpt has minor transcription deviations; monthly-report bot purpose is paraphrased. Geometry and literal transcription remain separate diagnostics.",
+    "pass": true
+  }
+}

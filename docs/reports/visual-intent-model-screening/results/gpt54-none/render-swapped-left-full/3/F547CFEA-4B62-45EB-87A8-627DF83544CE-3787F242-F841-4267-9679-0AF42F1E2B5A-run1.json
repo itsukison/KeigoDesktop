@@ -1,0 +1,64 @@
+{
+  "geometryWarnings" : [
+
+  ],
+  "inputTokens" : 1827,
+  "model" : "gpt-5.4-2026-03-05",
+  "modelMs" : 2738,
+  "outputTokens" : 253,
+  "promptVersion" : "visual-intent-a-2",
+  "result" : {
+    "captureId" : "F547CFEA-4B62-45EB-87A8-627DF83544CE",
+    "conversationRegion" : [
+      {
+        "box" : {
+          "height" : 536,
+          "width" : 555,
+          "x" : 28,
+          "y" : 20
+        },
+        "label" : "Thread · Workshop conversation"
+      }
+    ],
+    "draft" : "Agreed — I’ll finish my part by Monday at 09:45. Reference: INDIGO-917.",
+    "evidence" : [
+      {
+        "box" : {
+          "height" : 31,
+          "width" : 236,
+          "x" : 50,
+          "y" : 24
+        },
+        "excerpt" : "Thread · Workshop",
+        "partial" : false
+      },
+      {
+        "author" : "Ren",
+        "box" : {
+          "height" : 49,
+          "width" : 500,
+          "x" : 50,
+          "y" : 143
+        },
+        "excerpt" : "Ren: For the Indigo workshop, can you finish your part by Monday at 09:45? The reference is INDIGO-917.",
+        "partial" : false
+      },
+      {
+        "box" : {
+          "height" : 25,
+          "width" : 144,
+          "x" : 49,
+          "y" : 503
+        },
+        "excerpt" : "Reply to thread",
+        "partial" : false
+      }
+    ],
+    "missingContext" : [
+
+    ],
+    "status" : "ready",
+    "targetId" : "7837F57B-3CC5-4EF2-8E16-6DC7609EAE54"
+  },
+  "validationVersion" : "visual-intent-validation-2"
+}

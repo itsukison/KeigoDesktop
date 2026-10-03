@@ -1,0 +1,72 @@
+{
+  "purpose": "Prompt-v3 calibration on already-used scenes. Not held-out acceptance.",
+  "repeats": 3,
+  "unchanged": [
+    "request bytes",
+    "wire JPEG",
+    "composer marker",
+    "strict result schema",
+    "image detail high",
+    "2400 completion token budget",
+    "validation version 2"
+  ],
+  "synthetic": {
+    "required": [
+      "correct target conversation",
+      "correct deadline and reference in draft and incoming-message evidence",
+      "no other-pane facts",
+      "intent not quoted as source evidence"
+    ],
+    "coordinates": "Report separately; a fact-bearing box intersection is only a coarse necessary condition."
+  },
+  "linkedin": {
+    "required": [
+      "active Mercari Product Manager internship conversation",
+      "incoming-message evidence rather than composer text",
+      "Japanese sendable reply",
+      "express interest and intent to apply",
+      "ask where to find application information",
+      "no invented eligibility, credentials, application completion or commitments"
+    ],
+    "recipient": "Yurino Horiuchi / Horiuchi Yurino / 堀内ゆり乃 is visible. Salutation omission is not a failure because none was requested; incorrect attribution is.",
+    "optional": [
+      "exact salary",
+      "internship duration",
+      "graduation year",
+      "salutation"
+    ]
+  },
+  "slack": {
+    "required": [
+      "right thread bound to marked composer",
+      "Japanese summary of the permissions situation",
+      "Cloud Run rakuten-report-bot and read-only BigQuery access",
+      "prior BigQuery 403 permission error",
+      "later participant reports having addressed the request",
+      "no invented promise to verify, test, implement or follow up",
+      "do not turn reported response into proof of successful runtime verification"
+    ],
+    "interpretation": "The bot subject may be described equivalently as the Rakuten monthly-report bot; literal Cloud Run spelling and the full bot identifier are not mandatory. The read-only access constraint must survive into the draft, not merely the evidence record.",
+    "excluded": [
+      "channel topics about token-consumption suppression",
+      "sales AI",
+      "attendance",
+      "unseen older history"
+    ],
+    "optional": [
+      "exact GCP project ID",
+      "full service account",
+      "IAM command"
+    ]
+  },
+  "cost": {
+    "yenPerUSD": 150,
+    "method": "Standard uncached input plus total completion tokens, including reasoning where reported. No cache discount assumed. Missing usage on rejected calls remains unaccounted, not zero.",
+    "limits": [
+      "conditional estimates for 1000 calls, not a forecast of user usage",
+      "private saved scenes are not duplicated into public artifacts",
+      "model ready is not a quality pass"
+    ]
+  },
+  "promptVersion": "visual-intent-a-3"
+}
